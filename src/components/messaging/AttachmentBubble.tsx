@@ -50,7 +50,7 @@ export default function AttachmentBubble({ attachments, isOwn, onImageClick }: A
                 src={att.url}
                 alt={att.name || 'Image'}
                 loading="lazy"
-                className="max-w-full rounded-xl max-h-72 object-contain cursor-pointer"
+                className="max-w-full rounded-xl max-h-56 sm:max-h-72 object-contain cursor-pointer"
                 onClick={() => onImageClick?.(att.url)}
               />
               <button

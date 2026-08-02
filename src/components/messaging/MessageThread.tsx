@@ -53,6 +53,7 @@ import {
   Clapperboard,
   X,
   Download,
+  Plus,
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -991,43 +992,43 @@ export default function MessageThread({
             </div>
           )}
 
-          <form onSubmit={handleSend} className="flex items-end gap-2">
+          <form onSubmit={handleSend} className="flex items-end gap-1 sm:gap-2">
             <button
               type="button"
-              className="icon-btn h-11 w-11 rounded-full flex-shrink-0"
+              className="icon-btn h-10 w-10 sm:h-11 sm:w-11 rounded-full flex-shrink-0"
               onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowGifPicker(false); }}
               title="Emoji"
             >
               <Smile className="w-5 h-5" />
             </button>
-            <button
-              type="button"
-              className="icon-btn h-11 w-11 rounded-full flex-shrink-0"
-              onClick={() => { setShowGifPicker(!showGifPicker); setShowEmojiPicker(false); }}
-              title="GIF"
-            >
-              <Clapperboard className="w-5 h-5" />
-            </button>
-            <button
-              type="button"
-              className="icon-btn h-11 w-11 rounded-full flex-shrink-0"
-              onClick={() => imageInputRef.current?.click()}
-              title="Upload image"
-              disabled={uploadingAttachment}
-            >
-              <ImagePlus className="w-5 h-5" />
-            </button>
-            <button
-              type="button"
-              className="icon-btn h-11 w-11 rounded-full flex-shrink-0"
-              onClick={() => fileInputRef.current?.click()}
-              title="Upload file"
-              disabled={uploadingAttachment}
-            >
-              <Paperclip className="w-5 h-5" />
-            </button>
 
-            <div className="orbis-input-wrap h-11 flex-1 rounded-2xl">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="icon-btn h-10 w-10 sm:h-11 sm:w-11 rounded-full flex-shrink-0"
+                  title="Attach"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-44">
+                <DropdownMenuItem onClick={() => { setShowGifPicker(true); setShowEmojiPicker(false); }}>
+                  <Clapperboard className="h-4 w-4 mr-2" />
+                  GIF
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
+                  <ImagePlus className="h-4 w-4 mr-2" />
+                  Photo
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                  <Paperclip className="h-4 w-4 mr-2" />
+                  File
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <div className="orbis-input-wrap h-11 flex-1 rounded-2xl min-w-0">
               <input
                 ref={inputRef}
                 value={newMessage}
@@ -1035,7 +1036,7 @@ export default function MessageThread({
                 onPaste={handlePaste}
                 placeholder={recording ? 'Recording…' : 'Type a message...'}
                 disabled={sending}
-                className="flex-1 bg-transparent border-0 outline-none text-sm text-foreground placeholder:text-muted-foreground"
+                className="flex-1 bg-transparent border-0 outline-none text-sm text-foreground placeholder:text-muted-foreground min-w-0"
               />
             </div>
 
@@ -1052,7 +1053,7 @@ export default function MessageThread({
               <button
                 type="button"
                 onClick={startRecording}
-                className="icon-btn h-11 w-11 rounded-full flex-shrink-0"
+                className="icon-btn h-10 w-10 sm:h-11 sm:w-11 rounded-full flex-shrink-0"
                 title="Record voice message"
               >
                 <Mic className="w-5 h-5" />
