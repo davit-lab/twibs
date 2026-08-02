@@ -18,6 +18,8 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
+import WallpaperPickerDialog from '@/components/messaging/WallpaperPickerDialog';
+import { BUILT_IN_WALLPAPERS, NONE_WALLPAPER_ID, isCustomWallpaper, wallpaperName } from '@/lib/chatWallpapers';
 import {
   Loader2, Camera, User, Bell, Lock, Shield, Palette, Eye,
   Globe, Moon, Sun, Monitor, Smartphone, Laptop, MapPin,
@@ -551,6 +553,13 @@ function AccountSection({ profile, formData, setFormData, user, saving, uploadin
 }
 
 function AppearanceSection({ preferences, updatePreferences }: any) {
+  const [wallpaperOpen, setWallpaperOpen] = useState(false);
+  const currentWallpaper = preferences?.chat_wallpaper || null;
+  const currentBackground = currentWallpaper
+    ? BUILT_IN_WALLPAPERS.find((w) => w.id === currentWallpaper)?.background ||
+      (isCustomWallpaper(currentWallpaper) ? `url("${currentWallpaper}") center / cover` : '')
+    : '';
+
   return (
     <div className="space-y-5">
       <SectionCard title="Theme" description="Choose your preferred appearance">
@@ -666,6 +675,53 @@ function AppearanceSection({ preferences, updatePreferences }: any) {
           ))}
         </div>
       </SectionCard>
+
+      <SectionCard title="Chat Wallpaper" description="Choose a background for your conversations">
+        <button
+          onClick={() => setWallpaperOpen(true)}
+          className="flex items-center gap-4 w-full text-left p-3 rounded-xl border border-border hover:border-primary/40 transition-colors"
+        >
+          <div
+            className="h-16 w-11 flex-shrink-0 rounded-lg border border-border/60"
+            style={{ background: currentBackground || 'hsl(var(--muted))' }}
+          />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">{currentWallpaper ? wallpaperName(currentWallpaper) : 'Default'}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {currentWallpaper
+                ? isCustomWallpaper(currentWallpaper)
+                  ? 'Custom image'
+                  : 'Free built-in wallpaper'
+                : 'No wallpaper applied'}
+            </p>
+          </div>
+          <span className="text-sm font-medium text-primary">Change</span>
+        </button>
+        <div className="mt-4">
+          <p className="text-xs text-muted-foreground mb-3">Popular picks</p>
+          <div className="grid grid-cols-6 gap-2">
+            {BUILT_IN_WALLPAPERS.slice(0, 6).map((w) => (
+              <button
+                key={w.id}
+                onClick={() => updatePreferences({ chat_wallpaper: w.id })}
+                className={cn(
+                  "aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all",
+                  currentWallpaper === w.id ? "border-primary" : "border-border/60 hover:border-primary/50"
+                )}
+                title={w.name}
+                style={{ background: w.background }}
+              />
+            ))}
+          </div>
+        </div>
+      </SectionCard>
+
+      <WallpaperPickerDialog
+        open={wallpaperOpen}
+        onOpenChange={setWallpaperOpen}
+        value={currentWallpaper}
+        onSelect={(value) => updatePreferences({ chat_wallpaper: value === NONE_WALLPAPER_ID ? null : value })}
+      />
     </div>
   );
 }

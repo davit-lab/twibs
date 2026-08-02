@@ -5,6 +5,9 @@ import { useCallBlocks } from '@/hooks/useCallBlocks';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWebRTC, CallSession } from '@/hooks/useWebRTC';
 import { useConversations, Conversation } from '@/hooks/useConversations';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { getWallpaperBackground } from '@/lib/chatWallpapers';
+import WallpaperPickerDialog from './WallpaperPickerDialog';
 import { formatLastSeen, isUserOnline } from '@/hooks/usePresence';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -41,6 +44,7 @@ import {
   LogOut,
   Shield,
   Image as ImageIcon,
+  Palette,
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -86,6 +90,11 @@ export default function MessageThread({
   const { blockUser, unblockUser, isUserBlocked } = useCallBlocks();
   const { toggleMute, leaveConversation } = useConversations();
   const { callState, startCall, answerCall, endCall, toggleAudio, toggleVideo, toggleScreenShare, retryCall } = useWebRTC(conversationId, otherUserId);
+  const { preferences, updatePreferences } = useUserPreferences();
+
+  const wallpaper = preferences?.chat_wallpaper || null;
+  const wallpaperBackground = getWallpaperBackground(wallpaper);
+  const [wallpaperOpen, setWallpaperOpen] = useState(false);
 
   const isGroup = conversation ? conversation.type !== 'dm' : false;
   const isCommunity = conversation?.type === 'community';
@@ -190,6 +199,11 @@ export default function MessageThread({
     const next = !muted;
     const ok = await toggleMute(conversationId, next);
     if (ok) setMuted(next);
+  };
+
+  const handleWallpaperSelect = (value: string) => {
+    updatePreferences({ chat_wallpaper: value === 'none' ? null : value });
+    setWallpaperOpen(false);
   };
 
   const handleLeave = async () => {
@@ -370,11 +384,28 @@ export default function MessageThread({
           onRetry={retryCall}
         />
       )}
+
+      <WallpaperPickerDialog
+        open={wallpaperOpen}
+        onOpenChange={setWallpaperOpen}
+        value={wallpaper}
+        onSelect={handleWallpaperSelect}
+      />
       
       <div className={cn(
         "flex flex-col h-full bg-background relative",
         isExtended && "fixed inset-0 z-50"
       )}>
+        {wallpaperBackground && (
+          <>
+            <div
+              aria-hidden
+              className="absolute inset-0"
+              style={{ background: wallpaperBackground }}
+            />
+            <div aria-hidden className="absolute inset-0 bg-white/25 dark:bg-black/40" />
+          </>
+        )}
         {/* Header */}
         <div className="h-[70px] px-4 md:px-6 flex items-center gap-3 border-b border-border/50 bg-card/70 backdrop-blur-xl flex-shrink-0 z-10">
           {onBack && !isExtended && (
@@ -423,6 +454,13 @@ export default function MessageThread({
           </div>
 
           <div className="flex items-center gap-1">
+            <button
+              className={cn('icon-btn', wallpaper && 'text-primary')}
+              onClick={() => setWallpaperOpen(true)}
+              title="Chat wallpaper"
+            >
+              <Palette className="h-4 w-4" />
+            </button>
             {!isGroup && canCall && (
               <>
                 <button className="icon-btn" onClick={() => startCall('audio')}>
@@ -535,7 +573,7 @@ export default function MessageThread({
         </div>
 
         {/* Messages area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-1 scrollbar-thin">
+        <div className="flex-1 overflow-y-auto p-6 space-y-1 scrollbar-thin relative">
           {messageGroups.map((group) => (
             <div key={group.date}>
               {/* Date divider */}
@@ -665,7 +703,7 @@ export default function MessageThread({
         </div>
 
         {/* Quick emoji bar */}
-        <div className="flex gap-1 px-6 flex-wrap">
+        <div className="flex gap-1 px-6 flex-wrap relative">
           {['👍', '❤️', '😂', '🔥', '✨', '🎨', '💜', '🙌'].map((emoji) => (
             <button key={emoji} className="emoji-chip" onClick={() => handleEmojiSelect(emoji)}>
               {emoji}
@@ -674,7 +712,7 @@ export default function MessageThread({
         </div>
 
         {/* Input area */}
-        <div className="px-3 pt-3 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] md:p-4 border-t border-border/50 bg-card/70 backdrop-blur-xl flex-shrink-0">
+        <div className="px-3 pt-3 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] md:p-4 border-t border-border/50 bg-card/70 backdrop-blur-xl flex-shrink-0 relative">
           <form onSubmit={handleSend} className="flex items-end gap-2">
             <button
               type="button"
