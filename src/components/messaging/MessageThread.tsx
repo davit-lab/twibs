@@ -5,7 +5,6 @@ import { useCallBlocks } from '@/hooks/useCallBlocks';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWebRTC, CallSession } from '@/hooks/useWebRTC';
 import { useConversations, Conversation } from '@/hooks/useConversations';
-import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { getWallpaperBackground } from '@/lib/chatWallpapers';
 import WallpaperPickerDialog from './WallpaperPickerDialog';
 import { formatLastSeen, isUserOnline } from '@/hooks/usePresence';
@@ -90,9 +89,8 @@ export default function MessageThread({
   const { blockUser, unblockUser, isUserBlocked } = useCallBlocks();
   const { toggleMute, leaveConversation } = useConversations();
   const { callState, startCall, answerCall, endCall, toggleAudio, toggleVideo, toggleScreenShare, retryCall } = useWebRTC(conversationId, otherUserId);
-  const { preferences, updatePreferences } = useUserPreferences();
 
-  const wallpaper = (conversation?.chat_wallpaper ?? preferences?.chat_wallpaper) || null;
+  const wallpaper = conversation?.chat_wallpaper || null;
   const wallpaperBackground = getWallpaperBackground(wallpaper);
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
 
@@ -209,8 +207,6 @@ export default function MessageThread({
         wallpaper: next,
       });
       if (error) console.error('Failed to set shared wallpaper:', error);
-    } else {
-      updatePreferences({ chat_wallpaper: next });
     }
     setWallpaperOpen(false);
   };
@@ -399,7 +395,7 @@ export default function MessageThread({
         onOpenChange={setWallpaperOpen}
         value={wallpaper}
         onSelect={handleWallpaperSelect}
-        note="This wallpaper is shared with everyone in this chat. Chats without a shared wallpaper use your personal default."
+        note="This wallpaper is shared with everyone in this chat — any member can change it."
       />
       
       <div className={cn(

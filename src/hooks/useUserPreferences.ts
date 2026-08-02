@@ -31,7 +31,6 @@ export interface UserPreferences {
   two_factor_enabled: boolean;
   login_alerts: boolean;
   do_not_disturb: boolean;
-  chat_wallpaper?: string | null;
 }
 
 const defaultPreferences: Omit<UserPreferences, 'user_id'> = {

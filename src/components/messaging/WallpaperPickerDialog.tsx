@@ -166,7 +166,7 @@ export default function WallpaperPickerDialog({ open, onOpenChange, value, onSel
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                {note || 'Saved to your account as your default. Chats with their own shared wallpaper override it.'}
+                {note || 'This wallpaper is shared with everyone in the chat — any member can change it.'}
               </p>
             </div>
           </div>
