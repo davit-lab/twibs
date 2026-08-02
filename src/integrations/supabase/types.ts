@@ -1006,6 +1006,60 @@ export type Database = {
           },
         ]
       }
+      message_attachments: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          duration: number | null
+          id: string
+          message_id: string
+          mime_type: string | null
+          name: string | null
+          size: number | null
+          type: string
+          url: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          duration?: number | null
+          id?: string
+          message_id: string
+          mime_type?: string | null
+          name?: string | null
+          size?: number | null
+          type: string
+          url: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          duration?: number | null
+          id?: string
+          message_id?: string
+          mime_type?: string | null
+          name?: string | null
+          size?: number | null
+          type?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_attachments_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_attachments_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           actor_id: string | null

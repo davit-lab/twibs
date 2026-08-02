@@ -13,6 +13,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import AttachmentBubble, { formatDuration, downloadUrl } from './AttachmentBubble';
+import { useToast } from '@/hooks/use-toast';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,8 +45,14 @@ import {
   BellOff,
   LogOut,
   Shield,
-  Image as ImageIcon,
   Palette,
+  ImagePlus,
+  Paperclip,
+  Mic,
+  Square,
+  Clapperboard,
+  X,
+  Download,
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -69,6 +78,16 @@ interface MessageThreadProps {
   onCallAnswered?: () => void;
   initialDraft?: string;
   draftNonce?: string;
+}
+
+interface PendingAttachment {
+  id: string;
+  type: 'image' | 'audio' | 'file';
+  url: string;
+  name: string;
+  size: number;
+  mime_type: string | null;
+  duration?: number | null;
 }
 
 export default function MessageThread({
@@ -118,11 +137,24 @@ export default function MessageThread({
   const [callBlockReason, setCallBlockReason] = useState<string | null>(null);
   const [isBlocked, setIsBlocked] = useState(false);
   const [muted, setMuted] = useState(conversation?.muted || false);
-  
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const longPressTriggeredRef = useRef(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingStartRef = useRef(0);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const { toast } = useToast();
 
   useEffect(() => {
     setMuted(conversation?.muted || false);
@@ -243,6 +275,148 @@ export default function MessageThread({
     }
   };
 
+  const uploadToChat = async (file: File): Promise<string> => {
+    if (!user) throw new Error('Not signed in');
+    const ext = file.name.split('.').pop() || 'bin';
+    const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage
+      .from('chat-media')
+      .upload(path, file, { contentType: file.type });
+    if (error) throw error;
+    const { data } = supabase.storage.from('chat-media').getPublicUrl(path);
+    return data.publicUrl;
+  };
+
+  const addFiles = async (files: File[]) => {
+    if (!user) return;
+    for (const file of files) {
+      if (file.size > 25 * 1024 * 1024) {
+        toast({ variant: 'destructive', title: 'File too large', description: `${file.name} is over 25MB.` });
+        continue;
+      }
+      setUploadingAttachment(true);
+      try {
+        const url = await uploadToChat(file);
+        setAttachments(prev => [
+          ...prev,
+          {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            type: file.type.startsWith('image/') ? 'image' : 'file',
+            url,
+            name: file.name,
+            size: file.size,
+            mime_type: file.type,
+          },
+        ]);
+      } catch (err) {
+        toast({
+          variant: 'destructive',
+          title: 'Upload failed',
+          description: err instanceof Error ? err.message : 'Could not upload file.',
+        });
+      } finally {
+        setUploadingAttachment(false);
+      }
+    }
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length) addFiles(files);
+    e.target.value = '';
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length) addFiles(files);
+    e.target.value = '';
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageFiles: File[] = [];
+    for (const item of items) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) imageFiles.push(file);
+      }
+    }
+    if (imageFiles.length) {
+      e.preventDefault();
+      addFiles(imageFiles);
+    }
+  };
+
+  const startRecording = async () => {
+    if (!user) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      recordingChunksRef.current = [];
+      recorder.ondataavailable = (ev) => {
+        if (ev.data.size > 0) recordingChunksRef.current.push(ev.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(recordingChunksRef.current, { type: 'audio/webm' });
+        if (blob.size > 0) {
+          setUploadingAttachment(true);
+          try {
+            const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
+            const url = await uploadToChat(file);
+            setAttachments(prev => [
+              ...prev,
+              {
+                id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                type: 'audio',
+                url,
+                name: 'Voice message',
+                size: blob.size,
+                mime_type: 'audio/webm',
+                duration: Math.round((Date.now() - recordingStartRef.current) / 1000),
+              },
+            ]);
+          } catch (err) {
+            toast({
+              variant: 'destructive',
+              title: 'Recording failed',
+              description: err instanceof Error ? err.message : 'Could not upload recording.',
+            });
+          } finally {
+            setUploadingAttachment(false);
+          }
+        }
+      };
+      recorder.start();
+      recordingStartRef.current = Date.now();
+      setRecordingTime(0);
+      setRecording(true);
+      recordingTimerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
+    } catch {
+      toast({
+        variant: 'destructive',
+        title: 'Microphone unavailable',
+        description: 'Allow microphone access to record voice messages.',
+      });
+    }
+  };
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    mediaRecorderRef.current = null;
+    setRecording(false);
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  };
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, typingUsers]);
@@ -267,12 +441,17 @@ export default function MessageThread({
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || sending) return;
+    const hasText = newMessage.trim().length > 0;
+    if ((!hasText && attachments.length === 0) || sending || uploadingAttachment) return;
 
     setSending(true);
     try {
-      await sendMessage(newMessage);
+      await sendMessage(
+        newMessage.trim(),
+        attachments.map(({ id, ...att }) => att)
+      );
       setNewMessage('');
+      setAttachments([]);
       inputRef.current?.focus();
     } catch (error) {
       console.error('Failed to send message:', error);
@@ -397,6 +576,26 @@ export default function MessageThread({
         onSelect={handleWallpaperSelect}
         note="This wallpaper is shared with everyone in this chat — any member can change it."
       />
+
+      <Dialog open={!!lightboxUrl} onOpenChange={(open) => { if (!open) setLightboxUrl(null); }}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-base">Image preview</DialogTitle>
+          </DialogHeader>
+          {lightboxUrl && (
+            <div className="flex flex-col items-center gap-4">
+              <img
+                src={lightboxUrl}
+                alt="Preview"
+                className="max-h-[70vh] w-auto max-w-full rounded-lg object-contain"
+              />
+              <Button onClick={() => downloadUrl(lightboxUrl, 'image')} className="gap-2">
+                <Download className="h-4 w-4" /> Download
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       
       <div className={cn(
         "flex flex-col h-full bg-background relative",
@@ -627,7 +826,7 @@ export default function MessageThread({
                         <div
                           className={cn(
                             'cursor-pointer select-none',
-                            isGifUrl(message.content) ? 'p-1' : 'px-4 py-2.5',
+                            isGifUrl(message.content) || (!message.content && message.attachments?.length) ? 'p-1' : 'px-4 py-2.5',
                             isOwn ? 'message-own shadow-md shadow-primary/25' : 'message-other',
                             selectedMessageId === message.id && 'ring-2 ring-primary/50'
                           )}
@@ -649,8 +848,15 @@ export default function MessageThread({
                               className="max-w-full rounded-xl max-h-64 object-contain pointer-events-none"
                               loading="lazy"
                             />
-                          ) : (
+                          ) : message.content ? (
                             <p className="break-words text-sm leading-relaxed">{message.content}</p>
+                          ) : null}
+                          {message.attachments && message.attachments.length > 0 && (
+                            <AttachmentBubble
+                              attachments={message.attachments}
+                              isOwn={isOwn}
+                              onImageClick={setLightboxUrl}
+                            />
                           )}
                           <div className={cn('flex items-center gap-1 mt-1', isOwn ? 'justify-end' : 'justify-start')}>
                             <span className={cn('text-[10px]', isOwn ? 'text-white/70' : 'text-muted-foreground')}>
@@ -719,13 +925,106 @@ export default function MessageThread({
 
         {/* Input area */}
         <div className="px-3 pt-3 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] md:p-4 border-t border-border/50 bg-card/70 backdrop-blur-xl flex-shrink-0 relative">
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handleImageSelect}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+
+          {recording && (
+            <div className="flex items-center gap-2 mb-2 px-1">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+              </span>
+              <span className="text-sm font-medium text-red-500">Recording {formatDuration(recordingTime)}</span>
+              <button
+                type="button"
+                onClick={stopRecording}
+                className="ml-auto text-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                Stop
+              </button>
+            </div>
+          )}
+
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {attachments.map((att) => (
+                <div key={att.id} className="relative group">
+                  {att.type === 'image' ? (
+                    <img
+                      src={att.url}
+                      alt={att.name}
+                      className="h-16 w-16 rounded-lg object-cover border border-border/60"
+                    />
+                  ) : (
+                    <div className="h-16 w-16 rounded-lg border border-border/60 flex flex-col items-center justify-center gap-0.5 bg-muted/40 px-1">
+                      {att.type === 'audio' ? (
+                        <Mic className="h-5 w-5 text-primary" />
+                      ) : (
+                        <Paperclip className="h-5 w-5 text-primary" />
+                      )}
+                      <span className="text-[9px] text-muted-foreground truncate max-w-full">{att.name}</span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(att.id)}
+                    className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center shadow"
+                    title="Remove"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+              {uploadingAttachment && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground self-center" />}
+            </div>
+          )}
+
           <form onSubmit={handleSend} className="flex items-end gap-2">
             <button
               type="button"
               className="icon-btn h-11 w-11 rounded-full flex-shrink-0"
               onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowGifPicker(false); }}
+              title="Emoji"
             >
               <Smile className="w-5 h-5" />
+            </button>
+            <button
+              type="button"
+              className="icon-btn h-11 w-11 rounded-full flex-shrink-0"
+              onClick={() => { setShowGifPicker(!showGifPicker); setShowEmojiPicker(false); }}
+              title="GIF"
+            >
+              <Clapperboard className="w-5 h-5" />
+            </button>
+            <button
+              type="button"
+              className="icon-btn h-11 w-11 rounded-full flex-shrink-0"
+              onClick={() => imageInputRef.current?.click()}
+              title="Upload image"
+              disabled={uploadingAttachment}
+            >
+              <ImagePlus className="w-5 h-5" />
+            </button>
+            <button
+              type="button"
+              className="icon-btn h-11 w-11 rounded-full flex-shrink-0"
+              onClick={() => fileInputRef.current?.click()}
+              title="Upload file"
+              disabled={uploadingAttachment}
+            >
+              <Paperclip className="w-5 h-5" />
             </button>
 
             <div className="orbis-input-wrap h-11 flex-1 rounded-2xl">
@@ -733,22 +1032,36 @@ export default function MessageThread({
                 ref={inputRef}
                 value={newMessage}
                 onChange={handleInputChange}
-                placeholder="Type a message..."
+                onPaste={handlePaste}
+                placeholder={recording ? 'Recording…' : 'Type a message...'}
                 disabled={sending}
                 className="flex-1 bg-transparent border-0 outline-none text-sm text-foreground placeholder:text-muted-foreground"
               />
+            </div>
+
+            {recording ? (
               <button
                 type="button"
-                className="icon-btn h-8 w-8 rounded-full"
-                onClick={() => { setShowGifPicker(!showGifPicker); setShowEmojiPicker(false); }}
+                onClick={stopRecording}
+                className="send-btn flex-shrink-0"
+                title="Stop recording"
               >
-                <ImageIcon className="w-4 h-4" />
+                <Square className="w-5 h-5 fill-current" />
               </button>
-            </div>
+            ) : (
+              <button
+                type="button"
+                onClick={startRecording}
+                className="icon-btn h-11 w-11 rounded-full flex-shrink-0"
+                title="Record voice message"
+              >
+                <Mic className="w-5 h-5" />
+              </button>
+            )}
 
             <button
               type="submit"
-              disabled={!newMessage.trim() || sending}
+              disabled={(!newMessage.trim() && attachments.length === 0) || sending || uploadingAttachment}
               className="send-btn disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {sending ? (

@@ -2,6 +2,28 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
+export interface MessageAttachment {
+  id: string;
+  message_id: string;
+  conversation_id: string;
+  type: 'image' | 'audio' | 'file';
+  url: string;
+  name: string | null;
+  size: number | null;
+  mime_type: string | null;
+  duration: number | null;
+  created_at: string;
+}
+
+export interface NewAttachment {
+  type: 'image' | 'audio' | 'file';
+  url: string;
+  name?: string | null;
+  size?: number | null;
+  mime_type?: string | null;
+  duration?: number | null;
+}
+
 export interface Message {
   id: string;
   conversation_id: string;
@@ -9,6 +31,7 @@ export interface Message {
   content: string;
   created_at: string;
   is_edited: boolean;
+  attachments?: MessageAttachment[];
   profiles?: {
     username: string;
     display_name: string;
@@ -51,6 +74,18 @@ export function useMessages(conversationId: string | null) {
 
       if (error) throw error;
 
+      const messageIds = (data || []).map(m => m.id);
+
+      let attachments: MessageAttachment[] = [];
+      if (messageIds.length > 0) {
+        const { data: attData, error: attError } = await supabase
+          .from('message_attachments')
+          .select('*')
+          .in('message_id', messageIds);
+        if (attError) throw attError;
+        attachments = (attData || []) as MessageAttachment[];
+      }
+
       // Fetch profiles for senders
       const senderIds = [...new Set((data || []).map(m => m.sender_id))];
       const { data: profiles } = await supabase
@@ -62,6 +97,7 @@ export function useMessages(conversationId: string | null) {
 
       const messagesWithProfiles = (data || []).map(m => ({
         ...m,
+        attachments: attachments.filter(a => a.message_id === m.id),
         profiles: profileMap.get(m.sender_id),
       }));
 
@@ -93,7 +129,7 @@ export function useMessages(conversationId: string | null) {
         },
         async (payload) => {
           const newMessage = payload.new as Message;
-          
+
           // Fetch sender profile
           const { data: profile } = await supabase
             .from('profiles')
@@ -101,7 +137,32 @@ export function useMessages(conversationId: string | null) {
             .eq('user_id', newMessage.sender_id)
             .single();
 
-          setMessages(prev => [...prev, { ...newMessage, profiles: profile || undefined }]);
+          // Fetch attachments (may be empty if still being inserted)
+          const { data: attachments } = await supabase
+            .from('message_attachments')
+            .select('*')
+            .eq('message_id', newMessage.id);
+
+          setMessages(prev => [...prev, { ...newMessage, attachments: (attachments || []) as MessageAttachment[], profiles: profile || undefined }]);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'message_attachments',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const attachment = payload.new as MessageAttachment;
+          setMessages(prev =>
+            prev.map(m =>
+              m.id === attachment.message_id
+                ? { ...m, attachments: [...(m.attachments || []), attachment] }
+                : m
+            )
+          );
         }
       )
       .on(
@@ -180,19 +241,40 @@ export function useMessages(conversationId: string | null) {
     };
   }, [conversationId, user]);
 
-  const sendMessage = async (content: string) => {
-    if (!conversationId || !user || !content.trim()) return;
+  const sendMessage = async (content: string, attachments: NewAttachment[] = []) => {
+    if (!conversationId || !user) return;
+    if (!content.trim() && attachments.length === 0) return;
 
     try {
-      const { error } = await supabase
+      const { data: inserted, error } = await supabase
         .from('messages')
         .insert({
           conversation_id: conversationId,
           sender_id: user.id,
           content: content.trim(),
-        });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
+
+      if (attachments.length > 0) {
+        const { error: attError } = await supabase
+          .from('message_attachments')
+          .insert(
+            attachments.map(a => ({
+              message_id: inserted.id,
+              conversation_id: conversationId,
+              type: a.type,
+              url: a.url,
+              name: a.name ?? null,
+              size: a.size ?? null,
+              mime_type: a.mime_type ?? null,
+              duration: a.duration ?? null,
+            }))
+          );
+        if (attError) throw attError;
+      }
 
       // Clear typing indicator
       await setTyping(false);
