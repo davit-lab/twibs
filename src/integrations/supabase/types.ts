@@ -536,6 +536,7 @@ export type Database = {
       conversations: {
         Row: {
           avatar_url: string | null
+          chat_wallpaper: string | null
           created_at: string
           description: string | null
           id: string
@@ -547,6 +548,7 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          chat_wallpaper?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -558,6 +560,7 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          chat_wallpaper?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -1925,6 +1928,10 @@ export type Database = {
       }
       leave_conversation: {
         Args: { conv_id: string }
+        Returns: undefined
+      }
+      set_conversation_wallpaper: {
+        Args: { conv_id: string; wallpaper?: string | null }
         Returns: undefined
       }
       user_owns_book: {

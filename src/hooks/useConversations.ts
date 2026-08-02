@@ -36,6 +36,7 @@ export interface Conversation {
   join_code: string | null;
   owner_id: string | null;
   updated_at: string;
+  chat_wallpaper: string | null;
   participants: Participant[];
   participant_count: number;
   muted: boolean;
@@ -53,6 +54,7 @@ interface RawConversation {
   join_code: string | null;
   owner_id: string | null;
   updated_at: string;
+  chat_wallpaper: string | null;
   conversation_participants?: RawParticipant[];
 }
 
@@ -106,6 +108,7 @@ export function useConversations() {
           join_code,
           owner_id,
           updated_at,
+          chat_wallpaper,
           conversation_participants (
             user_id,
             last_read_at,
@@ -177,6 +180,7 @@ export function useConversations() {
           join_code: conv.join_code,
           owner_id: conv.owner_id,
           updated_at: conv.updated_at,
+          chat_wallpaper: conv.chat_wallpaper ?? null,
           participants: normalized.filter((p) => p.user_id !== user.id),
           participant_count: normalized.length,
           muted: !!myParticipant?.muted,
@@ -222,6 +226,17 @@ export function useConversations() {
           schema: 'public',
           table: 'conversation_participants',
           filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          fetchConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'conversations',
         },
         () => {
           fetchConversations();

@@ -676,7 +676,7 @@ function AppearanceSection({ preferences, updatePreferences }: any) {
         </div>
       </SectionCard>
 
-      <SectionCard title="Chat Wallpaper" description="Choose a background for your conversations">
+      <SectionCard title="Default Chat Wallpaper" description="Your personal background, used in chats that don't share their own. You can also set a shared wallpaper from any chat's header.">
         <button
           onClick={() => setWallpaperOpen(true)}
           className="flex items-center gap-4 w-full text-left p-3 rounded-xl border border-border hover:border-primary/40 transition-colors"
@@ -721,8 +721,7 @@ function AppearanceSection({ preferences, updatePreferences }: any) {
         onOpenChange={setWallpaperOpen}
         value={currentWallpaper}
         onSelect={(value) => updatePreferences({ chat_wallpaper: value === NONE_WALLPAPER_ID ? null : value })}
-      />
-    </div>
+      />    </div>
   );
 }
 

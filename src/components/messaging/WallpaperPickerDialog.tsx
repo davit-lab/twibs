@@ -19,9 +19,10 @@ interface WallpaperPickerDialogProps {
   onOpenChange: (open: boolean) => void;
   value: string | null;
   onSelect: (value: string) => void;
+  note?: string;
 }
 
-export default function WallpaperPickerDialog({ open, onOpenChange, value, onSelect }: WallpaperPickerDialogProps) {
+export default function WallpaperPickerDialog({ open, onOpenChange, value, onSelect, note }: WallpaperPickerDialogProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [uploading, setUploading] = useState(false);
@@ -165,7 +166,7 @@ export default function WallpaperPickerDialog({ open, onOpenChange, value, onSel
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Your wallpaper is saved to your account and applies to every chat.
+                {note || 'Saved to your account as your default. Chats with their own shared wallpaper override it.'}
               </p>
             </div>
           </div>

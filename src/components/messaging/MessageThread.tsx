@@ -92,7 +92,7 @@ export default function MessageThread({
   const { callState, startCall, answerCall, endCall, toggleAudio, toggleVideo, toggleScreenShare, retryCall } = useWebRTC(conversationId, otherUserId);
   const { preferences, updatePreferences } = useUserPreferences();
 
-  const wallpaper = preferences?.chat_wallpaper || null;
+  const wallpaper = (conversation?.chat_wallpaper ?? preferences?.chat_wallpaper) || null;
   const wallpaperBackground = getWallpaperBackground(wallpaper);
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
 
@@ -201,8 +201,17 @@ export default function MessageThread({
     if (ok) setMuted(next);
   };
 
-  const handleWallpaperSelect = (value: string) => {
-    updatePreferences({ chat_wallpaper: value === 'none' ? null : value });
+  const handleWallpaperSelect = async (value: string) => {
+    const next = value === 'none' ? null : value;
+    if (conversation) {
+      const { error } = await supabase.rpc('set_conversation_wallpaper', {
+        conv_id: conversationId,
+        wallpaper: next,
+      });
+      if (error) console.error('Failed to set shared wallpaper:', error);
+    } else {
+      updatePreferences({ chat_wallpaper: next });
+    }
     setWallpaperOpen(false);
   };
 
@@ -390,6 +399,7 @@ export default function MessageThread({
         onOpenChange={setWallpaperOpen}
         value={wallpaper}
         onSelect={handleWallpaperSelect}
+        note="This wallpaper is shared with everyone in this chat. Chats without a shared wallpaper use your personal default."
       />
       
       <div className={cn(
