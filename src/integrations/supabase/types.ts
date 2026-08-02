@@ -968,6 +968,7 @@ export type Database = {
           created_at: string
           id: string
           is_edited: boolean | null
+          reply_to_message_id: string | null
           sender_id: string
           updated_at: string
         }
@@ -977,6 +978,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_edited?: boolean | null
+          reply_to_message_id?: string | null
           sender_id: string
           updated_at?: string
         }
@@ -986,6 +988,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_edited?: boolean | null
+          reply_to_message_id?: string | null
           sender_id?: string
           updated_at?: string
         }

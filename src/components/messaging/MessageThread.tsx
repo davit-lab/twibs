@@ -54,6 +54,8 @@ import {
   X,
   Download,
   Plus,
+  Reply,
+  SmilePlus,
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -143,6 +145,7 @@ export default function MessageThread({
   const [recording, setRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -160,6 +163,12 @@ export default function MessageThread({
   useEffect(() => {
     setMuted(conversation?.muted || false);
   }, [conversation?.muted]);
+
+  useEffect(() => {
+    setReplyToMessage(null);
+    setAttachments([]);
+    setNewMessage('');
+  }, [conversationId]);
 
   useEffect(() => {
     if (initialDraft && draftNonce) {
@@ -449,16 +458,24 @@ export default function MessageThread({
     try {
       await sendMessage(
         newMessage.trim(),
-        attachments.map(({ id, ...att }) => att)
+        attachments.map(({ id, ...att }) => att),
+        replyToMessage?.id ?? null
       );
       setNewMessage('');
       setAttachments([]);
+      setReplyToMessage(null);
       inputRef.current?.focus();
     } catch (error) {
       console.error('Failed to send message:', error);
     } finally {
       setSending(false);
     }
+  };
+
+  const handleReply = (message: Message) => {
+    setReplyToMessage(message);
+    setSelectedMessageId(null);
+    inputRef.current?.focus();
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -554,6 +571,17 @@ export default function MessageThread({
   }
 
   const messageGroups = groupMessagesByDate(messages);
+  const messageMap = new Map(messages.map(m => [m.id, m]));
+
+  const replyAuthorName = (m: Message) =>
+    m.sender_id === user?.id ? 'You' : (m.profiles?.display_name || 'User');
+
+  const replyContentPreview = (m: Message) => {
+    if (m.attachments?.some(a => a.type === 'image')) return '📷 Photo';
+    if (m.attachments?.some(a => a.type === 'audio')) return '🎤 Voice message';
+    if (m.attachments?.some(a => a.type === 'file')) return '📎 File';
+    return m.content || '';
+  };
 
   return (
     <>
@@ -795,9 +823,10 @@ export default function MessageThread({
                   const showAvatar = !isOwn && (idx === 0 || group.messages[idx - 1].sender_id !== message.sender_id);
                   const messageReactions = getReactionsForMessage(message.id);
                   const senderProfile = isGroup ? message.profiles : undefined;
+                  const replyTarget = message.reply_to_message_id ? messageMap.get(message.reply_to_message_id) : undefined;
 
                   return (
-                    <div key={message.id} className={cn('flex gap-2', isOwn && 'justify-end')}>
+                    <div key={message.id} id={`msg-${message.id}`} className={cn('group flex gap-2', isOwn && 'justify-end')}>
                       {!isOwn && (
                         <div className="w-8 flex-shrink-0">
                           {showAvatar && (
@@ -821,8 +850,32 @@ export default function MessageThread({
                             onSelect={handleReactionSelect}
                             onClose={() => setSelectedMessageId(null)}
                             position={reactionPickerPosition}
+                            onReply={() => handleReply(message)}
                           />
                         )}
+
+                        {/* Hover actions */}
+                        <div className={cn(
+                          'absolute top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100',
+                          isOwn ? 'left-0 -translate-x-full pr-1' : 'right-0 translate-x-full pl-1'
+                        )}>
+                          <button
+                            type="button"
+                            onClick={() => handleReply(message)}
+                            className="icon-btn h-8 w-8 rounded-full bg-background/90 backdrop-blur border border-border/50 shadow"
+                            title="Reply"
+                          >
+                            <Reply className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedMessageId(message.id); setReactionPickerPosition(isOwn ? 'right' : 'left'); }}
+                            className="icon-btn h-8 w-8 rounded-full bg-background/90 backdrop-blur border border-border/50 shadow"
+                            title="React"
+                          >
+                            <SmilePlus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                         
                         <div
                           className={cn(
@@ -842,6 +895,23 @@ export default function MessageThread({
                             setReactionPickerPosition(isOwn ? 'right' : 'left');
                           }}
                         >
+                          {replyTarget && (
+                            <button
+                              type="button"
+                              onClick={() => document.getElementById(`msg-${replyTarget.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                              className={cn(
+                                'flex flex-col gap-0.5 text-left border-l-2 rounded-r-lg px-2.5 py-1.5 mb-1.5 w-full',
+                                isOwn ? 'border-white/60 bg-white/15' : 'border-primary/60 bg-primary/5'
+                              )}
+                            >
+                              <span className={cn('text-xs font-semibold', isOwn ? 'text-white' : 'text-primary')}>
+                                {replyAuthorName(replyTarget)}
+                              </span>
+                              <span className={cn('text-xs truncate', isOwn ? 'text-white/80' : 'text-muted-foreground')}>
+                                {replyContentPreview(replyTarget)}
+                              </span>
+                            </button>
+                          )}
                           {isGifUrl(message.content) ? (
                             <img 
                               src={message.content.trim()} 
@@ -941,6 +1011,28 @@ export default function MessageThread({
             onChange={handleFileSelect}
           />
 
+          {replyToMessage && (
+            <div className="flex items-center gap-2 mb-2 px-1">
+              <Reply className="h-4 w-4 text-primary flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-primary truncate">
+                  Replying to {replyAuthorName(replyToMessage)}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {replyContentPreview(replyToMessage)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReplyToMessage(null)}
+                className="icon-btn h-7 w-7 rounded-full flex-shrink-0"
+                title="Cancel reply"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
           {recording && (
             <div className="flex items-center gap-2 mb-2 px-1">
               <span className="relative flex h-3 w-3">
@@ -1034,7 +1126,7 @@ export default function MessageThread({
                 value={newMessage}
                 onChange={handleInputChange}
                 onPaste={handlePaste}
-                placeholder={recording ? 'Recording…' : 'Type a message...'}
+                placeholder={replyToMessage ? 'Reply…' : recording ? 'Recording…' : 'Type a message...'}
                 disabled={sending}
                 className="flex-1 bg-transparent border-0 outline-none text-sm text-foreground placeholder:text-muted-foreground min-w-0"
               />

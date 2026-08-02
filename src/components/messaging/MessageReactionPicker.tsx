@@ -1,9 +1,11 @@
+import { Reply } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MessageReactionPickerProps {
   onSelect: (emoji: string) => void;
   onClose: () => void;
   position: 'left' | 'right';
+  onReply?: () => void;
 }
 
 const QUICK_REACTIONS = ['❤️', '😂', '😮', '😢', '😡', '👍'];
@@ -12,6 +14,7 @@ export default function MessageReactionPicker({
   onSelect,
   onClose,
   position,
+  onReply,
 }: MessageReactionPickerProps) {
   return (
     <>
@@ -24,9 +27,9 @@ export default function MessageReactionPicker({
       {/* Picker */}
       <div
         className={cn(
-          "absolute z-50 bottom-full mb-2 flex items-center gap-1 p-2 rounded-full",
-          "bg-background/95  border border-border/50 shadow-xl",
-          " origin-bottom",
+          "absolute z-50 bottom-full mb-2 flex items-center gap-1 p-2 rounded-2xl",
+          "bg-background/95 border border-border/50 shadow-xl",
+          "origin-bottom",
           position === 'right' ? 'right-0' : 'left-0'
         )}
       >
@@ -46,6 +49,26 @@ export default function MessageReactionPicker({
             {emoji}
           </button>
         ))}
+        {onReply && (
+          <div className="w-px h-6 bg-border/60 mx-1" />
+        )}
+        {onReply && (
+          <button
+            onClick={() => {
+              onReply();
+              onClose();
+            }}
+            className={cn(
+              "h-10 px-3 flex items-center gap-1.5 rounded-full text-xs font-medium",
+              "text-muted-foreground hover:bg-muted hover:text-foreground transition-all",
+              "active:scale-95"
+            )}
+            title="Reply"
+          >
+            <Reply className="h-4 w-4" />
+            Reply
+          </button>
+        )}
       </div>
     </>
   );

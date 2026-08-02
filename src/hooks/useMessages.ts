@@ -31,6 +31,7 @@ export interface Message {
   content: string;
   created_at: string;
   is_edited: boolean;
+  reply_to_message_id?: string | null;
   attachments?: MessageAttachment[];
   profiles?: {
     username: string;
@@ -67,7 +68,8 @@ export function useMessages(conversationId: string | null) {
           sender_id,
           content,
           created_at,
-          is_edited
+          is_edited,
+          reply_to_message_id
         `)
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true });
@@ -241,7 +243,7 @@ export function useMessages(conversationId: string | null) {
     };
   }, [conversationId, user]);
 
-  const sendMessage = async (content: string, attachments: NewAttachment[] = []) => {
+  const sendMessage = async (content: string, attachments: NewAttachment[] = [], replyToId: string | null = null) => {
     if (!conversationId || !user) return;
     if (!content.trim() && attachments.length === 0) return;
 
@@ -252,6 +254,7 @@ export function useMessages(conversationId: string | null) {
           conversation_id: conversationId,
           sender_id: user.id,
           content: content.trim(),
+          reply_to_message_id: replyToId,
         })
         .select()
         .single();
