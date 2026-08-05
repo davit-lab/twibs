@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserBan } from '@/hooks/useUserBan';
@@ -70,6 +70,21 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
   usePresence();
   const location = useLocation();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [navVisible, setNavVisible] = useState(true);
+  const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const onScroll = () => {
+      setNavVisible(false);
+      if (scrollTimer.current) clearTimeout(scrollTimer.current);
+      scrollTimer.current = setTimeout(() => setNavVisible(true), 200);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (scrollTimer.current) clearTimeout(scrollTimer.current);
+    };
+  }, []);
 
   const getInitials = (name: string) => {
     return name
@@ -183,23 +198,23 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
         </aside>
       )}
 
-      {/* Mobile Header */}
-      {user && !immersive && (
-        <header className="lg:hidden sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/50">
-          <div className="flex items-center justify-between h-14 px-4">
-            <Link to="/" className="flex items-center">
-              <BrandLogo className="h-8" />
-            </Link>
-            <div className="flex items-center gap-1">
-              <NotificationDropdown className="text-muted-foreground hover:text-foreground hover:bg-primary/10" />
-              <Link to="/messages">
-                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-primary/10">
-                  <MessageCircle className="h-5 w-5" strokeWidth={1.5} />
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </header>
+      {/* Mobile Floating Nav - Notifications & Chats */}
+      {user && !immersive && location.pathname !== '/messages' && (
+        <div
+          className={cn(
+            'lg:hidden fixed top-3 right-3 z-50 flex items-center gap-0.5 bg-background/85 backdrop-blur-xl border border-border/60 rounded-full p-1.5 shadow-lg shadow-black/10 transition-all duration-300',
+            navVisible
+              ? 'translate-y-0 opacity-100'
+              : '-translate-y-16 opacity-0 pointer-events-none'
+          )}
+        >
+          <NotificationDropdown className="text-muted-foreground hover:text-foreground hover:bg-primary/10" />
+          <Link to="/messages">
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-primary/10">
+              <MessageCircle className="h-5 w-5" strokeWidth={1.5} />
+            </Button>
+          </Link>
+        </div>
       )}
 
       {/* Guest Header */}

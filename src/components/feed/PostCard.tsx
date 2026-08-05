@@ -30,6 +30,10 @@ import {
   Users,
   Lock,
   Bookmark,
+  Pencil,
+  Check,
+  X,
+  Loader2,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -56,6 +60,7 @@ interface PostData {
   comment_count: number;
   is_pinned: boolean;
   created_at: string;
+  updated_at: string;
   user_id: string;
   profiles: PostProfile;
   post_media: PostMedia[];
@@ -84,8 +89,12 @@ export default function PostCard({ post, onPostDeleted, onStarChange }: PostCard
   const [isStarring, setIsStarring] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const isOwnPost = currentUserProfile?.user_id === post.user_id;
+  const isEdited = !!post.updated_at && new Date(post.updated_at).getTime() !== new Date(post.created_at).getTime();
 
   const getInitials = (name: string) => {
     return name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
@@ -168,6 +177,43 @@ export default function PostCard({ post, onPostDeleted, onStarChange }: PostCard
     }
   };
 
+  const startEditing = () => {
+    setEditContent(post.content);
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editContent.trim() || isSavingEdit) return;
+    setIsSavingEdit(true);
+    try {
+      const { error } = await supabase
+        .from('posts')
+        .update({
+          content: editContent.trim(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', post.id)
+        .eq('user_id', user?.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Post updated',
+        description: 'Your post has been edited.',
+      });
+      setIsEditing(false);
+    } catch (error: unknown) {
+      console.error('Edit error:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to edit post. Please try again.',
+      });
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   const handleShare = async () => {
     const postUrl = `${window.location.origin}/post/${post.id}`;
     
@@ -227,6 +273,11 @@ export default function PostCard({ post, onPostDeleted, onStarChange }: PostCard
             >
               {formatDistanceToNow(new Date(post.created_at), { addSuffix: false })}
             </time>
+            {isEdited && (
+              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                edited
+              </span>
+            )}
             <span className="p-0.5 rounded-full bg-muted/80">
               <VisibilityIcon className="h-3 w-3 text-muted-foreground/80" />
             </span>
@@ -245,6 +296,13 @@ export default function PostCard({ post, onPostDeleted, onStarChange }: PostCard
                 <DropdownMenuItem className="gap-2 text-sm rounded-lg">
                   <Pin className="h-4 w-4" />
                   Pin to profile
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2 text-sm rounded-lg"
+                  onClick={startEditing}
+                >
+                  <Pencil className="h-4 w-4" />
+                  Edit post
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-border/30" />
                 <DropdownMenuItem
@@ -267,11 +325,49 @@ export default function PostCard({ post, onPostDeleted, onStarChange }: PostCard
       </div>
 
       {/* Post Content */}
-      {post.content && (
+      {post.content || isEditing ? (
         <div className="px-4">
-          <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">{post.content}</p>
+          {isEditing ? (
+            <div className="flex flex-col gap-2">
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                rows={3}
+                autoFocus
+                placeholder="What's on your mind?"
+                className="w-full bg-muted/40 border border-border/60 rounded-xl px-3.5 py-2.5 text-[15px] leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary/50 resize-none"
+              />
+              <div className="flex items-center gap-2 justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsEditing(false)}
+                  disabled={isSavingEdit}
+                  className="rounded-full text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSaveEdit}
+                  disabled={!editContent.trim() || isSavingEdit}
+                  className="rounded-full gap-1.5"
+                >
+                  {isSavingEdit ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                  Save
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">{post.content}</p>
+          )}
         </div>
-      )}
+      ) : null}
 
       {/* Media Grid */}
       {post.post_media && post.post_media.length > 0 && (

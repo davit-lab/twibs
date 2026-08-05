@@ -968,6 +968,7 @@ export type Database = {
           created_at: string
           id: string
           is_edited: boolean | null
+          location_session_id: string | null
           reply_to_message_id: string | null
           sender_id: string
           updated_at: string
@@ -978,6 +979,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_edited?: boolean | null
+          location_session_id?: string | null
           reply_to_message_id?: string | null
           sender_id: string
           updated_at?: string
@@ -988,6 +990,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_edited?: boolean | null
+          location_session_id?: string | null
           reply_to_message_id?: string | null
           sender_id?: string
           updated_at?: string
@@ -1001,11 +1004,75 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "messages_location_session_id_fkey"
+            columns: ["location_session_id"]
+            isOneToOne: false
+            referencedRelation: "live_location_sessions"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "messages_sender_id_profiles_fkey"
             columns: ["sender_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      live_location_sessions: {
+        Row: {
+          accuracy: number | null
+          conversation_id: string
+          current_lat: number | null
+          current_lng: number | null
+          ended_at: string | null
+          expires_at: string
+          id: string
+          message_id: string | null
+          started_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accuracy?: number | null
+          conversation_id: string
+          current_lat?: number | null
+          current_lng?: number | null
+          ended_at?: string | null
+          expires_at: string
+          id?: string
+          message_id?: string | null
+          started_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accuracy?: number | null
+          conversation_id?: string
+          current_lat?: number | null
+          current_lng?: number | null
+          ended_at?: string | null
+          expires_at?: string
+          id?: string
+          message_id?: string | null
+          started_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_location_sessions_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "live_location_sessions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1070,6 +1137,7 @@ export type Database = {
           created_at: string
           id: string
           is_read: boolean | null
+          message_id: string | null
           target_id: string | null
           target_type: string | null
           title: string
@@ -1082,6 +1150,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_read?: boolean | null
+          message_id?: string | null
           target_id?: string | null
           target_type?: string | null
           title: string
@@ -1094,13 +1163,22 @@ export type Database = {
           created_at?: string
           id?: string
           is_read?: boolean | null
+          message_id?: string | null
           target_id?: string | null
           target_type?: string | null
           title?: string
           type?: Database["public"]["Enums"]["notification_type"]
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notifications_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       post_media: {
         Row: {

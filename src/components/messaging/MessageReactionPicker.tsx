@@ -1,4 +1,4 @@
-import { Reply } from 'lucide-react';
+import { Reply, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MessageReactionPickerProps {
@@ -6,6 +6,8 @@ interface MessageReactionPickerProps {
   onClose: () => void;
   position: 'left' | 'right';
   onReply?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
 const QUICK_REACTIONS = ['❤️', '😂', '😮', '😢', '😡', '👍'];
@@ -15,6 +17,8 @@ export default function MessageReactionPicker({
   onClose,
   position,
   onReply,
+  onEdit,
+  onDelete,
 }: MessageReactionPickerProps) {
   return (
     <>
@@ -67,6 +71,43 @@ export default function MessageReactionPicker({
           >
             <Reply className="h-4 w-4" />
             Reply
+          </button>
+        )}
+        {(onEdit || onDelete) && (
+          <div className="w-px h-6 bg-border/60 mx-1" />
+        )}
+        {onEdit && (
+          <button
+            onClick={() => {
+              onEdit();
+              onClose();
+            }}
+            className={cn(
+              "h-10 px-3 flex items-center gap-1.5 rounded-full text-xs font-medium",
+              "text-foreground hover:bg-muted transition-all",
+              "active:scale-95"
+            )}
+            title="Edit"
+          >
+            <Pencil className="h-4 w-4" />
+            Edit
+          </button>
+        )}
+        {onDelete && (
+          <button
+            onClick={() => {
+              onDelete();
+              onClose();
+            }}
+            className={cn(
+              "h-10 px-3 flex items-center gap-1.5 rounded-full text-xs font-medium",
+              "text-destructive hover:bg-destructive/10 transition-all",
+              "active:scale-95"
+            )}
+            title="Delete"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
           </button>
         )}
       </div>

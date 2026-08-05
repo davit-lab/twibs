@@ -15,6 +15,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import AttachmentBubble, { formatDuration, downloadUrl } from './AttachmentBubble';
+import { useLiveLocation } from '@/hooks/useLiveLocation';
+import LocationShareDialog from './LocationShareDialog';
+import { LiveLocationMap, LocationPreview } from './LiveLocationMap';
 import { useToast } from '@/hooks/use-toast';
 import {
   DropdownMenu,
@@ -56,6 +59,9 @@ import {
   Plus,
   Reply,
   SmilePlus,
+  Pencil,
+  Trash2,
+  MapPin,
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -106,8 +112,9 @@ export default function MessageThread({
   draftNonce,
 }: MessageThreadProps) {
   const { user } = useAuth();
-  const { messages, loading, typingUsers, sendMessage, handleTyping, markAsRead } = useMessages(conversationId);
+  const { messages, loading, typingUsers, sendMessage, handleTyping, markAsRead, editMessage, deleteMessage } = useMessages(conversationId);
   const { toggleReaction, getReactionsForMessage } = useMessageReactions(conversationId);
+  const liveLocation = useLiveLocation(conversationId);
   const { blockUser, unblockUser, isUserBlocked } = useCallBlocks();
   const { toggleMute, leaveConversation } = useConversations();
   const { callState, startCall, answerCall, endCall, toggleAudio, toggleVideo, toggleScreenShare, retryCall } = useWebRTC(conversationId, otherUserId);
@@ -146,6 +153,11 @@ export default function MessageThread({
   const [recordingTime, setRecordingTime] = useState(0);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editMessageContent, setEditMessageContent] = useState('');
+  const [isSavingEditMessage, setIsSavingEditMessage] = useState(false);
+  const [locationDialogOpen, setLocationDialogOpen] = useState(false);
+  const [mapDialogOpen, setMapDialogOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -160,6 +172,19 @@ export default function MessageThread({
 
   const { toast } = useToast();
 
+  const handleStartCall = async (type: 'audio' | 'video') => {
+    if (callState.session || callState.isConnecting) return;
+
+    const result = await startCall(type);
+    if (!result.ok) {
+      toast({
+        variant: 'destructive',
+        title: 'Call failed',
+        description: result.error || 'Could not start the call.',
+      });
+    }
+  };
+
   useEffect(() => {
     setMuted(conversation?.muted || false);
   }, [conversation?.muted]);
@@ -168,6 +193,7 @@ export default function MessageThread({
     setReplyToMessage(null);
     setAttachments([]);
     setNewMessage('');
+    setEditingMessageId(null);
   }, [conversationId]);
 
   useEffect(() => {
@@ -526,14 +552,60 @@ export default function MessageThread({
     return new Date(message.created_at) <= new Date(lastReadAt);
   };
 
+  const isMessageSeen = (message: Message) => {
+    if (message.sender_id !== user?.id) return false;
+    const created = new Date(message.created_at).getTime();
+    if (lastReadAt && created <= new Date(lastReadAt).getTime()) return true;
+    const otherReads = (conversation?.participants || [])
+      .filter((p) => p.user_id !== user?.id)
+      .map((p) => p.last_read_at)
+      .filter((r): r is string => !!r);
+    return otherReads.some((r) => created <= new Date(r).getTime());
+  };
+
+  const startEditingMessage = (message: Message) => {
+    setEditMessageContent(message.content || '');
+    setEditingMessageId(message.id);
+    setSelectedMessageId(null);
+  };
+
+  const handleSaveMessageEdit = async () => {
+    if (!editingMessageId || isSavingEditMessage) return;
+    setIsSavingEditMessage(true);
+    const ok = await editMessage(editingMessageId, editMessageContent);
+    setIsSavingEditMessage(false);
+    if (ok) {
+      setEditingMessageId(null);
+    } else {
+      toast({
+        variant: 'destructive',
+        title: 'Edit failed',
+        description: 'This message may have already been seen or you do not have permission.',
+      });
+    }
+  };
+
+  const handleDeleteMessage = async (message: Message) => {
+    setSelectedMessageId(null);
+    const ok = await deleteMessage(message.id);
+    if (!ok) {
+      toast({
+        variant: 'destructive',
+        title: 'Delete failed',
+        description: 'Could not delete this message.',
+      });
+    }
+  };
+
   const handleLongPressStart = useCallback((messageId: string, isOwn: boolean) => {
+    if (editingMessageId) return;
     longPressTriggeredRef.current = false;
     longPressTimerRef.current = setTimeout(() => {
       longPressTriggeredRef.current = true;
       setSelectedMessageId(messageId);
       setReactionPickerPosition(isOwn ? 'right' : 'left');
     }, 500);
-  }, []);
+  }, [editingMessageId]);
 
   const handleLongPressEnd = useCallback(() => {
     if (longPressTimerRef.current) {
@@ -605,6 +677,36 @@ export default function MessageThread({
         onSelect={handleWallpaperSelect}
         note="This wallpaper is shared with everyone in this chat — any member can change it."
       />
+
+      <LocationShareDialog
+        open={locationDialogOpen}
+        onOpenChange={setLocationDialogOpen}
+        sessions={liveLocation.sessions}
+        currentUserId={user?.id}
+        requesting={liveLocation.requesting}
+        error={liveLocation.error}
+        signal={liveLocation.signal}
+        lastAccuracy={liveLocation.lastAccuracy}
+        onStart={liveLocation.startSharing}
+        onStop={liveLocation.stopSharing}
+      />
+
+      <Dialog open={mapDialogOpen} onOpenChange={setMapDialogOpen}>
+        <DialogContent className="sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5 text-primary" />
+              Live location
+            </DialogTitle>
+          </DialogHeader>
+          <LiveLocationMap
+            sessions={liveLocation.sessions}
+            currentUserId={user?.id}
+            follow
+            className="h-[60vh]"
+          />
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!lightboxUrl} onOpenChange={(open) => { if (!open) setLightboxUrl(null); }}>
         <DialogContent className="sm:max-w-3xl">
@@ -697,10 +799,10 @@ export default function MessageThread({
             </button>
             {!isGroup && canCall && (
               <>
-                <button className="icon-btn" onClick={() => startCall('audio')}>
+                <button className="icon-btn" onClick={() => handleStartCall('audio')}>
                   <Phone className="h-4 w-4" />
                 </button>
-                <button className="icon-btn" onClick={() => startCall('video')}>
+                <button className="icon-btn" onClick={() => handleStartCall('video')}>
                   <Video className="h-4 w-4" />
                 </button>
               </>
@@ -824,6 +926,10 @@ export default function MessageThread({
                   const messageReactions = getReactionsForMessage(message.id);
                   const senderProfile = isGroup ? message.profiles : undefined;
                   const replyTarget = message.reply_to_message_id ? messageMap.get(message.reply_to_message_id) : undefined;
+                  const isLocationMessage = !!message.location_session_id;
+                  const locationSession = message.location_session_id
+                    ? (liveLocation.sessions.find((s) => s.id === message.location_session_id) ?? null)
+                    : null;
 
                   return (
                     <div key={message.id} id={`msg-${message.id}`} className={cn('group flex gap-2', isOwn && 'justify-end')}>
@@ -851,6 +957,8 @@ export default function MessageThread({
                             onClose={() => setSelectedMessageId(null)}
                             position={reactionPickerPosition}
                             onReply={() => handleReply(message)}
+                            onEdit={isOwn ? () => startEditingMessage(message) : undefined}
+                            onDelete={isOwn ? () => handleDeleteMessage(message) : undefined}
                           />
                         )}
 
@@ -875,13 +983,59 @@ export default function MessageThread({
                           >
                             <SmilePlus className="h-3.5 w-3.5" />
                           </button>
+                          {isOwn && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="icon-btn h-8 w-8 rounded-full bg-background/90 backdrop-blur border border-border/50 shadow"
+                                  title="More"
+                                >
+                                  <MoreVertical className="h-3.5 w-3.5" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align={isOwn ? 'end' : 'start'} className="w-48 rounded-xl">
+                                {isMessageSeen(message) ? (
+                                  <>
+                                    <DropdownMenuItem disabled className="gap-2 text-sm">
+                                      <Pencil className="h-4 w-4" />
+                                      Edit
+                                    </DropdownMenuItem>
+                                    <p className="px-2 pb-1 -mt-1 text-[11px] text-muted-foreground">
+                                      Seen by the recipient — can't edit
+                                    </p>
+                                  </>
+                                ) : (
+                                  <DropdownMenuItem
+                                    className="gap-2 text-sm"
+                                    onClick={() => startEditingMessage(message)}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="gap-2 text-sm text-destructive focus:text-destructive"
+                                  onClick={() => handleDeleteMessage(message)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                         </div>
                         
                         <div
                           className={cn(
                             'cursor-pointer select-none',
-                            isGifUrl(message.content) || (!message.content && message.attachments?.length) ? 'p-1' : 'px-4 py-2.5',
-                            isOwn ? 'message-own shadow-md shadow-primary/25' : 'message-other',
+                            isLocationMessage
+                              ? 'p-0'
+                              : isGifUrl(message.content) || (!message.content && message.attachments?.length)
+                                ? 'p-1'
+                                : 'px-4 py-2.5',
+                            !isLocationMessage && (isOwn ? 'message-own shadow-md shadow-primary/25' : 'message-other'),
                             selectedMessageId === message.id && 'ring-2 ring-primary/50'
                           )}
                           onMouseDown={() => handleLongPressStart(message.id, isOwn)}
@@ -912,24 +1066,86 @@ export default function MessageThread({
                               </span>
                             </button>
                           )}
-                          {isGifUrl(message.content) ? (
-                            <img 
-                              src={message.content.trim()} 
-                              alt="GIF" 
-                              className="max-w-full rounded-xl max-h-64 object-contain pointer-events-none"
-                              loading="lazy"
-                            />
-                          ) : message.content ? (
-                            <p className="break-words text-sm leading-relaxed">{message.content}</p>
-                          ) : null}
-                          {message.attachments && message.attachments.length > 0 && (
-                            <AttachmentBubble
-                              attachments={message.attachments}
-                              isOwn={isOwn}
-                              onImageClick={setLightboxUrl}
-                            />
+                          {editingMessageId === message.id ? (
+                            <div className={cn('flex flex-col gap-1.5 py-1', isOwn ? 'items-end' : 'items-start')}>
+                              <textarea
+                                value={editMessageContent}
+                                onChange={(e) => setEditMessageContent(e.target.value)}
+                                rows={2}
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleSaveMessageEdit();
+                                  }
+                                  if (e.key === 'Escape') {
+                                    setEditingMessageId(null);
+                                  }
+                                }}
+                                className={cn(
+                                  'w-full min-w-[220px] rounded-xl px-3 py-2 text-sm bg-background/80 border border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary/50 resize-none',
+                                  isOwn ? 'text-right' : 'text-left'
+                                )}
+                              />
+                              <div className="flex items-center gap-1.5">
+                                <Button
+                                  size="sm"
+                                  onClick={handleSaveMessageEdit}
+                                  disabled={!editMessageContent.trim() || isSavingEditMessage}
+                                  className="h-8 rounded-full gap-1.5 px-4"
+                                >
+                                  {isSavingEditMessage ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Check className="h-3.5 w-3.5" />
+                                  )}
+                                  Save
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setEditingMessageId(null)}
+                                  disabled={isSavingEditMessage}
+                                  className="h-8 rounded-full text-muted-foreground hover:text-foreground"
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              {isLocationMessage ? (
+                                <LocationPreview
+                                  session={locationSession}
+                                  currentUserId={user?.id}
+                                  isOwn={isOwn}
+                                  onExpand={() => setMapDialogOpen(true)}
+                                />
+                              ) : isGifUrl(message.content) ? (
+                                <img
+                                  src={message.content.trim()}
+                                  alt="GIF"
+                                  className="max-w-full rounded-xl max-h-64 object-contain pointer-events-none"
+                                  loading="lazy"
+                                />
+                              ) : message.content ? (
+                                <p className="break-words text-sm leading-relaxed">{message.content}</p>
+                              ) : null}
+                              {message.attachments && message.attachments.length > 0 && (
+                                <AttachmentBubble
+                                  attachments={message.attachments}
+                                  isOwn={isOwn}
+                                  onImageClick={setLightboxUrl}
+                                />
+                              )}
+                            </>
                           )}
                           <div className={cn('flex items-center gap-1 mt-1', isOwn ? 'justify-end' : 'justify-start')}>
+                            {message.is_edited && (
+                              <span className={cn('text-[10px] font-medium uppercase tracking-wide', isOwn ? 'text-white/60' : 'text-muted-foreground/70')}>
+                                edited
+                              </span>
+                            )}
                             <span className={cn('text-[10px]', isOwn ? 'text-white/70' : 'text-muted-foreground')}>
                               {formatMessageTime(message.created_at)}
                             </span>
@@ -979,6 +1195,29 @@ export default function MessageThread({
                   <span />
                 </div>
               </div>
+            </div>
+          )}
+
+          {liveLocation.activeSessions.length > 0 && (
+            <div className="sticky bottom-2 z-10 flex items-center justify-center mt-2">
+              <button
+                type="button"
+                onClick={() => setMapDialogOpen(true)}
+                className="flex items-center gap-2 rounded-full bg-background/95 backdrop-blur border border-border/70 shadow-lg px-3.5 py-2 hover:bg-background"
+              >
+                <span className="relative flex h-2 w-2 flex-shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+                </span>
+                <span className="text-xs font-medium truncate">
+                  {liveLocation.activeSessions
+                    .map((s) => (s.user_id === user?.id ? 'You' : s.profiles?.display_name || 'Someone'))
+                    .join(', ')}
+                  {' '}
+                  {liveLocation.activeSessions.length === 1 ? 'is' : 'are'} sharing live location
+                </span>
+                <span className="text-[11px] font-semibold text-primary flex-shrink-0">View</span>
+              </button>
             </div>
           )}
 
@@ -1116,6 +1355,10 @@ export default function MessageThread({
                 <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
                   <Paperclip className="h-4 w-4 mr-2" />
                   File
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setLocationDialogOpen(true); setShowEmojiPicker(false); }}>
+                  <MapPin className="h-4 w-4 mr-2" />
+                  Live location
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

@@ -175,7 +175,8 @@ export function useComments(postId: string) {
       const { error } = await supabase
         .from('comments')
         .delete()
-        .eq('id', commentId);
+        .eq('id', commentId)
+        .eq('user_id', user.id);
 
       if (error) throw error;
 
@@ -184,12 +185,48 @@ export function useComments(postId: string) {
         description: 'Your comment has been removed.',
       });
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error deleting comment:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
         description: 'Failed to delete comment. Please try again.',
+      });
+      return false;
+    }
+  };
+
+  const editComment = async (commentId: string, content: string) => {
+    if (!user) return false;
+
+    const trimmed = content.trim();
+    if (!trimmed) return false;
+
+    try {
+      const { error } = await supabase
+        .from('comments')
+        .update({
+          content: trimmed,
+          is_edited: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', commentId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Comment updated',
+        description: 'Your comment has been edited.',
+      });
+      await fetchComments();
+      return true;
+    } catch (error: unknown) {
+      console.error('Error editing comment:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to edit comment. Please try again.',
       });
       return false;
     }
@@ -254,6 +291,7 @@ export function useComments(postId: string) {
     isLoading,
     addComment,
     deleteComment,
+    editComment,
     vote,
     refetch: fetchComments,
   };

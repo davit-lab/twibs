@@ -32,6 +32,7 @@ export interface Message {
   created_at: string;
   is_edited: boolean;
   reply_to_message_id?: string | null;
+  location_session_id?: string | null;
   attachments?: MessageAttachment[];
   profiles?: {
     username: string;
@@ -69,7 +70,8 @@ export function useMessages(conversationId: string | null) {
           content,
           created_at,
           is_edited,
-          reply_to_message_id
+          reply_to_message_id,
+          location_session_id
         `)
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true });
@@ -327,6 +329,54 @@ export function useMessages(conversationId: string | null) {
     }
   };
 
+  const editMessage = async (messageId: string, content: string) => {
+    if (!conversationId || !user) return false;
+
+    const trimmed = content.trim();
+    if (!trimmed) return false;
+
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .update({
+          content: trimmed,
+          is_edited: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', messageId)
+        .eq('sender_id', user.id);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error editing message:', error);
+      return false;
+    }
+  };
+
+  const deleteMessage = async (messageId: string) => {
+    if (!conversationId || !user) return false;
+
+    try {
+      await supabase
+        .from('message_attachments')
+        .delete()
+        .eq('message_id', messageId);
+
+      const { error } = await supabase
+        .from('messages')
+        .delete()
+        .eq('id', messageId)
+        .eq('sender_id', user.id);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      return false;
+    }
+  };
+
   return {
     messages,
     loading,
@@ -334,5 +384,7 @@ export function useMessages(conversationId: string | null) {
     sendMessage,
     handleTyping,
     markAsRead,
+    editMessage,
+    deleteMessage,
   };
 }

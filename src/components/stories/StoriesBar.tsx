@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useStories, GroupedStories } from '@/hooks/useStories';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -23,6 +23,7 @@ export default function StoriesBar() {
   const [musicMuted, setMusicMuted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const touchStartX = useRef<number | null>(null);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -65,17 +66,30 @@ export default function StoriesBar() {
     setCurrentGroupIndex(groupIndex);
     setCurrentStoryIndex(storyIndex);
     setViewerOpen(true);
+    setPaused(false);
     setMusicMuted(false);
-    
-    // Mark story as viewed
+
     const story = groupedStories[groupIndex]?.stories[storyIndex];
     if (story && !story.is_viewed) {
       viewStory(story.id);
     }
   };
 
-  const nextStory = () => {
+  const jumpToGroup = useCallback((groupIndex: number) => {
+    const group = groupedStories[groupIndex];
+    if (!group) return;
+    setCurrentGroupIndex(groupIndex);
+    setCurrentStoryIndex(0);
+    setPaused(false);
+    const story = group.stories[0];
+    if (story && !story.is_viewed) {
+      viewStory(story.id);
+    }
+  }, [groupedStories, viewStory]);
+
+  const nextStory = useCallback(() => {
     const currentGroup = groupedStories[currentGroupIndex];
+    if (!currentGroup) return;
     if (currentStoryIndex < currentGroup.stories.length - 1) {
       const newIndex = currentStoryIndex + 1;
       setCurrentStoryIndex(newIndex);
@@ -90,9 +104,11 @@ export default function StoriesBar() {
     } else {
       setViewerOpen(false);
     }
-  };
+  }, [currentGroupIndex, currentStoryIndex, groupedStories, viewStory]);
 
-  const prevStory = () => {
+  const prevStory = useCallback(() => {
+    const currentGroup = groupedStories[currentGroupIndex];
+    if (!currentGroup) return;
     if (currentStoryIndex > 0) {
       setCurrentStoryIndex(currentStoryIndex - 1);
     } else if (currentGroupIndex > 0) {
@@ -100,7 +116,31 @@ export default function StoriesBar() {
       setCurrentGroupIndex(newGroupIndex);
       setCurrentStoryIndex(groupedStories[newGroupIndex].stories.length - 1);
     }
-  };
+  }, [currentGroupIndex, currentStoryIndex, groupedStories]);
+
+  useEffect(() => {
+    if (!viewerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setViewerOpen(false);
+      if (e.key === 'ArrowRight' || e.key === ' ') {
+        e.preventDefault();
+        nextStory();
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        prevStory();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [viewerOpen, nextStory, prevStory]);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (paused) v.pause();
+    else v.play().catch(() => { /* autoplay blocked until interaction */ });
+  }, [paused, currentStoryIndex]);
 
   const getInitials = (name: string) => {
     return name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
@@ -129,9 +169,8 @@ export default function StoriesBar() {
       <div className="py-4">
         <ScrollArea className="w-full">
           <div className="flex gap-4 px-4">
-            {/* Add Story Button */}
             {user && (
-              <button 
+              <button
                 onClick={() => fileInputRef.current?.click()}
                 className="flex flex-col items-center gap-2 min-w-[72px]"
                 disabled={uploading}
@@ -149,7 +188,6 @@ export default function StoriesBar() {
               </button>
             )}
 
-            {/* Stories */}
             {groupedStories.map((group, groupIndex) => (
               <button
                 key={group.user_id}
@@ -157,10 +195,10 @@ export default function StoriesBar() {
                 className="flex flex-col items-center gap-2 min-w-[72px]"
               >
                 <div className={cn(
-                  "p-[2px] rounded-full",
+                  'p-[2.5px] rounded-full transition-transform hover:scale-105',
                   group.has_unviewed
-                    ? "bg-gradient-to-br from-primary to-primary/50"
-                    : "bg-muted"
+                    ? 'bg-gradient-to-br from-primary via-accent to-primary/50 story-ring'
+                    : 'bg-muted'
                 )}>
                   <div className="p-0.5 rounded-full bg-background">
                     <Avatar className="w-14 h-14">
@@ -189,194 +227,238 @@ export default function StoriesBar() {
         className="hidden"
       />
 
-      {/* Story Viewer Dialog */}
+      {/* ─── Story Theater ─── */}
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
-        <DialogContent className="max-w-lg p-0 bg-black border-none overflow-hidden h-[90vh] max-h-[800px]">
-          {currentStory && currentGroup && (
-            <div className="relative h-full w-full flex flex-col">
-              {/* Progress bars */}
-              <div className="absolute top-2 left-2 right-2 z-20 flex gap-1">
-                {currentGroup.stories.map((story, i) => (
-                  <div key={story.id} className="flex-1 h-1 bg-white/30 rounded-full overflow-hidden">
-                    <div 
-                      className={cn(
-                        "h-full bg-white transition-all duration-300",
-                        i < currentStoryIndex && "w-full",
-                        i === currentStoryIndex && !paused && "animate-story-progress",
-                        i > currentStoryIndex && "w-0"
-                      )}
-                    />
-                  </div>
-                ))}
-              </div>
+        <DialogContent
+          className="w-full h-[100dvh] sm:h-[90vh] sm:max-h-[860px] max-w-[460px] p-0 border-none overflow-hidden sm:rounded-[2rem] bg-transparent"
+        >
+          <div className="relative h-full w-full bg-[radial-gradient(120%_120%_at_50%_0%,#221d33_0%,#0d0c14_55%,#05050a_100%)]">
+            <div className="absolute inset-0 z-0 pointer-events-none bg-[radial-gradient(90%_70%_at_50%_50%,transparent_35%,rgba(0,0,0,0.6)_100%)]" />
 
-              {/* Header */}
-              <div className="absolute top-6 left-0 right-0 z-20 flex items-center justify-between px-4">
-                <div className="flex items-center gap-3">
-                  <Avatar className="w-10 h-10 ring-2 ring-white/30">
-                    <AvatarImage src={currentGroup.avatar_url || undefined} />
-                    <AvatarFallback className="bg-neutral-800 text-white text-sm">
-                      {getInitials(currentGroup.display_name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="text-white font-semibold text-sm">{currentGroup.display_name}</p>
-                    <p className="text-white/60 text-xs">
-                      {formatDistanceToNow(new Date(currentStory.created_at), { addSuffix: true })}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setPaused(!paused)}
-                    className="rounded-full text-white hover:bg-white/20"
-                  >
-                    {paused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
-                  </Button>
-                  {currentStory.media_type === 'video' && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setMuted(!muted)}
-                      className="rounded-full text-white hover:bg-white/20"
-                    >
-                      {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                    </Button>
-                  )}
-                  {currentGroup.user_id === user?.id && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        deleteStory(currentStory.id);
-                        nextStory();
-                      }}
-                      className="rounded-full text-white hover:bg-destructive/80"
-                    >
-                      <Trash2 className="h-5 w-5" />
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setViewerOpen(false)}
-                    className="rounded-full text-white hover:bg-white/20"
-                  >
-                    <X className="h-5 w-5" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Media */}
-              <div className="flex-1 flex items-center justify-center bg-black">
-                {currentStory.media_type === 'video' ? (
-                  <video
-                    ref={videoRef}
-                    src={currentStory.media_url}
-                    className="max-h-full max-w-full object-contain"
-                    autoPlay
-                    loop={false}
-                    muted={muted || !!currentStory.music_url}
-                    playsInline
-                    onEnded={nextStory}
-                  />
-                ) : (
-                  <img
-                    src={currentStory.media_url}
-                    alt=""
-                    className="max-h-full max-w-full object-contain"
-                    onLoad={() => {
-                      if (!paused) {
-                        setTimeout(nextStory, (currentStory.duration || 5) * 1000);
-                      }
-                    }}
-                  />
-                )}
-              </div>
-
-              {/* Story music */}
-              {currentStory.music_url && (
-                <>
-                  <audio
-                    key={currentStory.id}
-                    src={currentStory.music_url}
-                    autoPlay
-                    loop
-                    muted={musicMuted}
-                    className="hidden"
-                  />
-                  <div className="absolute bottom-20 left-4 right-4 z-20 flex justify-center">
-                    <div className="flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-full pl-3 pr-1.5 py-1.5">
-                      <Music className="h-4 w-4 text-white flex-shrink-0" />
-                      <span className="text-white text-xs font-medium max-w-[160px] truncate">
-                        {currentStory.music_name || 'Audio'}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setMusicMuted(!musicMuted)}
-                        className="h-7 w-7 rounded-full text-white hover:bg-white/20"
-                      >
-                        {musicMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                      </Button>
+            {currentStory && currentGroup && (
+              <>
+                {/* Progress bars */}
+                <div className="absolute top-3 left-3 right-3 z-30 flex gap-1.5">
+                  {currentGroup.stories.map((story, i) => (
+                    <div key={story.id} className="flex-1 h-[3px] rounded-full bg-white/25 overflow-hidden">
+                      <div
+                        className={cn('h-full rounded-full', i === currentStoryIndex && 'story-progress-active')}
+                        style={
+                          i === currentStoryIndex
+                            ? { animationDuration: `${story.duration}s`, animationPlayState: paused ? 'paused' : 'running' }
+                            : i < currentStoryIndex
+                              ? { width: '100%' }
+                              : { width: '0%' }
+                        }
+                        onAnimationEnd={() => { if (currentStory.media_type === 'image') nextStory(); }}
+                      />
                     </div>
+                  ))}
+                </div>
+
+                {/* Media card */}
+                <div
+                  className="absolute inset-x-2 top-10 bottom-[88px] z-10"
+                  onTouchStart={e => { touchStartX.current = e.touches[0].clientX; }}
+                  onTouchEnd={e => {
+                    if (touchStartX.current == null) return;
+                    const dx = e.changedTouches[0].clientX - touchStartX.current;
+                    touchStartX.current = null;
+                    if (Math.abs(dx) > 50) {
+                      if (dx < 0) nextStory(); else prevStory();
+                    }
+                  }}
+                >
+                  <div className="relative w-full h-full rounded-[1.75rem] overflow-hidden ring-1 ring-white/15 shadow-2xl shadow-black/70 bg-black">
+                    <div className="absolute -inset-4 z-0 bg-primary/15 blur-3xl opacity-30 pointer-events-none" />
+
+                    {currentStory.media_type === 'video' ? (
+                      <video
+                        ref={videoRef}
+                        src={currentStory.media_url}
+                        className="absolute inset-0 w-full h-full object-cover"
+                        autoPlay
+                        loop={false}
+                        muted={muted || !!currentStory.music_url}
+                        playsInline
+                        onEnded={nextStory}
+                      />
+                    ) : (
+                      <img
+                        key={currentStory.id}
+                        src={currentStory.media_url}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover story-kenburns"
+                        draggable={false}
+                      />
+                    )}
+
+                    {/* Scrims */}
+                    <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/75 via-black/15 to-transparent z-10" />
+                    <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black/85 via-black/40 to-transparent z-10" />
+
+                    {/* Header */}
+                    <div className="absolute top-0 left-0 right-0 z-20 p-3 flex items-center justify-between gap-2">
+                      <a href={`/profile/${currentGroup.username}`} className="flex items-center gap-2.5 min-w-0">
+                        <Avatar className="w-9 h-9 ring-2 ring-white/40 flex-shrink-0">
+                          <AvatarImage src={currentGroup.avatar_url || undefined} />
+                          <AvatarFallback className="bg-neutral-800 text-white text-sm">
+                            {getInitials(currentGroup.display_name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <p className="text-white font-bold text-sm leading-tight truncate">
+                            {currentGroup.display_name}
+                          </p>
+                          <p className="text-white/60 text-[11px] font-medium">
+                            {formatDistanceToNow(new Date(currentStory.created_at), { addSuffix: true })}
+                          </p>
+                        </div>
+                      </a>
+
+                      <div className="flex items-center gap-1 bg-black/40 backdrop-blur-md rounded-full p-1 flex-shrink-0">
+                        <Button variant="ghost" size="icon" onClick={() => setPaused(!paused)} className="h-8 w-8 rounded-full text-white hover:bg-white/20">
+                          {paused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                        </Button>
+                        {currentStory.media_type === 'video' && (
+                          <Button variant="ghost" size="icon" onClick={() => setMuted(!muted)} className="h-8 w-8 rounded-full text-white hover:bg-white/20">
+                            {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                          </Button>
+                        )}
+                        {currentGroup.user_id === user?.id && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              deleteStory(currentStory.id);
+                              nextStory();
+                            }}
+                            className="h-8 w-8 rounded-full text-white hover:bg-destructive/80"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="icon" onClick={() => setViewerOpen(false)} className="h-8 w-8 rounded-full text-white hover:bg-white/20">
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Music */}
+                    {currentStory.music_url && (
+                      <>
+                        <audio
+                          key={currentStory.id}
+                          src={currentStory.music_url}
+                          autoPlay
+                          loop
+                          muted={musicMuted}
+                          className="hidden"
+                        />
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-black/50 backdrop-blur-md rounded-full pl-3 pr-1.5 py-1.5">
+                          {!musicMuted && (
+                            <span className="flex items-end gap-[2px] h-4 w-4 story-eq">
+                              <span /><span /><span />
+                            </span>
+                          )}
+                          <Music className={cn('h-4 w-4 flex-shrink-0', musicMuted ? 'text-white/40' : 'text-white')} />
+                          <span className="text-white text-xs font-medium max-w-[140px] truncate">
+                            {currentStory.music_name || 'Audio'}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setMusicMuted(!musicMuted)}
+                            className="h-7 w-7 rounded-full text-white hover:bg-white/20"
+                          >
+                            {musicMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Caption */}
+                    {currentStory.caption && (
+                      <div className="absolute inset-x-4 bottom-4 z-20 flex justify-center pointer-events-none">
+                        <p className="text-white text-center text-sm font-medium bg-black/45 backdrop-blur-sm rounded-full px-4 py-1.5 max-w-full">
+                          {currentStory.caption}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Own story views */}
+                    {currentGroup.user_id === user?.id && (
+                      <div className="absolute top-16 left-3 z-20">
+                        <span className="text-white/70 text-xs font-semibold bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1">
+                          👁 {currentStory.view_count} views
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Tap zones */}
+                    <button onClick={prevStory} className="absolute left-0 top-1/2 -translate-y-1/2 w-1/3 h-2/3 z-10" />
+                    <button onClick={nextStory} className="absolute right-0 top-1/2 -translate-y-1/2 w-1/3 h-2/3 z-10" />
                   </div>
-                </>
-              )}
-
-              {/* Caption */}
-              {currentStory.caption && (
-                <div className="absolute bottom-20 left-4 right-4 z-20">
-                  <p className="text-white text-center text-sm bg-black/40 rounded-lg px-4 py-2">
-                    {currentStory.caption}
-                  </p>
                 </div>
-              )}
 
-              {/* Navigation */}
-              <button
-                onClick={prevStory}
-                className="absolute left-0 top-1/2 -translate-y-1/2 w-1/3 h-2/3 z-10"
-              />
-              <button
-                onClick={nextStory}
-                className="absolute right-0 top-1/2 -translate-y-1/2 w-1/3 h-2/3 z-10"
-              />
-
-              {/* Nav arrows */}
-              {(currentGroupIndex > 0 || currentStoryIndex > 0) && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={prevStory}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 z-20 rounded-full bg-black/30 text-white hover:bg-black/50"
-                >
-                  <ChevronLeft className="h-6 w-6" />
-                </Button>
-              )}
-              {(currentGroupIndex < groupedStories.length - 1 || currentStoryIndex < currentGroup.stories.length - 1) && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={nextStory}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 z-20 rounded-full bg-black/30 text-white hover:bg-black/50"
-                >
-                  <ChevronRight className="h-6 w-6" />
-                </Button>
-              )}
-
-              {/* View count for own stories */}
-              {currentGroup.user_id === user?.id && (
-                <div className="absolute bottom-4 left-0 right-0 z-20 text-center">
-                  <span className="text-white/60 text-sm">
-                    👁 {currentStory.view_count} views
-                  </span>
+                {/* Story dock */}
+                <div className="absolute bottom-3 left-0 right-0 z-30 flex justify-center px-4">
+                  <div className="flex items-center gap-2.5 bg-white/10 backdrop-blur-xl border border-white/10 rounded-full px-3 py-2 overflow-x-auto scrollbar-hide max-w-full">
+                    {groupedStories.map((group, i) => {
+                      const active = i === currentGroupIndex;
+                      return (
+                        <button
+                          key={group.user_id}
+                          onClick={() => jumpToGroup(i)}
+                          className={cn(
+                            'relative rounded-full flex-shrink-0 transition-all duration-200',
+                            active ? 'scale-110' : 'opacity-80 hover:opacity-100'
+                          )}
+                          title={group.display_name}
+                        >
+                          <div className={cn(
+                            'p-[2px] rounded-full',
+                            active ? 'bg-white' : group.has_unviewed ? 'bg-gradient-to-br from-primary to-primary/50' : 'bg-white/20'
+                          )}>
+                            <div className="p-[1.5px] rounded-full bg-black/40">
+                              <Avatar className={cn('rounded-full', active ? 'w-8 h-8' : 'w-7 h-7')}>
+                                <AvatarImage src={group.avatar_url || undefined} />
+                                <AvatarFallback className="bg-neutral-800 text-white text-[10px]">
+                                  {getInitials(group.display_name)}
+                                </AvatarFallback>
+                              </Avatar>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
+
+                {/* Nav arrows (desktop) */}
+                {(currentGroupIndex > 0 || currentStoryIndex > 0) && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={prevStory}
+                    className="hidden sm:inline-flex absolute left-3 top-1/2 -translate-y-1/2 z-20 rounded-full bg-black/40 backdrop-blur-md text-white hover:bg-black/60"
+                  >
+                    <ChevronLeft className="h-6 w-6" />
+                  </Button>
+                )}
+                {(currentGroupIndex < groupedStories.length - 1 || currentStoryIndex < currentGroup.stories.length - 1) && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={nextStory}
+                    className="hidden sm:inline-flex absolute right-3 top-1/2 -translate-y-1/2 z-20 rounded-full bg-black/40 backdrop-blur-md text-white hover:bg-black/60"
+                  >
+                    <ChevronRight className="h-6 w-6" />
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -385,9 +467,39 @@ export default function StoriesBar() {
           from { width: 0%; }
           to { width: 100%; }
         }
-        .animate-story-progress {
-          animation: story-progress 5s linear forwards;
+        .story-progress-active {
+          animation-name: story-progress;
+          animation-timing-function: linear;
+          animation-fill-mode: forwards;
         }
+        @keyframes story-kenburns {
+          from { transform: scale(1.02); }
+          to { transform: scale(1.14); }
+        }
+        .story-kenburns {
+          animation: story-kenburns 8s ease-out forwards;
+        }
+        @keyframes story-ring {
+          0% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.55); }
+          70% { box-shadow: 0 0 0 9px rgba(139, 92, 246, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); }
+        }
+        .story-ring {
+          animation: story-ring 2.2s ease-out infinite;
+        }
+        @keyframes eq-a { 0%, 100% { height: 30%; } 50% { height: 95%; } }
+        @keyframes eq-b { 0%, 100% { height: 80%; } 50% { height: 25%; } }
+        @keyframes eq-c { 0%, 100% { height: 45%; } 50% { height: 100%; } }
+        .story-eq span {
+          width: 3px;
+          border-radius: 2px;
+          background: white;
+          display: inline-block;
+          height: 100%;
+        }
+        .story-eq span:nth-child(1) { animation: eq-a 0.8s ease-in-out infinite; }
+        .story-eq span:nth-child(2) { animation: eq-b 0.6s ease-in-out infinite; }
+        .story-eq span:nth-child(3) { animation: eq-c 0.9s ease-in-out infinite; }
       `}</style>
     </>
   );

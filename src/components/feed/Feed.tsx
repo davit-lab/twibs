@@ -29,6 +29,7 @@ interface Post {
   comment_count: number;
   is_pinned: boolean;
   created_at: string;
+  updated_at: string;
   user_id: string;
   profiles: PostProfile;
   post_media: PostMedia[];
@@ -74,6 +75,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
           comment_count,
           is_pinned,
           created_at,
+          updated_at,
           user_id,
           profiles!inner (
             username,
@@ -170,6 +172,14 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'posts' },
         () => fetchPosts()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'posts' },
+        (payload) => {
+          const updated = payload.new as Post;
+          setPosts(prev => prev.map(p => (p.id === updated.id ? { ...p, ...updated } : p)));
+        }
       )
       .on(
         'postgres_changes',

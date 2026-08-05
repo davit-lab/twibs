@@ -20,7 +20,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import {
   Loader2, Camera, User, Bell, Lock, Shield, Palette, Eye,
-  Globe, Moon, Sun, Monitor, Smartphone, Laptop, MapPin,
+  Globe, Moon, Smartphone, Laptop, MapPin,
   LogOut, Trash2, Key, AlertTriangle, Check, Mail, Upload,
   PhoneOff, UserX, ChevronRight, ChevronLeft, Settings2,
   MessageSquare, Heart, Bookmark, Search, Accessibility
@@ -553,29 +553,27 @@ function AccountSection({ profile, formData, setFormData, user, saving, uploadin
 function AppearanceSection({ preferences, updatePreferences }: any) {
   return (
     <div className="space-y-5">
-      <SectionCard title="Theme" description="Choose your preferred appearance">
-        <div className="grid grid-cols-3 gap-3">
+      <SectionCard title="Theme" description="Twibsers is dark mode only">
+        <div className="grid grid-cols-1 gap-3">
           {[
-            { value: 'light', icon: Sun, label: 'Light', desc: 'Bright and clean' },
             { value: 'dark', icon: Moon, label: 'Dark', desc: 'Easy on eyes' },
-            { value: 'system', icon: Monitor, label: 'Auto', desc: 'Match device' },
           ].map(({ value, icon: Icon, label, desc }) => (
             <button
               key={value}
               onClick={() => updatePreferences({ theme: value })}
               className={cn(
-                "flex flex-col items-center gap-2 p-4 rounded-xl border transition-all",
+                "flex items-center gap-3 p-4 rounded-xl border transition-all",
                 preferences?.theme === value
                   ? "border-primary bg-primary/5"
                   : "border-border hover:border-primary/40"
               )}
             >
               <Icon className={cn("h-5 w-5", preferences?.theme === value ? "text-primary" : "text-muted-foreground")} />
-              <div className="text-center">
+              <div className="text-left">
                 <p className="font-medium text-sm">{label}</p>
                 <p className="text-xs text-muted-foreground">{desc}</p>
               </div>
-              {preferences?.theme === value && <Check className="h-4 w-4 text-primary absolute top-2 right-2" />}
+              {preferences?.theme === value && <Check className="h-4 w-4 text-primary ml-auto" />}
             </button>
           ))}
         </div>

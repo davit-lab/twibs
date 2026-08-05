@@ -25,6 +25,20 @@ const ICE_SERVERS: RTCConfiguration = {
   iceCandidatePoolSize: 10,
 };
 
+interface CallSignalingClient {
+  rpc: (fn: string, params?: Record<string, unknown>) => Promise<{
+    error: { message?: string } | null;
+  }>;
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return 'Something went wrong.';
+};
+
 export interface CallSession {
   id: string;
   conversation_id: string;
@@ -34,8 +48,8 @@ export interface CallSession {
   status: 'ringing' | 'accepted' | 'declined' | 'ended' | 'missed';
   sdp_offer: string | null;
   sdp_answer: string | null;
-  caller_ice_candidates: any[];
-  receiver_ice_candidates: any[];
+  caller_ice_candidates: RTCIceCandidateInit[];
+  receiver_ice_candidates: RTCIceCandidateInit[];
   started_at: string | null;
   ended_at: string | null;
   created_at: string;
@@ -53,6 +67,11 @@ export interface CallState {
   connectionState: RTCPeerConnectionState | null;
   iceState: RTCIceConnectionState | null;
   isFailed: boolean;
+}
+
+export interface StartCallResult {
+  ok: boolean;
+  error?: string;
 }
 
 const initialCallState: CallState = {
@@ -78,6 +97,10 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
   const screenStreamRef = useRef<MediaStream | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const pendingIceCandidatesRef = useRef<RTCIceCandidate[]>([]);
+  const addedIceCandidatesRef = useRef<Set<string>>(new Set());
+  const activeSessionRef = useRef<CallSession | null>(null);
+  const screenSharingRef = useRef(false);
+  const toggleScreenShareRef = useRef<() => Promise<boolean>>(async () => false);
   const isCleaningUpRef = useRef(false);
   const mountedRef = useRef(true);
 
@@ -107,6 +130,10 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
       }
 
       pendingIceCandidatesRef.current = [];
+      addedIceCandidatesRef.current = new Set();
+      activeSessionRef.current = null;
+      screenSharingRef.current = false;
+
       if (mountedRef.current) {
         setCallState(initialCallState);
       }
@@ -131,10 +158,11 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
 
     try {
       return await navigator.mediaDevices.getUserMedia(constraints);
-    } catch (error: any) {
-      if (error.name === 'NotAllowedError') {
+    } catch (error) {
+      const mediaError = error as { name?: string };
+      if (mediaError.name === 'NotAllowedError' || mediaError.name === 'PermissionDeniedError') {
         throw new Error('Camera/microphone access denied.');
-      } else if (error.name === 'NotFoundError') {
+      } else if (mediaError.name === 'NotFoundError') {
         throw new Error('No camera or microphone found.');
       }
       throw new Error('Could not access camera/microphone.');
@@ -142,9 +170,17 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
   };
 
   const storeIceCandidate = async (sessionId: string, candidate: RTCIceCandidate, isCaller: boolean) => {
-    const candidateField = isCaller ? 'caller_ice_candidates' : 'receiver_ice_candidates';
-
     try {
+      const { error } = await (supabase as unknown as CallSignalingClient).rpc('append_call_ice_candidate', {
+        p_session_id: sessionId,
+        p_is_caller: isCaller,
+        p_candidate: candidate.toJSON(),
+      });
+
+      if (!error) return;
+
+      console.warn('[WebRTC] RPC append unavailable, using fallback:', error?.message);
+      const candidateField = isCaller ? 'caller_ice_candidates' : 'receiver_ice_candidates';
       const { data: currentSession } = await supabase
         .from('call_sessions')
         .select(candidateField)
@@ -152,7 +188,7 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
         .single();
 
       if (currentSession) {
-        const currentCandidates = (currentSession as any)[candidateField] || [];
+        const currentCandidates = (currentSession as unknown as Record<string, RTCIceCandidateInit[]>)[candidateField] || [];
         await supabase
           .from('call_sessions')
           .update({ [candidateField]: [...currentCandidates, candidate.toJSON()] })
@@ -207,17 +243,21 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
     return pc;
   };
 
-  const addIceCandidates = async (candidates: any[]) => {
+  const addIceCandidates = async (candidates: RTCIceCandidateInit[]) => {
     const pc = peerConnectionRef.current;
     if (!pc) return;
 
     for (const candidate of candidates) {
+      const key = candidate?.candidate || JSON.stringify(candidate);
+      if (addedIceCandidatesRef.current.has(key)) continue;
+
       try {
         if (pc.remoteDescription) {
           await pc.addIceCandidate(new RTCIceCandidate(candidate));
         } else {
           pendingIceCandidatesRef.current.push(new RTCIceCandidate(candidate));
         }
+        addedIceCandidatesRef.current.add(key);
       } catch (error) {
         console.error('[WebRTC] Failed to add ICE candidate:', error);
       }
@@ -228,14 +268,36 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
     const pc = peerConnectionRef.current;
     if (!pc?.remoteDescription) return;
 
-    for (const candidate of pendingIceCandidatesRef.current) {
+    const pending = pendingIceCandidatesRef.current;
+    pendingIceCandidatesRef.current = [];
+
+    for (const candidate of pending) {
       try {
         await pc.addIceCandidate(candidate);
       } catch (error) {
         console.error('[WebRTC] Failed to add pending ICE candidate:', error);
       }
     }
-    pendingIceCandidatesRef.current = [];
+  };
+
+  const syncRemoteCandidates = async (sessionId: string, isCaller: boolean) => {
+    const pc = peerConnectionRef.current;
+    if (!pc || !pc.remoteDescription) return;
+
+    const field = isCaller ? 'receiver_ice_candidates' : 'caller_ice_candidates';
+    try {
+      const { data } = await supabase
+        .from('call_sessions')
+        .select(field)
+        .eq('id', sessionId)
+        .single();
+      const candidates = (data as unknown as Record<string, RTCIceCandidateInit[]> | null)?.[field] || [];
+      if (candidates.length > 0) {
+        await addIceCandidates(candidates);
+      }
+    } catch (error) {
+      console.error('[WebRTC] Failed to sync remote ICE candidates:', error);
+    }
   };
 
   const subscribeToSession = (sessionId: string, isCaller: boolean) => {
@@ -268,10 +330,7 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
               const answer = JSON.parse(updated.sdp_answer);
               await pc.setRemoteDescription(new RTCSessionDescription(answer));
               await processPendingIceCandidates();
-
-              if (updated.receiver_ice_candidates?.length) {
-                await addIceCandidates(updated.receiver_ice_candidates);
-              }
+              await syncRemoteCandidates(sessionId, true);
             } catch (error) {
               console.error('[WebRTC] Failed to set remote answer:', error);
               if (mountedRef.current) {
@@ -280,8 +339,10 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
             }
           }
 
+          if (isCaller && !pc.remoteDescription) return;
+
           const candidatesField = isCaller ? 'receiver_ice_candidates' : 'caller_ice_candidates';
-          const candidates = (updated as any)[candidatesField] || [];
+          const candidates = (updated as unknown as Record<string, RTCIceCandidateInit[]>)[candidatesField] || [];
           if (candidates.length > 0 && pc.remoteDescription) {
             await addIceCandidates(candidates);
           }
@@ -290,17 +351,21 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
       .subscribe();
 
     channelRef.current = channel;
+    syncRemoteCandidates(sessionId, isCaller);
   };
 
-  const startCall = async (type: 'audio' | 'video') => {
+  const startCall = async (type: 'audio' | 'video'): Promise<StartCallResult> => {
     if (!user || !conversationId || !otherUserId) {
-      if (mountedRef.current) {
-        setCallState(prev => ({ ...prev, error: 'Missing conversation data.' }));
-      }
-      return null;
+      return { ok: false, error: 'Missing conversation data.' };
     }
 
-    if (callState.session) return null;
+    if (activeSessionRef.current) {
+      return { ok: false, error: 'You are already in a call.' };
+    }
+
+    if (callState.isConnecting) {
+      return { ok: false, error: 'A call is already connecting...' };
+    }
 
     try {
       if (mountedRef.current) {
@@ -329,11 +394,14 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
 
       if (error || !session) throw new Error('Failed to create call.');
 
+      const callSession = session as CallSession;
+      activeSessionRef.current = callSession;
+
       if (mountedRef.current) {
-        setCallState(prev => ({ ...prev, session: session as CallSession }));
+        setCallState(prev => ({ ...prev, session: callSession }));
       }
 
-      const pc = createPeerConnection(session.id, true);
+      const pc = createPeerConnection(callSession.id, true);
       peerConnectionRef.current = pc;
 
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
@@ -347,22 +415,22 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
       await supabase
         .from('call_sessions')
         .update({ sdp_offer: JSON.stringify(offer) })
-        .eq('id', session.id);
+        .eq('id', callSession.id);
 
-      subscribeToSession(session.id, true);
+      subscribeToSession(callSession.id, true);
 
-      return session.id;
-    } catch (error: any) {
+      return { ok: true };
+    } catch (error) {
       console.error('[WebRTC] Failed to start call:', error);
       if (mountedRef.current) {
         setCallState(prev => ({
           ...prev,
           isConnecting: false,
-          error: error.message || 'Failed to start call.',
+          error: getErrorMessage(error) || 'Failed to start call.',
         }));
       }
       cleanup();
-      return null;
+      return { ok: false, error: getErrorMessage(error) || 'Failed to start call.' };
     }
   };
 
@@ -373,6 +441,7 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
       if (mountedRef.current) {
         setCallState(prev => ({ ...prev, isConnecting: true, error: null, isFailed: false, session }));
       }
+      activeSessionRef.current = session;
 
       let latestSession = session;
       let attempts = 0;
@@ -413,9 +482,7 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
       await processPendingIceCandidates();
-      if (latestSession.caller_ice_candidates?.length) {
-        await addIceCandidates(latestSession.caller_ice_candidates);
-      }
+      await addIceCandidates(latestSession.caller_ice_candidates);
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
@@ -438,13 +505,14 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
       }
 
       subscribeToSession(session.id, false);
-    } catch (error: any) {
+      await syncRemoteCandidates(session.id, false);
+    } catch (error) {
       console.error('[WebRTC] Failed to answer call:', error);
       if (mountedRef.current) {
         setCallState(prev => ({
           ...prev,
           isConnecting: false,
-          error: error.message || 'Failed to answer call.',
+          error: getErrorMessage(error) || 'Failed to answer call.',
         }));
       }
       cleanup();
@@ -452,7 +520,7 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
   };
 
   const endCall = async () => {
-    const session = callState.session;
+    const session = activeSessionRef.current || callState.session;
 
     if (session) {
       try {
@@ -501,9 +569,14 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
     const pc = peerConnectionRef.current;
     if (!pc) return false;
 
-    if (callState.isScreenSharing) {
+    if (screenSharingRef.current) {
+      screenSharingRef.current = false;
+
       if (screenStreamRef.current) {
-        screenStreamRef.current.getTracks().forEach(track => track.stop());
+        screenStreamRef.current.getTracks().forEach(track => {
+          track.onended = null;
+          track.stop();
+        });
       }
 
       const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
@@ -518,44 +591,50 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
         setCallState(prev => ({ ...prev, screenStream: null, isScreenSharing: false }));
       }
       return false;
-    } else {
-      try {
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
-          audio: false,
-        });
+    }
 
-        screenStreamRef.current = screenStream;
-        const screenTrack = screenStream.getVideoTracks()[0];
-        const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      });
 
-        if (videoSender) {
-          await videoSender.replaceTrack(screenTrack);
-        }
+      screenStreamRef.current = screenStream;
+      const screenTrack = screenStream.getVideoTracks()[0];
+      const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
 
-        screenTrack.onended = () => {
-          toggleScreenShare();
-        };
-
-        if (mountedRef.current) {
-          setCallState(prev => ({ ...prev, screenStream, isScreenSharing: true }));
-        }
-        return true;
-      } catch (error) {
-        console.error('[WebRTC] Failed to start screen share:', error);
-        return false;
+      if (videoSender) {
+        await videoSender.replaceTrack(screenTrack);
       }
+
+      screenSharingRef.current = true;
+      screenTrack.onended = () => {
+        toggleScreenShareRef.current();
+      };
+
+      if (mountedRef.current) {
+        setCallState(prev => ({ ...prev, screenStream, isScreenSharing: true }));
+      }
+      return true;
+    } catch (error) {
+      console.error('[WebRTC] Failed to start screen share:', error);
+      return false;
     }
   };
 
+  toggleScreenShareRef.current = toggleScreenShare;
+
   const retryCall = async () => {
-    const session = callState.session;
+    const session = activeSessionRef.current;
     if (!session) return;
 
     const callType = session.call_type;
     cleanup();
     await new Promise(r => setTimeout(r, 500));
-    await startCall(callType);
+    const result = await startCall(callType);
+    if (!result.ok && mountedRef.current) {
+      setCallState(prev => ({ ...prev, error: result.error || 'Failed to retry call.' }));
+    }
   };
 
   useEffect(() => {

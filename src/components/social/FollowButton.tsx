@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { UserPlus, UserMinus, Clock, Loader2 } from 'lucide-react';
+import { UserPlus, UserCheck, UserMinus, Clock, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type FollowStatus = 'none' | 'pending' | 'following';
@@ -27,7 +27,7 @@ export default function FollowButton({
 }: FollowButtonProps) {
   const { user } = useAuth();
   const { toast } = useToast();
-  
+
   const [status, setStatus] = useState<FollowStatus>('none');
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -83,7 +83,8 @@ export default function FollowButton({
         });
 
       if (error) {
-        if (error.code === '23505') {
+        const e = error as { code?: string; message?: string };
+        if (e.code === '23505') {
           // Already following
           toast({
             title: 'Already following',
@@ -102,7 +103,7 @@ export default function FollowButton({
         });
         onFollowChange?.();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Follow error:', error);
       toast({
         variant: 'destructive',
@@ -136,7 +137,7 @@ export default function FollowButton({
           : `You unfollowed @${targetUsername}`,
       });
       onFollowChange?.();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Unfollow error:', error);
       toast({
         variant: 'destructive',
@@ -148,16 +149,18 @@ export default function FollowButton({
     }
   };
 
+  const pill = 'rounded-full font-semibold';
+
   if (loading) {
     return (
-      <Button variant="outline" size={size} disabled className={className}>
+      <Button variant="outline" size={size} disabled className={cn(pill, className)}>
         <Loader2 className="h-4 w-4 animate-spin" />
       </Button>
     );
   }
 
   // Don't show follow button for own profile
-  if (user?.id === targetUserId) {
+  if (!user || user.id === targetUserId) {
     return null;
   }
 
@@ -168,13 +171,18 @@ export default function FollowButton({
         size={size}
         onClick={handleUnfollow}
         disabled={actionLoading}
-        className={cn('group hover:border-destructive hover:text-destructive', className)}
+        className={cn(
+          pill,
+          'group border-2 border-border/80 bg-transparent text-muted-foreground hover:border-destructive/50 hover:bg-destructive/5 hover:text-destructive',
+          className
+        )}
       >
         {actionLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
-          <UserMinus className="h-4 w-4 mr-2 hidden group-hover:inline" />
+          <UserCheck className="h-4 w-4 group-hover:hidden" />
         )}
+        <UserMinus className="h-4 w-4 hidden group-hover:inline" />
         <span className="group-hover:hidden">Following</span>
         <span className="hidden group-hover:inline">Unfollow</span>
       </Button>
@@ -188,13 +196,18 @@ export default function FollowButton({
         size={size}
         onClick={handleUnfollow}
         disabled={actionLoading}
-        className={cn('group', className)}
+        className={cn(
+          pill,
+          'group border-2 border-border/80 bg-transparent text-muted-foreground hover:border-foreground/40 hover:text-foreground',
+          className
+        )}
       >
         {actionLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
-          <Clock className="h-4 w-4 mr-2" />
+          <Clock className="h-4 w-4 group-hover:hidden" />
         )}
+        <X className="h-4 w-4 hidden group-hover:inline" />
         <span className="group-hover:hidden">Pending</span>
         <span className="hidden group-hover:inline">Cancel</span>
       </Button>
@@ -206,12 +219,16 @@ export default function FollowButton({
       size={size}
       onClick={handleFollow}
       disabled={actionLoading}
-      className={cn('', className)}
+      className={cn(
+        pill,
+        'bg-foreground text-background shadow-sm hover:bg-foreground/90 active:shadow-none',
+        className
+      )}
     >
       {actionLoading ? (
-        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+        <Loader2 className="h-4 w-4 animate-spin" />
       ) : (
-        <UserPlus className="h-4 w-4 mr-2" />
+        <UserPlus className="h-4 w-4" />
       )}
       Follow
     </Button>

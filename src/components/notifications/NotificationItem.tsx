@@ -14,7 +14,7 @@ import {
   X,
   PhoneMissed,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { format, isToday, isYesterday } from 'date-fns';
 
 interface NotificationItemProps {
   notification: Notification;
@@ -37,15 +37,37 @@ const iconMap: Record<NotificationType, React.ComponentType<{ className?: string
 
 const colorMap: Record<NotificationType, string> = {
   follow: 'text-primary bg-primary/10',
-  follow_request: 'text-primary bg-primary/15',
-  follow_accepted: 'text-success bg-success/10',
-  star: 'text-primary bg-primary/10',
-  mention: 'text-primary bg-primary/10',
+  follow_request: 'text-amber-400 bg-amber-400/15',
+  follow_accepted: 'text-emerald-400 bg-emerald-400/15',
+  star: 'text-amber-400 bg-amber-400/15',
+  mention: 'text-sky-400 bg-sky-400/15',
   message: 'text-primary bg-primary/10',
-  comment: 'text-primary bg-primary/10',
-  system: 'text-muted-foreground bg-muted',
-  missed_call: 'text-destructive bg-destructive/10',
+  comment: 'text-violet-400 bg-violet-400/15',
+  system: 'text-muted-foreground bg-surface-3',
+  missed_call: 'text-red-400 bg-red-400/15',
 };
+
+const gradientMap: Record<NotificationType, string> = {
+  follow: 'from-primary to-[hsl(285_80%_58%)]',
+  follow_request: 'from-amber-400 to-orange-500',
+  follow_accepted: 'from-emerald-400 to-teal-500',
+  star: 'from-amber-400 to-yellow-500',
+  mention: 'from-sky-400 to-blue-500',
+  message: 'from-primary to-[hsl(285_80%_58%)]',
+  comment: 'from-violet-400 to-purple-500',
+  system: 'from-surface-4 to-surface-3',
+  missed_call: 'from-red-400 to-rose-500',
+};
+
+function formatTime(date: string) {
+  const d = new Date(date);
+  const diffMs = Date.now() - d.getTime();
+  if (diffMs < 60_000) return 'now';
+  if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m`;
+  if (isToday(d)) return format(d, 'h:mm a');
+  if (isYesterday(d)) return 'Yesterday';
+  return format(d, 'MMM d');
+}
 
 export default function NotificationItem({
   notification,
@@ -55,6 +77,8 @@ export default function NotificationItem({
 }: NotificationItemProps) {
   const Icon = iconMap[notification.type] || Bell;
   const colorClass = colorMap[notification.type] || colorMap.system;
+  const gradientClass = gradientMap[notification.type] || gradientMap.system;
+  const unread = !notification.is_read;
 
   const getInitials = (name: string) => {
     return name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
@@ -84,66 +108,80 @@ export default function NotificationItem({
   const content = (
     <div
       className={cn(
-        'flex items-start gap-3 p-3 rounded-xl transition-colors cursor-pointer group',
-        notification.is_read
-          ? 'bg-transparent hover:bg-muted/50'
-          : 'bg-primary/5 hover:bg-primary/10'
+        'relative group flex items-start gap-3 px-3 py-3 rounded-2xl transition-all duration-200 cursor-pointer',
+        unread ? 'bg-primary/[0.07]' : 'hover:bg-surface-2'
       )}
       onClick={handleClick}
     >
+      {/* Unread accent bar */}
+      {unread && (
+        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-[3px] rounded-r-full bg-primary" />
+      )}
+
       {/* Icon or Avatar */}
       <div className="relative flex-shrink-0">
         {notification.actor ? (
-          <Avatar className="h-10 w-10">
-            <AvatarImage src={notification.actor.avatar_url || undefined} />
-            <AvatarFallback className="bg-gradient-to-br from-primary to-primary/60 text-white text-sm">
-              {getInitials(notification.actor.display_name)}
-            </AvatarFallback>
-          </Avatar>
+          <>
+            <div className={cn(
+              'rounded-full p-[2px] transition-all duration-200',
+              unread ? 'bg-gradient-to-tr from-primary to-[hsl(285_80%_58%)]' : 'bg-transparent'
+            )}>
+              <Avatar className="h-11 w-11 rounded-full ring-2 ring-background">
+                <AvatarImage src={notification.actor.avatar_url || undefined} />
+                <AvatarFallback className="rounded-full bg-gradient-to-br from-primary to-primary/60 text-white text-xs font-bold">
+                  {getInitials(notification.actor.display_name)}
+                </AvatarFallback>
+              </Avatar>
+            </div>
+            <div className={cn(
+              'absolute -bottom-1 -right-1 h-5 w-5 rounded-full flex items-center justify-center ring-2 ring-background shadow-sm',
+              colorClass
+            )}>
+              <Icon className="h-3 w-3" />
+            </div>
+          </>
         ) : (
-          <div className={cn('h-10 w-10 rounded-full flex items-center justify-center', colorClass)}>
-            <Icon className="h-5 w-5" />
-          </div>
-        )}
-
-        {/* Type badge */}
-        {notification.actor && (
           <div className={cn(
-            'absolute -bottom-1 -right-1 h-5 w-5 rounded-full flex items-center justify-center ring-2 ring-background',
-            colorClass
+            'h-11 w-11 rounded-full flex items-center justify-center bg-gradient-to-br shadow-sm',
+            gradientClass
           )}>
-            <Icon className="h-3 w-3" />
+            <Icon className="h-5 w-5 text-white" />
           </div>
         )}
       </div>
 
       {/* Content */}
       <div className="flex-1 min-w-0 pt-0.5">
-        <p className={cn(
-          'text-sm',
-          !notification.is_read && 'font-semibold text-foreground'
-        )}>
-          {notification.title}
-        </p>
+        <div className="flex items-start justify-between gap-2">
+          <p className={cn(
+            'text-sm flex-1 min-w-0 line-clamp-2',
+            unread ? 'font-bold text-foreground' : 'font-medium text-foreground/90'
+          )}>
+            {notification.title}
+          </p>
+          <span className={cn(
+            'text-[11px] flex-shrink-0 tabular-nums mt-0.5',
+            unread ? 'text-primary font-semibold' : 'text-muted-foreground/80'
+          )}>
+            {formatTime(notification.created_at)}
+          </span>
+        </div>
         {notification.body && (
-          <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
+          <p className="text-[13px] text-muted-foreground mt-0.5 line-clamp-1">
             {notification.body}
           </p>
         )}
-        <p className="text-xs text-muted-foreground/80 mt-1">
-          {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
-        </p>
       </div>
 
-      {/* Unread indicator & Delete */}
-      <div className="flex flex-col items-end justify-between gap-1 py-1">
-        {!notification.is_read && (
-          <div className="h-2 w-2 rounded-full bg-primary mt-0.5" />
+      {/* Unread dot + Delete */}
+      <div className="flex flex-col items-center justify-center gap-1.5 flex-shrink-0">
+        {unread && (
+          <span className="h-2 w-2 rounded-full bg-primary shadow-sm shadow-primary/40" />
         )}
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+          className="h-7 w-7 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
           onClick={(e) => {
             e.stopPropagation();
             e.preventDefault();
@@ -157,7 +195,7 @@ export default function NotificationItem({
   );
 
   if (link) {
-    return <Link to={link}>{content}</Link>;
+    return <Link to={link} className="block">{content}</Link>;
   }
 
   return content;

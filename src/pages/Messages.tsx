@@ -184,14 +184,14 @@ export default function Messages() {
           selectedConvId ? 'hidden md:flex' : 'flex'
         )}>
           {/* Tab switcher */}
-          <div className="px-4 py-3 border-b border-border bg-background">
-            <div className="flex gap-1 p-1 bg-surface rounded-lg">
+          <div className="px-5 pt-5 pb-2 border-b border-border/50 bg-card">
+            <div className="flex gap-1 p-1 bg-surface-2 rounded-full">
               <button
                 onClick={() => setActiveTab('messages')}
                 className={cn(
-                  'flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-sm font-medium transition-all',
+                  'flex-1 flex items-center justify-center gap-2 py-2 rounded-full text-sm font-medium transition-all duration-200',
                   activeTab === 'messages' 
-                    ? 'bg-background text-foreground shadow-sm' 
+                    ? 'bg-foreground text-background shadow-sm' 
                     : 'text-muted-foreground hover:text-foreground'
                 )}
               >
@@ -201,9 +201,9 @@ export default function Messages() {
               <button
                 onClick={() => setActiveTab('calls')}
                 className={cn(
-                  'flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-sm font-medium transition-all',
+                  'flex-1 flex items-center justify-center gap-2 py-2 rounded-full text-sm font-medium transition-all duration-200',
                   activeTab === 'calls' 
-                    ? 'bg-background text-foreground shadow-sm' 
+                    ? 'bg-foreground text-background shadow-sm' 
                     : 'text-muted-foreground hover:text-foreground'
                 )}
               >

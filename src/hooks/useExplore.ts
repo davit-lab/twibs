@@ -1,6 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { getViewerLocation, geocodeLocation, haversineKm } from '@/lib/geolocation';
 
 export interface ExploreUser {
   id: string;
@@ -11,6 +12,9 @@ export interface ExploreUser {
   avatar_url: string | null;
   is_verified: boolean;
   privacy: 'public' | 'private';
+  location: string | null;
+  follower_count: number;
+  distanceKm: number | null;
 }
 
 export interface ExplorePost {
@@ -51,8 +55,21 @@ export interface ExploreReel {
 
 export type ExploreTab = 'all' | 'people' | 'posts' | 'reels';
 
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const idx = cursor++;
+      results[idx] = await fn(items[idx]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 export function useExplore() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [users, setUsers] = useState<ExploreUser[]>([]);
   const [posts, setPosts] = useState<ExplorePost[]>([]);
   const [reels, setReels] = useState<ExploreReel[]>([]);
@@ -60,13 +77,59 @@ export function useExplore() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<ExploreTab>('all');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [viewerLocationKnown, setViewerLocationKnown] = useState(false);
+  const [distancesReady, setDistancesReady] = useState(false);
+  const [distancesLoading, setDistancesLoading] = useState(false);
+  const distanceTokenRef = useRef(0);
+
+  const attachDistances = useCallback(
+    async (list: ExploreUser[]) => {
+      const token = ++distanceTokenRef.current;
+      if (list.length === 0) return;
+
+      setDistancesLoading(true);
+
+      const profileLoc = profile?.location ?? null;
+      const viewer = await getViewerLocation(profileLoc);
+      if (token !== distanceTokenRef.current) return;
+      setViewerLocationKnown(!!viewer);
+
+      const withLocation = list.filter((u) => u.location && u.location.trim());
+      if (!viewer || withLocation.length === 0) {
+        setDistancesReady(false);
+        setDistancesLoading(false);
+        return;
+      }
+
+      const resolved = await mapLimit(list, 4, async (u) => {
+        if (!u.location) return { user: u, dist: null };
+        const coords = await geocodeLocation(u.location);
+        return { user: u, dist: coords ? haversineKm(viewer, coords) : null };
+      });
+
+      if (token !== distanceTokenRef.current) return;
+
+      const mapped = resolved.map(({ user: u, dist }) => ({ ...u, distanceKm: dist }));
+      const sorted = [...mapped].sort((a, b) => {
+        if (a.distanceKm == null && b.distanceKm == null) return 0;
+        if (a.distanceKm == null) return 1;
+        if (b.distanceKm == null) return -1;
+        return a.distanceKm - b.distanceKm;
+      });
+
+      setUsers(sorted);
+      setDistancesReady(true);
+      setDistancesLoading(false);
+    },
+    [profile?.location]
+  );
 
   const fetchData = useCallback(async () => {
     setLoading(true);
 
     const profileBase = supabase
       .from('profiles')
-      .select('id, user_id, username, display_name, bio, avatar_url, is_verified, privacy')
+      .select('id, user_id, username, display_name, bio, avatar_url, is_verified, privacy, location')
       .order('created_at', { ascending: false })
       .limit(20);
 
@@ -90,7 +153,7 @@ export function useExplore() {
 
     if (searchQuery.trim()) {
       const q = searchQuery.trim();
-      profileQuery = profileBase.or(`username.ilike.%${q}%,display_name.ilike.%${q}%,bio.ilike.%${q}%`);
+      profileQuery = profileBase.or(`username.ilike.%${q}%,display_name.ilike.%${q}%,bio.ilike.%${q}%,location.ilike.%${q}%`);
       postQuery = postBase.or(`content.ilike.%${q}%`);
       reelQuery = reelBase.or(`caption.ilike.%${q}%`);
     }
@@ -109,7 +172,27 @@ export function useExplore() {
     if (postsResult.error) console.error('Explore posts error:', postsResult.error);
     if (reelsResult.error) console.error('Explore reels error:', reelsResult.error);
 
-    if (usersResult.data) setUsers(usersResult.data as ExploreUser[]);
+    if (usersResult.data) {
+      const userIds = usersResult.data.map(u => u.user_id);
+      const counts = new Map<string, number>();
+      if (userIds.length > 0) {
+        const { data: followRows } = await supabase
+          .from('follows')
+          .select('following_id')
+          .eq('status', 'accepted')
+          .in('following_id', userIds);
+        for (const row of followRows || []) {
+          counts.set(row.following_id, (counts.get(row.following_id) || 0) + 1);
+        }
+      }
+      const withCounts = (usersResult.data as Omit<ExploreUser, 'follower_count' | 'distanceKm'>[]).map(u => ({
+        ...u,
+        follower_count: counts.get(u.user_id) || 0,
+        distanceKm: null,
+      })) as ExploreUser[];
+      setUsers(withCounts);
+      attachDistances(withCounts);
+    }
     if (postsResult.data) setPosts(postsResult.data as unknown as ExplorePost[]);
 
     if (reelsResult.data) {
@@ -137,7 +220,7 @@ export function useExplore() {
     }
 
     setLoading(false);
-  }, [searchQuery, user, refreshKey]);
+  }, [searchQuery, user, refreshKey, attachDistances]);
 
   useEffect(() => {
     const timer = setTimeout(fetchData, searchQuery ? 400 : 0);
@@ -156,6 +239,9 @@ export function useExplore() {
     activeTab,
     setActiveTab,
     handleFollowChange,
+    viewerLocationKnown,
+    distancesReady,
+    distancesLoading,
     hasAny: users.length > 0 || posts.length > 0 || reels.length > 0,
   };
 }

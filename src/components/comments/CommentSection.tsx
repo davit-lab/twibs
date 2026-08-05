@@ -14,7 +14,7 @@ interface CommentSectionProps {
 
 export default function CommentSection({ postId }: CommentSectionProps) {
   const { user, profile } = useAuth();
-  const { comments, isLoading, addComment, deleteComment, vote } = useComments(postId);
+  const { comments, isLoading, addComment, deleteComment, editComment, vote } = useComments(postId);
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -106,6 +106,7 @@ export default function CommentSection({ postId }: CommentSectionProps) {
               onVote={vote}
               onReply={handleReply}
               onDelete={deleteComment}
+              onEdit={editComment}
             />
           ))}
         </div>

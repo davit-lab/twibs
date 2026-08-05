@@ -4,14 +4,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { detectCountryFromIP, detectBrowserLanguage } from '@/lib/languageDetection';
 
-function applyThemeToDOM(theme: string) {
+function applyThemeToDOM() {
   const root = document.documentElement;
-  if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-    root.classList.add('dark');
-  } else {
-    root.classList.remove('dark');
-  }
-  localStorage.setItem('twibsers-theme', theme);
+  root.classList.add('dark');
+  localStorage.setItem('twibsers-theme', 'dark');
 }
 
 export interface UserPreferences {
@@ -34,7 +30,7 @@ export interface UserPreferences {
 }
 
 const defaultPreferences: Omit<UserPreferences, 'user_id'> = {
-  theme: 'system',
+  theme: 'dark',
   font_size: 'medium',
   display_density: 'comfortable',
   color_accent: 'purple',
@@ -75,7 +71,7 @@ export function useUserPreferences() {
         setPreferences(data as UserPreferences);
         // Apply theme from preferences
         if (data.theme) {
-          applyThemeToDOM(data.theme);
+          applyThemeToDOM();
         }
         // Apply font size
         applyFontSize(data.font_size);
@@ -169,7 +165,7 @@ export function useUserPreferences() {
 
     // Optimistically update the UI
     if (updates.theme) {
-      applyThemeToDOM(updates.theme);
+      applyThemeToDOM();
     }
     if (updates.font_size) {
       applyFontSize(updates.font_size);
@@ -198,7 +194,7 @@ export function useUserPreferences() {
     } catch (error: any) {
       // Revert on error
       if (updates.theme && preferences.theme) {
-        applyThemeToDOM(preferences.theme);
+        applyThemeToDOM();
       }
       toast({
         variant: 'destructive',
