@@ -16,6 +16,7 @@ import { isValidPhoneNumber } from 'libphonenumber-js';
 import CountryCodeSelector from '@/components/auth/CountryCodeSelector';
 import { countries, type Country } from '@/lib/countryCodes';
 import BrandLogo from '@/components/brand/BrandLogo';
+import { ChatPreview, FeedPreview } from '@/components/auth/AuthPreview';
 import { cn } from '@/lib/utils';
 
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
@@ -353,16 +354,11 @@ export default function Auth() {
 
   const renderAuthForm = () => (
     <div>
-      <div className="text-center mb-6">
-        <h1 className="text-2xl font-bold tracking-tight mb-1">
-          {activeTab === 'login' ? 'Welcome back' : 'Create your account'}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {activeTab === 'login'
-            ? 'Log in to see what your friends are sharing.'
-            : 'Sign up to share moments and connect with people.'}
-        </p>
-      </div>
+      <p className="text-center text-sm text-muted-foreground mb-6">
+        {activeTab === 'login'
+          ? 'Log in to see photos and videos from your friends.'
+          : 'Sign up to see photos and videos from your friends.'}
+      </p>
 
       <div className="flex gap-1 bg-surface-2 p-1 rounded-full mb-6">
         <button type="button" onClick={() => switchTab('login')}
@@ -442,11 +438,6 @@ export default function Auth() {
               Phone
             </button>
           </div>
-
-          <p className="text-center text-sm text-muted-foreground pt-1">
-            Don't have an account?{' '}
-            <button type="button" onClick={() => switchTab('signup')} className="text-primary font-semibold hover:underline">Sign up</button>
-          </p>
         </form>
       ) : (
         <form onSubmit={handleSignUp} className="space-y-4">
@@ -545,35 +536,59 @@ export default function Auth() {
             <Phone className="h-4 w-4 text-muted-foreground" />
             Sign up with Phone
           </button>
-
-          <p className="text-center text-sm text-muted-foreground pt-1">
-            Already have an account?{' '}
-            <button type="button" onClick={() => switchTab('login')} className="text-primary font-semibold hover:underline">Log in</button>
-          </p>
         </form>
       )}
     </div>
   );
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4 py-12">
-      <div className="w-full max-w-sm">
-        <div className="flex justify-center mb-7">
-          <BrandLogo className="h-11" />
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+      <div className="w-full max-w-7xl grid lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_400px_minmax(0,1fr)] items-center gap-10 lg:gap-12 xl:gap-16">
+        {/* Mock chat */}
+        <div className="hidden lg:flex justify-center">
+          <ChatPreview />
         </div>
 
-        <div className="bg-card border border-border rounded-2xl p-6 sm:p-7">
-          {(authMode === 'otp-request' || authMode === 'otp-verify') && renderOtpFlow()}
-          {(authMode === 'phone-request' || authMode === 'phone-verify') && renderPhoneFlow()}
-          {authMode === 'login' && renderAuthForm()}
+        {/* Auth form */}
+        <div className="w-full max-w-sm mx-auto">
+          <div className="flex justify-center mb-6">
+            <BrandLogo className="h-12" />
+          </div>
+
+          <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/20">
+            {(authMode === 'otp-request' || authMode === 'otp-verify') && renderOtpFlow()}
+            {(authMode === 'phone-request' || authMode === 'phone-verify') && renderPhoneFlow()}
+            {authMode === 'login' && renderAuthForm()}
+          </div>
+
+          {(authMode === 'login' || authMode === 'signup') && (
+            <div className="mt-3 bg-card border border-border rounded-3xl p-4 text-center text-sm text-muted-foreground">
+              {activeTab === 'login' ? (
+                <>
+                  Don't have an account?{' '}
+                  <button type="button" onClick={() => switchTab('signup')} className="text-primary font-semibold hover:underline">Sign up</button>
+                </>
+              ) : (
+                <>
+                  Already have an account?{' '}
+                  <button type="button" onClick={() => switchTab('login')} className="text-primary font-semibold hover:underline">Log in</button>
+                </>
+              )}
+            </div>
+          )}
+
+          <p className="text-center text-xs text-muted-foreground mt-6 leading-relaxed">
+            By continuing you agree to our{' '}
+            <a href="/terms" className="text-primary font-medium hover:underline">Terms</a>
+            {' '}and{' '}
+            <a href="/privacy" className="text-primary font-medium hover:underline">Privacy Policy</a>.
+          </p>
         </div>
 
-        <p className="text-center text-xs text-muted-foreground mt-6 leading-relaxed">
-          By continuing you agree to our{' '}
-          <a href="/terms" className="text-primary font-medium hover:underline">Terms</a>
-          {' '}and{' '}
-          <a href="/privacy" className="text-primary font-medium hover:underline">Privacy Policy</a>.
-        </p>
+        {/* Beautiful photos */}
+        <div className="hidden xl:flex justify-center">
+          <FeedPreview />
+        </div>
       </div>
     </div>
   );
