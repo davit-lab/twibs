@@ -1,16 +1,20 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Book, BookOpen, Play, BadgeCheck, CheckCircle2, Clock } from 'lucide-react';
+import { Book, BookOpen, Play, BadgeCheck, CheckCircle2, Clock, Trash2, X } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { useRef, useState } from 'react';
 import type { LibraryBookWithProgress } from '@/hooks/useBooks';
 
 interface LibraryBookCardProps {
   book: LibraryBookWithProgress;
+  onRemove?: () => void;
 }
 
-export default function LibraryBookCard({ book }: LibraryBookCardProps) {
+export default function LibraryBookCard({ book, onRemove }: LibraryBookCardProps) {
   const navigate = useNavigate();
+  const [confirming, setConfirming] = useState(false);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const progressPercent = book.total_chapters > 0
     ? (book.completed_count / book.total_chapters) * 100
@@ -30,6 +34,19 @@ export default function LibraryBookCard({ book }: LibraryBookCardProps) {
     }
   };
 
+  const handleRemoveClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (confirming) {
+      if (confirmTimer.current) clearTimeout(confirmTimer.current);
+      setConfirming(false);
+      onRemove?.();
+    } else {
+      setConfirming(true);
+      confirmTimer.current = setTimeout(() => setConfirming(false), 2500);
+    }
+  };
+
   return (
     <div className="group flex gap-4 rounded-2xl border border-border/60 bg-card p-4 transition-all duration-300 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5">
       <Link to={`/library/book/${book.id}`} className="w-20 flex-shrink-0 self-start sm:w-24">
@@ -45,27 +62,62 @@ export default function LibraryBookCard({ book }: LibraryBookCardProps) {
               <Book className="h-8 w-8 text-muted-foreground/30" />
             </div>
           )}
+          {isComplete && (
+            <span className="absolute right-1.5 top-1.5 rounded-full bg-emerald-500 p-1 shadow-lg shadow-emerald-500/30">
+              <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+            </span>
+          )}
         </div>
       </Link>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-start justify-between gap-3">
-          <Link
-            to={`/library/book/${book.id}`}
-            className="line-clamp-1 font-bold tracking-tight transition-colors hover:text-primary"
-          >
-            {book.title}
-          </Link>
-          {book.progress?.last_read_at && (
-            <span className="flex flex-shrink-0 items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="h-3 w-3" />
-              {formatDistanceToNow(new Date(book.progress.last_read_at), { addSuffix: true })}
-            </span>
+          <div className="min-w-0">
+            <Link
+              to={`/library/book/${book.id}`}
+              className="line-clamp-1 font-bold tracking-tight transition-colors hover:text-primary"
+            >
+              {book.title}
+            </Link>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              {book.genre && (
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                  {book.genre}
+                </span>
+              )}
+              {book.progress?.last_read_at && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Clock className="h-3 w-3" />
+                  {formatDistanceToNow(new Date(book.progress.last_read_at), { addSuffix: true })}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {onRemove && (
+            <button
+              onClick={handleRemoveClick}
+              title={confirming ? 'Confirm removal' : 'Remove from library'}
+              className={`flex flex-shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition-all ${
+                confirming
+                  ? 'bg-destructive/15 text-destructive hover:bg-destructive/25'
+                  : 'text-muted-foreground opacity-0 hover:bg-muted hover:text-destructive focus:opacity-100 group-hover:opacity-100'
+              }`}
+            >
+              {confirming ? (
+                <>
+                  <X className="h-3.5 w-3.5" />
+                  Remove?
+                </>
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+            </button>
           )}
         </div>
 
         {book.author && (
-          <div className="mt-1 flex items-center gap-1.5">
+          <div className="mt-2 flex items-center gap-1.5">
             <Avatar className="h-5 w-5 border border-border/60">
               <AvatarImage src={book.author.avatar_url || undefined} />
               <AvatarFallback className="bg-primary/10 text-[8px] font-bold text-primary">

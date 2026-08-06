@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import { useBooksByAuthor } from '@/hooks/useBooksByAuthor';
-import { useMyBooks, useUserLibrary } from '@/hooks/useBooks';
+import { useMyBooks, useUserLibrary, useBookActions } from '@/hooks/useBooks';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePremiumStatus } from '@/hooks/usePremiumStatus';
 import AuthorBooksSection from '@/components/library/AuthorBooksSection';
@@ -11,6 +11,7 @@ import ContinueReadingCard from '@/components/library/ContinueReadingCard';
 import CreateBookDialog from '@/components/library/CreateBookDialog';
 import ReadingStreakCard from '@/components/library/ReadingStreakCard';
 import BookCard from '@/components/library/BookCard';
+import ReadingOverview from '@/components/library/ReadingOverview';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -22,9 +23,7 @@ import {
   Sparkles,
   TrendingUp,
   Clock,
-  BookMarked,
   BookCheck,
-  BookPlus,
   Heart,
   Flame,
   PenTool,
@@ -44,13 +43,15 @@ export default function Library() {
   const { user, profile } = useAuth();
   const { authorGroups, isLoading: loadingBrowse } = useBooksByAuthor();
   const { books: myBooks, isLoading: loadingMyBooks, refetch: refetchMyBooks } = useMyBooks();
-  const { books: libraryBooks, isLoading: loadingLibrary } = useUserLibrary();
+  const { books: libraryBooks, isLoading: loadingLibrary, refetch: refetchLibrary } = useUserLibrary();
+  const { removeFromLibrary } = useBookActions();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<TabValue>(user ? 'my-library' : 'browse');
   const [sortBy, setSortBy] = useState<SortOption>('recent');
   const [librarySort, setLibrarySort] = useState<LibrarySort>('recent');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [activeGenre, setActiveGenre] = useState('all');
+  const [libraryGenre, setLibraryGenre] = useState('all');
   const { data: isPremium } = usePremiumStatus(user?.id);
 
   const isVerified = profile?.is_verified;
@@ -115,17 +116,35 @@ export default function Library() {
     return filtered;
   }, [libraryBooks, searchQuery, librarySort]);
 
-  const currentlyReading = filteredLibrary.filter(
+  const libraryGenres = useMemo(() => {
+    const set = new Set<string>();
+    libraryBooks.forEach((book) => {
+      if (book.genre) set.add(book.genre);
+    });
+    return ['all', ...Array.from(set).sort()];
+  }, [libraryBooks]);
+
+  const genreFilteredLibrary = useMemo(() => {
+    if (libraryGenre === 'all') return filteredLibrary;
+    return filteredLibrary.filter((book) => book.genre === libraryGenre);
+  }, [filteredLibrary, libraryGenre]);
+
+  const currentlyReading = genreFilteredLibrary.filter(
     (book) => book.progress && book.completed_count < book.total_chapters
   );
-  const notStarted = filteredLibrary.filter(
+  const notStarted = genreFilteredLibrary.filter(
     (book) => !book.progress || book.completed_count === 0
   );
-  const completedBooks = filteredLibrary.filter(
+  const completedBooks = genreFilteredLibrary.filter(
     (book) => book.completed_count === book.total_chapters && book.total_chapters > 0
   );
 
   const heroBook = currentlyReading[0];
+
+  const handleRemoveFromLibrary = async (bookId: string) => {
+    const removed = await removeFromLibrary(bookId);
+    if (removed) refetchLibrary();
+  };
 
   const tabs = [
     { value: 'my-library' as const, label: 'My Library', icon: Heart, requiresAuth: true, count: libraryBooks.length },
@@ -134,18 +153,16 @@ export default function Library() {
     { value: 'my-books' as const, label: 'My Books', icon: PenTool, requiresAuth: true, requiresCreate: true, count: undefined },
   ];
 
-  const statCards = [
-    { label: 'Total Books', value: libraryBooks.length, icon: BookMarked },
-    { label: 'In Progress', value: currentlyReading.length, icon: BookOpen },
-    { label: 'Completed', value: completedBooks.length, icon: BookCheck },
-    { label: 'Not Started', value: notStarted.length, icon: BookPlus },
-  ];
-
-  const renderSectionHeader = (title: string, icon?: React.ReactNode, action?: React.ReactNode) => (
+  const renderSectionHeader = (title: string, icon?: React.ReactNode, action?: React.ReactNode, count?: number) => (
     <div className="mb-4 flex items-end justify-between gap-4">
       <div className="flex items-center gap-2.5">
         {icon}
         <h2 className="text-lg font-bold tracking-tight">{title}</h2>
+        {count !== undefined && count > 0 && (
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
+            {count}
+          </span>
+        )}
       </div>
       {action}
     </div>
@@ -322,7 +339,28 @@ export default function Library() {
                     </Button>
                   </div>
                 ) : (
-                  <div className="space-y-12">
+                  <div className="space-y-10">
+                    <ReadingOverview books={libraryBooks} />
+
+                    {libraryGenres.length > 1 && (
+                      <div className="flex flex-wrap gap-2">
+                        {libraryGenres.map((genre) => (
+                          <button
+                            key={genre}
+                            onClick={() => setLibraryGenre(genre)}
+                            className={cn(
+                              'rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors',
+                              libraryGenre === genre
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'border-border/60 bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                            )}
+                          >
+                            {genre === 'all' ? 'All books' : genre}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     {heroBook && <ContinueReadingCard book={heroBook} />}
 
                     {currentlyReading.length > 0 && (
@@ -331,17 +369,17 @@ export default function Library() {
                           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
                             <BookOpen className="h-4 w-4 text-primary" />
                           </span>
-                        ))}
+                        ), undefined, currentlyReading.length)}
                         {viewMode === 'grid' ? (
                           <div className="grid gap-4 md:grid-cols-2">
                             {currentlyReading.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} />
+                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} />
                             ))}
                           </div>
                         ) : (
                           <div className="space-y-3">
                             {currentlyReading.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} />
+                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} />
                             ))}
                           </div>
                         )}
@@ -354,17 +392,17 @@ export default function Library() {
                           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
                             <Clock className="h-4 w-4 text-muted-foreground" />
                           </span>
-                        ))}
+                        ), undefined, notStarted.length)}
                         {viewMode === 'grid' ? (
                           <div className="grid gap-4 md:grid-cols-2">
                             {notStarted.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} />
+                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} />
                             ))}
                           </div>
                         ) : (
                           <div className="space-y-3">
                             {notStarted.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} />
+                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} />
                             ))}
                           </div>
                         )}
@@ -377,17 +415,17 @@ export default function Library() {
                           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
                             <BookCheck className="h-4 w-4 text-emerald-500" />
                           </span>
-                        ))}
+                        ), undefined, completedBooks.length)}
                         {viewMode === 'grid' ? (
                           <div className="grid gap-4 md:grid-cols-2">
                             {completedBooks.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} />
+                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} />
                             ))}
                           </div>
                         ) : (
                           <div className="space-y-3">
                             {completedBooks.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} />
+                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} />
                             ))}
                           </div>
                         )}
@@ -503,28 +541,6 @@ export default function Library() {
               </>
             )}
           </div>
-
-          {/* Stats */}
-          {user && libraryBooks.length > 0 && activeTab === 'my-library' && (
-            <div className="mt-12">
-              <div className="mb-4 flex items-center gap-2.5">
-                <h2 className="text-lg font-bold tracking-tight">Your reading stats</h2>
-              </div>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                {statCards.map((stat) => (
-                  <div key={stat.label} className="rounded-2xl border border-border/60 bg-card p-4">
-                    <div className="mb-2.5 flex items-center gap-2">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
-                        <stat.icon className="h-3.5 w-3.5 text-primary" />
-                      </span>
-                      <span className="text-xs font-medium text-muted-foreground">{stat.label}</span>
-                    </div>
-                    <p className="text-2xl font-bold tracking-tight">{stat.value}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Info for non-verified users */}
           {!canCreateBooks && user && (
