@@ -230,6 +230,7 @@ export default function StoriesBar() {
       {/* ─── Story Theater ─── */}
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
         <DialogContent
+          hideCloseButton
           className="w-full h-[100dvh] sm:h-[90vh] sm:max-h-[860px] max-w-[460px] p-0 border-none overflow-hidden sm:rounded-[2rem] bg-transparent"
         >
           <div className="relative h-full w-full bg-[radial-gradient(120%_120%_at_50%_0%,#221d33_0%,#0d0c14_55%,#05050a_100%)]">

@@ -302,11 +302,13 @@ export default function Admin() {
     setGiftingLoading(true);
     try {
       // Check if user already has a subscription
-      const { data: existingSub } = await supabase
+      const { data: existingSub, error: fetchError } = await supabase
         .from('subscriptions')
         .select('id')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
 
       const subscriptionData = {
         user_id: userId,
@@ -317,14 +319,16 @@ export default function Admin() {
       };
 
       if (existingSub) {
-        await supabase
+        const { error: updateError } = await supabase
           .from('subscriptions')
           .update(subscriptionData)
           .eq('id', existingSub.id);
+        if (updateError) throw updateError;
       } else {
-        await supabase
+        const { error: insertError } = await supabase
           .from('subscriptions')
           .insert(subscriptionData);
+        if (insertError) throw insertError;
       }
 
       toast({

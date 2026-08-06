@@ -122,7 +122,8 @@ export default function Profile() {
   const { mutuals, count: mutualCount, loading: mutualsLoading } = useMutualConnections(profileData?.user_id);
   const { data: isPremium } = usePremiumStatus(profileData?.user_id);
   const { groupedStories, viewStory, uploadStory, deleteStory } = useStories({
-    profileUserId: profileData?.user_id
+    profileUserId: profileData?.user_id,
+    enabled: !!profileData,
   });
 
   // Modal states
@@ -138,6 +139,12 @@ export default function Profile() {
 
   useEffect(() => {
     const fetchProfile = async () => {
+      // Reset immediately when the target profile changes so we never render
+      // stale data (or the previous user's stories) while loading the new one.
+      setLoading(true);
+      setProfileData(null);
+      setError(null);
+
       if (!username) {
         setError('Profile not found');
         setLoading(false);
@@ -177,6 +184,14 @@ export default function Profile() {
     fetchProfile();
   }, [username]);
 
+  // Close the story viewer whenever the profile being viewed changes.
+  const viewedUserId = profileData?.user_id;
+  useEffect(() => {
+    setViewerOpen(false);
+    setCurrentStoryIndex(0);
+    setPaused(false);
+  }, [viewedUserId]);
+
   const handleFollowChange = () => {
     setRefreshKey(prev => prev + 1);
   };
@@ -199,8 +214,8 @@ export default function Profile() {
     try {
       await uploadStory(file);
       toast({ title: 'Story added!', description: 'Your story will be visible for 24 hours.' });
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Upload failed', description: err.message || 'Failed to upload story.' });
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Upload failed', description: err instanceof Error ? err.message : 'Failed to upload story.' });
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';

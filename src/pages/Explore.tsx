@@ -276,7 +276,6 @@ function ReelCard({ reel, grid }: { reel: ExploreReel; grid?: boolean }) {
 export default function Explore() {
   const { profile: currentUserProfile } = useAuth();
   const { users, posts, reels, loading, searchQuery, setSearchQuery, activeTab, setActiveTab, handleFollowChange, hasAny, viewerLocationKnown, distancesReady, distancesLoading } = useExplore();
-  const [searchFocused, setSearchFocused] = useState(false);
   const trimmedQuery = searchQuery.trim();
   const counts = { people: users.length, posts: posts.length, reels: reels.length };
 
@@ -426,12 +425,7 @@ export default function Explore() {
                 placeholder={searchPlaceholder}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                onFocus={() => setSearchFocused(true)}
-                onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
                 onKeyDown={e => {
-                  if (e.key === 'Enter' && users.length > 0) {
-                    window.location.href = `/profile/${users[0].username}`;
-                  }
                   if (e.key === 'Escape') {
                     setSearchQuery('');
                     (e.target as HTMLInputElement).blur();
@@ -440,52 +434,14 @@ export default function Explore() {
                 className="pl-12 pr-12 h-12 text-base bg-card border border-border/60 focus:border-primary/50 rounded-xl font-medium"
               />
               {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>}
-
-              {searchFocused && trimmedQuery.length >= 2 && users.length > 0 && (
-                <div className="absolute z-30 mt-2 left-0 right-0 rounded-2xl bg-background border border-border/80 shadow-xl shadow-black/10 overflow-hidden">
-                  <p className="px-4 pt-3 pb-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">People</p>
-                  {users.slice(0, 5).map(u => (
-                    <a
-                      key={u.id}
-                      href={`/profile/${u.username}`}
-                      onMouseDown={e => e.preventDefault()}
-                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2/60 transition-colors"
-                    >
-                      <Avatar className="h-8 w-8 flex-shrink-0">
-                        <AvatarImage src={u.avatar_url || undefined} />
-                        <AvatarFallback className="bg-surface-2 text-foreground text-xs font-bold">{u.display_name?.[0] || 'U'}</AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1 text-sm font-bold">
-                          <span className="truncate">{u.display_name}</span>
-                          {u.is_verified && <BadgeCheck className="h-3.5 w-3.5 text-primary flex-shrink-0" />}
-                        </div>
-                        <p className="text-xs text-muted-foreground truncate">
-                          @{u.username}
-                          {u.location ? ` · ${u.location}` : ''}
-                        </p>
-                      </div>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    </a>
-                  ))}
-                  <button
-                    onMouseDown={e => e.preventDefault()}
-                    onClick={() => { setActiveTab('people'); setSearchFocused(false); }}
-                    className="w-full border-t border-border/60 px-4 py-3 text-left text-xs font-bold text-primary hover:bg-surface-2/60 transition-colors flex items-center gap-2"
-                  >
-                    <Users className="h-4 w-4" />
-                    See all people for “{trimmedQuery}”
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         </div>
 
         {/* Segmented Section Tabs */}
-        <div className="sticky top-14 z-40 bg-background/90 backdrop-blur border-b border-border">
+        <div className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b border-border">
           <div className="max-w-3xl mx-auto px-4">
-            <div className="flex items-center gap-2 py-3 overflow-x-auto scrollbar-hide">
+            <div className="flex items-center gap-2 py-3 overflow-x-auto scrollbar-hide pr-24 lg:pr-0">
               {TABS.map(({ value, label, icon: Icon }) => {
                 const active = activeTab === value;
                 const count = value === 'all' ? null : counts[value as 'people' | 'posts' | 'reels'];

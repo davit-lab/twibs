@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -35,6 +35,8 @@ export interface GroupedStories {
 interface UseStoriesOptions {
   // If provided, fetch stories for a specific user (profile page view)
   profileUserId?: string;
+  // When false, the hook is inert and returns empty data (e.g. profile still loading)
+  enabled?: boolean;
 }
 
 export function useStories(options: UseStoriesOptions = {}) {
@@ -43,11 +45,32 @@ export function useStories(options: UseStoriesOptions = {}) {
   const [stories, setStories] = useState<Story[]>([]);
   const [groupedStories, setGroupedStories] = useState<GroupedStories[]>([]);
   const [loading, setLoading] = useState(true);
+  const enabled = options.enabled ?? true;
+  const lastProfileUserId = useRef<string | undefined>(undefined);
 
   const fetchStories = useCallback(async () => {
+    // Not enabled (e.g. profile target hasn't loaded yet): show nothing so we
+    // never flash the current user's own (feed) stories on a profile page.
+    if (enabled === false) {
+      lastProfileUserId.current = undefined;
+      setStories([]);
+      setGroupedStories([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       // If viewing a specific profile, show that user's stories
       if (options.profileUserId) {
+        // Target user changed: drop the previous user's stories immediately so
+        // we never show stale (or our own) stories while refetching.
+        if (lastProfileUserId.current !== options.profileUserId) {
+          lastProfileUserId.current = options.profileUserId;
+          setStories([]);
+          setGroupedStories([]);
+          setLoading(true);
+        }
+
         const { data: storiesData, error } = await supabase
           .from('stories')
           .select('*')
@@ -191,7 +214,7 @@ export function useStories(options: UseStoriesOptions = {}) {
     } finally {
       setLoading(false);
     }
-  }, [user, options.profileUserId]);
+  }, [user, options.profileUserId, enabled]);
 
   useEffect(() => {
     fetchStories();
