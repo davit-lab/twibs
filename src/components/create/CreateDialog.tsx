@@ -5,7 +5,7 @@ import { useStories } from '@/hooks/useStories';
 import { useToast } from '@/hooks/use-toast';
 import CameraModal from '@/components/media/CameraModal';
 import type { MediaEditorResult } from '@/components/media/FilterEditor';
-import { Loader2, Camera, ImageIcon, X, Plus, ChevronRight, Clapperboard, Sparkles } from 'lucide-react';
+import { Loader2, Camera, ImageIcon, Plus, Clapperboard, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReelCreator from './ReelCreator';
 
@@ -19,28 +19,22 @@ const createOptions = [
     type: 'story' as const,
     icon: Camera,
     label: 'Story',
-    description: 'Take a photo or record a video that disappears in 24 hours',
     gradient: 'from-violet-500 to-fuchsia-500',
     glow: 'shadow-violet-500/30',
-    ring: 'group-hover:ring-violet-400/40',
   },
   {
     type: 'post' as const,
     icon: ImageIcon,
     label: 'Post',
-    description: 'Share photos, videos or an update with your followers',
     gradient: 'from-sky-500 to-blue-600',
     glow: 'shadow-sky-500/30',
-    ring: 'group-hover:ring-sky-400/40',
   },
   {
     type: 'reel' as const,
     icon: Clapperboard,
     label: 'Reel',
-    description: 'Record and edit a short vertical video with effects',
     gradient: 'from-pink-500 to-rose-500',
     glow: 'shadow-pink-500/30',
-    ring: 'group-hover:ring-pink-400/40',
   },
 ];
 
@@ -106,36 +100,35 @@ export default function CreateDialog({ open, onOpenChange }: CreateDialogProps) 
           </div>
 
           {/* Options */}
-          <div className="relative px-4 pb-5 space-y-3">
-            {createOptions.map((option) => (
-              <button
-                key={option.type}
-                onClick={() => handleCreateTypeSelect(option.type)}
-                className={cn(
-                  'group w-full flex items-center gap-4 p-4 rounded-2xl border border-border/60 bg-card text-left',
-                  'transition-all duration-200 hover:border-border hover:bg-muted/40',
-                  'hover:shadow-lg hover:shadow-black/5 active:scale-[0.98]'
-                )}
-              >
-                <div className={cn(
-                  'w-14 h-14 rounded-2xl bg-gradient-to-br text-white flex items-center justify-center',
-                  'shadow-md flex-shrink-0 transition-transform duration-200 group-hover:scale-105 group-hover:-rotate-3',
-                  option.gradient,
-                  option.glow
-                )}>
-                  <option.icon className="h-6 w-6" strokeWidth={2} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <span className="block font-semibold">{option.label}</span>
-                  <span className="block text-sm text-muted-foreground leading-snug">
-                    {option.description}
+          <div className="relative px-4 pb-5">
+            <div className="grid grid-cols-3 gap-3">
+              {createOptions.map((option) => (
+                <button
+                  key={option.type}
+                  onClick={() => handleCreateTypeSelect(option.type)}
+                  className={cn(
+                    'group flex flex-col items-center gap-3 px-2 py-6 rounded-3xl border border-border/60 bg-card text-center',
+                    'transition-all duration-200 hover:border-border hover:bg-muted/40',
+                    'hover:shadow-lg hover:shadow-black/5 active:scale-[0.96]'
+                  )}
+                >
+                  <div className={cn(
+                    'w-14 h-14 rounded-2xl bg-gradient-to-br text-white flex items-center justify-center',
+                    'shadow-md transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6',
+                    option.gradient,
+                    option.glow
+                  )}>
+                    <option.icon className="h-6 w-6" strokeWidth={2} />
+                  </div>
+                  <span className="font-semibold text-sm leading-tight">{option.label}</span>
+                  <span className="text-[10px] text-muted-foreground leading-tight">
+                    {option.type === 'story' ? 'Disappears in 24h' : option.type === 'post' ? 'Share with followers' : 'Short video'}
                   </span>
-                </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground/60 flex-shrink-0 transition-all duration-200 group-hover:text-primary group-hover:translate-x-0.5" />
-              </button>
-            ))}
+                </button>
+              ))}
+            </div>
 
-            <div className="pt-1 pb-1 text-center">
+            <div className="pt-4 pb-1 text-center">
               <span className="text-[11px] text-muted-foreground">
                 Stories vanish after 24 hours · Reels can be up to 60 seconds
               </span>
