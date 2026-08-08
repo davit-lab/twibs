@@ -107,103 +107,111 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Desktop Top Navigation */}
+      {/* Desktop Compact Icon Rail */}
       {user && !immersive && (
-        <header className="hidden lg:block sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-xl">
-          <div className="mx-auto max-w-7xl px-5 flex items-center gap-2 h-16">
-            <Link to="/" className="flex items-center flex-shrink-0 mr-2">
-              <BrandLogo className="h-8" />
-            </Link>
+        <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-[80px] z-40 flex-col items-center border-r border-border bg-background py-5 px-2">
+          <Link to="/" className="mb-6 flex items-center justify-center" title="Home">
+            <BrandLogo className="h-8" />
+          </Link>
 
-            <nav className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto scrollbar-hide">
-              {navItems.map((item) => {
-                const active = isActive(item.href);
+          <nav className="flex flex-1 w-full flex-col items-center gap-1 overflow-y-auto scrollbar-hide">
+            {navItems.map((item) => {
+              const active = isActive(item.href);
 
-                if (item.href === '#create') {
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => setCreateDialogOpen(true)}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold bg-gradient-to-br from-primary to-accent text-white shadow-sm shadow-primary/25 hover:brightness-110 active:scale-95 transition-all flex-shrink-0"
-                    >
-                      <Plus className="h-4 w-4" strokeWidth={2.5} />
-                      Create
-                    </button>
-                  );
-                }
-
+              if (item.href === '#create') {
                 return (
-                  <Link
-                    key={item.id}
-                    to={item.href}
+                  <div key={item.id} className="relative group w-full flex justify-center my-1">
+                    <button
+                      onClick={() => setCreateDialogOpen(true)}
+                      aria-label="Create"
+                      className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-accent text-white shadow-lg shadow-primary/30 flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+                    >
+                      <Plus className="h-6 w-6" strokeWidth={2.5} />
+                    </button>
+                    <span className="rail-tip">Create</span>
+                  </div>
+                );
+              }
+
+              return (
+                <Link
+                  key={item.id}
+                  to={item.href}
+                  aria-label={item.label}
+                  className="relative group w-full flex justify-center py-0.5"
+                >
+                  <span
                     className={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap flex-shrink-0 transition-colors',
+                      'flex h-11 w-11 items-center justify-center rounded-2xl transition-colors',
                       active
-                        ? 'bg-primary/10 text-primary font-semibold'
+                        ? 'bg-primary/10 text-primary'
                         : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
                     )}
                   >
                     <item.icon
-                      className={cn('h-5 w-5', active && 'text-primary')}
+                      className={cn('h-[22px] w-[22px]', active && 'text-primary')}
                       strokeWidth={active ? 2.5 : 1.5}
                       fill={active ? 'currentColor' : 'none'}
                     />
-                    <span>{item.label}</span>
-                  </Link>
-                );
-              })}
-            </nav>
+                  </span>
+                  <span className="rail-tip">{item.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
 
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <NotificationDropdown className="text-muted-foreground hover:text-foreground hover:bg-surface-2" />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="rounded-full transition-opacity hover:opacity-85 flex-shrink-0 ml-1">
-                    <Avatar className="h-9 w-9 ring-2 ring-border hover:ring-primary/40 transition-shadow">
-                      <AvatarImage src={profile?.avatar_url || undefined} />
-                      <AvatarFallback className="text-xs bg-surface-2">
-                        {getInitials(profile?.display_name || 'U')}
-                      </AvatarFallback>
-                    </Avatar>
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-[220px]" align="end" sideOffset={10}>
-                  <DropdownMenuItem asChild>
-                    <Link to={`/profile/${profile?.username}`} className="cursor-pointer">
-                      <User className="mr-3 h-4 w-4" />
-                      Profile
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/settings" className="cursor-pointer">
-                      <Settings className="mr-3 h-4 w-4" />
-                      Settings
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/pricing" className="cursor-pointer">
-                      <Crown className="mr-3 h-4 w-4" />
-                      Premium
-                    </Link>
-                  </DropdownMenuItem>
-                  {(isAdmin || isModerator) && (
-                    <DropdownMenuItem asChild>
-                      <Link to="/admin" className="cursor-pointer">
-                        <Shield className="mr-3 h-4 w-4" />
-                        Admin
-                      </Link>
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={signOut} className="cursor-pointer text-destructive">
-                    <LogOut className="mr-3 h-4 w-4" />
-                    Log out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+          <div className="relative group w-full flex justify-center py-1">
+            <NotificationDropdown className="h-11 w-11 rounded-2xl text-muted-foreground hover:text-foreground hover:bg-surface-2" />
+            <span className="rail-tip">Notifications</span>
           </div>
-        </header>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="relative group w-full flex justify-center mt-1" aria-label="Account">
+                <Avatar className="h-10 w-10 ring-2 ring-border hover:ring-primary/40 transition-shadow">
+                  <AvatarImage src={profile?.avatar_url || undefined} />
+                  <AvatarFallback className="text-xs bg-surface-2">
+                    {getInitials(profile?.display_name || 'U')}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="rail-tip">Account</span>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-[220px]" align="start" side="right" sideOffset={12}>
+              <DropdownMenuItem asChild>
+                <Link to={`/profile/${profile?.username}`} className="cursor-pointer">
+                  <User className="mr-3 h-4 w-4" />
+                  Profile
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/settings" className="cursor-pointer">
+                  <Settings className="mr-3 h-4 w-4" />
+                  Settings
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/pricing" className="cursor-pointer">
+                  <Crown className="mr-3 h-4 w-4" />
+                  Premium
+                </Link>
+              </DropdownMenuItem>
+              {(isAdmin || isModerator) && (
+                <DropdownMenuItem asChild>
+                  <Link to="/admin" className="cursor-pointer">
+                    <Shield className="mr-3 h-4 w-4" />
+                    Admin
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={signOut} className="cursor-pointer text-destructive">
+                <LogOut className="mr-3 h-4 w-4" />
+                Log out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </aside>
       )}
 
       {/* Mobile Floating Nav - Notifications & Chats */}
@@ -245,7 +253,7 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
       )}
 
       {/* Main Content */}
-      <main className="min-h-screen">
+      <main className={cn('min-h-screen', user && !immersive && 'lg:ml-[80px]')}>
         {isBanned && banInfo ? (
           <div className="max-w-md mx-auto py-20 px-4">
             <Card>
@@ -417,6 +425,30 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
       )}
 
       <CreateDialog open={createDialogOpen} onOpenChange={setCreateDialogOpen} />
+
+      <style>{`
+        .rail-tip {
+          pointer-events: none;
+          position: absolute;
+          left: calc(100% + 10px);
+          top: 50%;
+          transform: translateY(-50%);
+          white-space: nowrap;
+          border-radius: 8px;
+          background: hsl(var(--foreground));
+          color: hsl(var(--background));
+          font-size: 12px;
+          font-weight: 500;
+          padding: 5px 10px;
+          opacity: 0;
+          transition: opacity 0.15s ease;
+          z-index: 60;
+          box-shadow: 0 8px 20px rgba(0,0,0,0.18);
+        }
+        .group:hover > .rail-tip {
+          opacity: 1;
+        }
+      `}</style>
     </div>
   );
 }
