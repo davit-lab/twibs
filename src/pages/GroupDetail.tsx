@@ -22,13 +22,15 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import GroupPostCard from '@/components/groups/GroupPostCard';
 import GroupMembersSheet from '@/components/groups/GroupMembersSheet';
 import GroupSettingsDialog from '@/components/groups/GroupSettingsDialog';
+import GroupRequestsSheet from '@/components/groups/GroupRequestsSheet';
 import MediaLightbox from '@/components/MediaLightbox';
-import { useGroup, useGroupPosts, useGroupActions, uploadGroupMedia } from '@/hooks/useGroups';
+import { useGroup, useGroupPosts, useGroupJoinRequests, useGroupActions, uploadGroupMedia } from '@/hooks/useGroups';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 import {
   Users, Lock, Globe, Loader2, ImagePlus, X, MoreHorizontal, Trash2,
-  UserPlus, Check, MessageSquare, AlertTriangle, Settings, Camera,
+  UserPlus, Check, MessageSquare, AlertTriangle, Settings, Camera, Clock,
 } from 'lucide-react';
 
 const POST_MAX = 2000;
@@ -39,7 +41,7 @@ export default function GroupDetail() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const { group, membership, isLoading: groupLoading, error } = useGroup(slug);
+  const { group, membership, joinRequest, isLoading: groupLoading, error } = useGroup(slug);
   const {
     data: postsData,
     isLoading: postsLoading,
@@ -47,7 +49,8 @@ export default function GroupDetail() {
     hasNextPage,
     isFetchingNextPage,
   } = useGroupPosts(group?.id || '');
-  const { joinGroup, leaveGroup, deleteGroup, createPost } = useGroupActions();
+  const { data: joinRequestsData, isLoading: requestsLoading } = useGroupJoinRequests(group?.id || '');
+  const { joinGroup, leaveGroup, deleteGroup, createPost, requestJoinGroup, cancelJoinRequest } = useGroupActions();
 
   const [newPost, setNewPost] = useState('');
   const [mediaPreview, setMediaPreview] = useState<{ file: File; preview: string; type: 'image' | 'video' } | null>(null);
@@ -55,6 +58,7 @@ export default function GroupDetail() {
   const [posting, setPosting] = useState(false);
   const [joining, setJoining] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [requestsOpen, setRequestsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -65,7 +69,11 @@ export default function GroupDetail() {
   const isMember = !!membership;
   const isOwner = membership?.role === 'owner';
   const isAdmin = membership?.role === 'owner' || membership?.role === 'admin';
+  const isModerator = membership?.role === 'owner' || membership?.role === 'admin' || membership?.role === 'moderator';
   const isPrivate = group?.privacy === 'private';
+  const requestPending = joinRequest?.status === 'pending';
+  const requestDeclined = joinRequest?.status === 'declined';
+  const pendingRequests = joinRequestsData?.length ?? 0;
 
   // Infinite scroll
   useEffect(() => {
@@ -113,11 +121,11 @@ export default function GroupDetail() {
           const uploaded = await uploadGroupMedia(mediaPreview.file);
           mediaUrl = uploaded.url;
           mediaType = uploaded.type;
-        } catch (err: any) {
+        } catch (err) {
           toast({
             variant: 'destructive',
             title: 'Upload failed',
-            description: err?.message || 'Could not upload the media. Please try again.',
+            description: (err as Error)?.message || 'Could not upload the media. Please try again.',
           });
           return;
         }
@@ -140,7 +148,18 @@ export default function GroupDetail() {
     setJoining(true);
     try {
       if (isMember) await leaveGroup.mutateAsync(group.id);
+      else if (isPrivate) await requestJoinGroup.mutateAsync(group.id);
       else await joinGroup.mutateAsync(group.id);
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  const handleCancelRequest = async () => {
+    if (!group || !joinRequest) return;
+    setJoining(true);
+    try {
+      await cancelJoinRequest.mutateAsync(joinRequest.id);
     } finally {
       setJoining(false);
     }
@@ -249,10 +268,27 @@ export default function GroupDetail() {
                 </Button>
               )}
 
+              {isModerator && (
+                <Button
+                  variant="outline"
+                  onClick={() => setRequestsOpen(true)}
+                  className="rounded-xl font-bold"
+                  disabled={requestsLoading}
+                >
+                  <Clock className="h-4 w-4 mr-2" />
+                  Requests
+                  {pendingRequests > 0 && (
+                    <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-black text-primary-foreground">
+                      {pendingRequests}
+                    </span>
+                  )}
+                </Button>
+              )}
+
               {user && (
                 <Button
                   onClick={handleJoin}
-                  disabled={joining || isOwner}
+                  disabled={joining || isOwner || requestPending}
                   className="rounded-xl font-bold"
                 >
                   {joining ? (
@@ -264,10 +300,15 @@ export default function GroupDetail() {
                     </>
                   ) : isMember ? (
                     'Joined'
+                  ) : requestPending ? (
+                    <>
+                      <Clock className="h-4 w-4 mr-2" />
+                      Request sent
+                    </>
                   ) : (
                     <>
                       <UserPlus className="h-4 w-4 mr-2" />
-                      Join Group
+                      {isPrivate ? 'Request to Join' : 'Join Group'}
                     </>
                   )}
                 </Button>
@@ -406,17 +447,55 @@ export default function GroupDetail() {
             </div>
           ) : isPrivate && user ? (
             <div className="mt-5 text-center py-12 bg-card border border-border/60 rounded-2xl">
-              <div className="w-16 h-16 rounded-full bg-muted mx-auto mb-4 flex items-center justify-center">
-                <Lock className="h-8 w-8 text-muted-foreground" />
+              <div
+                className={cn(
+                  'w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center',
+                  requestPending ? 'bg-primary/10' : 'bg-muted'
+                )}
+              >
+                {requestPending ? (
+                  <Clock className="h-8 w-8 text-primary" />
+                ) : (
+                  <Lock className="h-8 w-8 text-muted-foreground" />
+                )}
               </div>
-              <h3 className="font-bold text-lg mb-1">This is a private group</h3>
-              <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                Join this group to see and post in its community.
+              <h3 className="font-bold text-lg mb-1">
+                {requestPending ? 'Request sent' : requestDeclined ? 'Request declined' : 'This is a private group'}
+              </h3>
+              <p className="text-sm text-muted-foreground max-w-sm mx-auto leading-relaxed">
+                {requestPending
+                  ? 'An admin or moderator will review your request and let you in.'
+                  : requestDeclined
+                    ? 'The group owners declined your request to join.'
+                    : 'This group is visible to everyone, but you need an admin or moderator to approve your request before joining.'}
               </p>
-              <Button onClick={handleJoin} disabled={joining} className="mt-5 rounded-xl font-bold">
-                {joining ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserPlus className="h-4 w-4 mr-2" />}
-                Join Group
-              </Button>
+              <div className="mt-5 flex items-center justify-center gap-2">
+                {requestPending ? (
+                  <Button
+                    variant="outline"
+                    onClick={handleCancelRequest}
+                    disabled={joining}
+                    className="rounded-xl font-bold"
+                  >
+                    {joining ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <X className="h-4 w-4 mr-2" />}
+                    Cancel request
+                  </Button>
+                ) : requestDeclined ? (
+                  <Button
+                    onClick={handleJoin}
+                    disabled={joining}
+                    className="rounded-xl font-bold"
+                  >
+                    {joining ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserPlus className="h-4 w-4 mr-2" />}
+                    Request again
+                  </Button>
+                ) : (
+                  <Button onClick={handleJoin} disabled={joining} className="rounded-xl font-bold">
+                    {joining ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserPlus className="h-4 w-4 mr-2" />}
+                    Request to Join
+                  </Button>
+                )}
+              </div>
             </div>
           ) : null}
 
@@ -474,6 +553,12 @@ export default function GroupDetail() {
         groupName={group.name || 'this group'}
         canManage={isAdmin}
         viewerRole={membership?.role || null}
+      />
+      <GroupRequestsSheet
+        open={requestsOpen}
+        onOpenChange={setRequestsOpen}
+        groupId={group.id}
+        groupName={group.name || 'this group'}
       />
       <GroupSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} group={group} />
       {lightboxOpen && mediaPreview?.type === 'image' && (

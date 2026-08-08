@@ -5,6 +5,7 @@ import PostCard from './PostCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Loader2, Sparkles } from 'lucide-react';
+import { useMutedUsers } from '@/hooks/useSafety';
 import { cn } from '@/lib/utils';
 
 interface PostProfile {
@@ -27,13 +28,22 @@ interface Post {
   visibility: 'public' | 'followers' | 'private';
   star_count: number;
   comment_count: number;
+  repost_count: number;
   is_pinned: boolean;
   created_at: string;
   updated_at: string;
+  is_edited: boolean;
   user_id: string;
   profiles: PostProfile;
   post_media: PostMedia[];
   user_has_starred?: boolean;
+}
+
+interface FeedItem {
+  type: 'post' | 'repost';
+  post: Post;
+  reposter?: PostProfile | null;
+  date: string;
 }
 
 type FeedType = 'all' | 'following';
@@ -44,9 +54,36 @@ interface FeedProps {
   onRefreshComplete?: () => void;
 }
 
+const POST_SELECT = `
+  id,
+  content,
+  visibility,
+  star_count,
+  comment_count,
+  repost_count,
+  is_pinned,
+  created_at,
+  updated_at,
+  is_edited,
+  user_id,
+  profiles!inner (
+    username,
+    display_name,
+    avatar_url,
+    is_verified
+  ),
+  post_media (
+    id,
+    url,
+    type,
+    alt_text
+  )
+`;
+
 export default function Feed({ userId, refreshTrigger, onRefreshComplete }: FeedProps) {
   const { user } = useAuth();
-  const [posts, setPosts] = useState<Post[]>([]);
+  const { data: mutedIds = [] } = useMutedUsers();
+  const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -55,6 +92,22 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
   
   const PAGE_SIZE = 10;
   const showFeedTabs = !userId && user;
+
+  const attachStars = useCallback(async (posts: Post[]): Promise<Post[]> => {
+    if (!user || posts.length === 0) return posts;
+    const postIds = posts.map(p => p.id);
+    const { data: stars } = await supabase
+      .from('stars')
+      .select('post_id')
+      .eq('user_id', user.id)
+      .in('post_id', postIds);
+
+    const starredPostIds = new Set(stars?.map(s => s.post_id) || []);
+    return posts.map(post => ({
+      ...post,
+      user_has_starred: starredPostIds.has(post.id),
+    }));
+  }, [user]);
 
   const fetchPosts = useCallback(async (loadMore = false) => {
     if (loadMore) {
@@ -65,92 +118,139 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
     setError(null);
 
     try {
-      let query = supabase
-        .from('posts')
-        .select(`
-          id,
-          content,
-          visibility,
-          star_count,
-          comment_count,
-          is_pinned,
-          created_at,
-          updated_at,
-          user_id,
-          profiles!inner (
-            username,
-            display_name,
-            avatar_url,
-            is_verified
-          ),
-          post_media (
-            id,
-            url,
-            type,
-            alt_text
-          )
-        `)
-        .order('created_at', { ascending: false })
-        .limit(PAGE_SIZE);
+      let cursor: string | null = null;
+      if (loadMore && items.length > 0) {
+        cursor = items[items.length - 1].date;
+      }
 
-      if (userId) {
-        query = query.eq('user_id', userId);
-      } else if (feedType === 'following' && user) {
+      // Resolve followed user ids once for the following feed
+      let followedIds: string[] = [];
+      if (!userId && feedType === 'following' && user) {
         const { data: followedUsers } = await supabase
           .from('follows')
           .select('following_id')
           .eq('follower_id', user.id)
           .eq('status', 'accepted');
 
-        const followedIds = followedUsers?.map(f => f.following_id) || [];
-        
+        followedIds = followedUsers?.map(f => f.following_id) || [];
+
         if (followedIds.length === 0) {
-          setPosts([]);
+          setItems([]);
           setHasMore(false);
           setLoading(false);
           setLoadingMore(false);
           onRefreshComplete?.();
           return;
         }
-        
-        query = query.in('user_id', followedIds);
       }
 
-      if (loadMore && posts.length > 0) {
-        query = query.lt('created_at', posts[posts.length - 1].created_at);
+      const postsQuery = supabase
+        .from('posts')
+        .select(POST_SELECT)
+        .order('created_at', { ascending: false })
+        .limit(PAGE_SIZE);
+
+      if (userId) {
+        postsQuery.eq('user_id', userId);
+      } else if (feedType === 'following') {
+        postsQuery.in('user_id', followedIds);
       }
 
-      const { data, error: fetchError } = await query;
+      if (cursor) {
+        postsQuery.lt('created_at', cursor);
+      }
 
+      const { data, error: fetchError } = await postsQuery;
       if (fetchError) throw fetchError;
 
-      const transformedPosts = (data || []).map(post => ({
-        ...post,
-        profiles: Array.isArray(post.profiles) ? post.profiles[0] : post.profiles,
-        post_media: post.post_media || [],
-      })) as Post[];
+      let nextItems: FeedItem[] = (data || []).map(post => ({
+        type: 'post' as const,
+        post: {
+          ...post,
+          profiles: Array.isArray(post.profiles) ? post.profiles[0] : post.profiles,
+          post_media: post.post_media || [],
+        },
+        date: post.created_at,
+      }));
 
-      if (user && transformedPosts.length > 0) {
-        const postIds = transformedPosts.map(p => p.id);
-        const { data: stars } = await supabase
-          .from('stars')
-          .select('post_id')
-          .eq('user_id', user.id)
-          .in('post_id', postIds);
+      // In following mode, also surface reposts made by followed users
+      if (feedType === 'following' && !userId) {
+        let repostsQuery = supabase
+          .from('reposts')
+          .select('post_id, user_id, created_at')
+          .in('user_id', followedIds)
+          .order('created_at', { ascending: false })
+          .limit(PAGE_SIZE);
 
-        const starredPostIds = new Set(stars?.map(s => s.post_id) || []);
-        transformedPosts.forEach(post => {
-          post.user_has_starred = starredPostIds.has(post.id);
-        });
+        if (cursor) {
+          repostsQuery = repostsQuery.lt('created_at', cursor);
+        }
+
+        const { data: reposts } = await repostsQuery;
+
+        if (reposts && reposts.length > 0) {
+          const repostIds = reposts.map(r => r.post_id);
+          const reposterIds = [...new Set(reposts.map(r => r.user_id))];
+
+          const [{ data: repostedPosts }, { data: reposterProfiles }] = await Promise.all([
+            supabase.from('posts').select(POST_SELECT).in('id', repostIds),
+            supabase
+              .from('profiles')
+              .select('user_id, username, display_name, avatar_url, is_verified')
+              .in('user_id', reposterIds),
+          ]);
+
+          const postMap = new Map((repostedPosts || []).map(p => [p.id, p]));
+          const profileMap = new Map((reposterProfiles || []).map(p => [p.user_id, p]));
+
+          const repostItems: FeedItem[] = reposts
+            .filter(r => postMap.has(r.post_id))
+            .map(r => ({
+              type: 'repost' as const,
+              post: {
+                ...(postMap.get(r.post_id) as Post),
+                profiles: Array.isArray(postMap.get(r.post_id)?.profiles)
+                  ? postMap.get(r.post_id)!.profiles[0]
+                  : postMap.get(r.post_id)!.profiles,
+              },
+              reposter: (profileMap.get(r.user_id) || {
+                username: '',
+                display_name: 'Someone',
+                avatar_url: null,
+                is_verified: false,
+              }) as PostProfile,
+              date: r.created_at,
+            }));
+
+          nextItems = [...nextItems, ...repostItems];
+        }
       }
+
+      // Hide content from muted users
+      if (mutedIds.length > 0) {
+        nextItems = nextItems.filter(item => !mutedIds.includes(item.post.user_id));
+      }
+
+      // Merge, sort newest-first, and slice to a full page
+      nextItems = nextItems
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, PAGE_SIZE);
+
+      const postsToAnnotate = [...new Map(nextItems.map(i => [i.post.id, i.post])).values()];
+      const annotated = await attachStars(postsToAnnotate);
+      const annotatedMap = new Map(annotated.map(p => [p.id, p]));
+      nextItems = nextItems.map(item => ({
+        ...item,
+        post: annotatedMap.get(item.post.id) || item.post,
+      }));
 
       if (loadMore) {
-        setPosts(prev => [...prev, ...transformedPosts]);
+        setItems(prev => [...prev, ...nextItems]);
       } else {
-        setPosts(transformedPosts);
+        setItems(nextItems);
       }
 
-      setHasMore(transformedPosts.length === PAGE_SIZE);
+      setHasMore(nextItems.length === PAGE_SIZE);
     } catch (err: unknown) {
       console.error('Feed fetch error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load posts');
@@ -159,7 +259,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
       setLoadingMore(false);
       onRefreshComplete?.();
     }
-  }, [userId, user, feedType, posts.length, onRefreshComplete]);
+  }, [userId, user, feedType, items.length, onRefreshComplete, mutedIds, attachStars]);
 
   useEffect(() => {
     fetchPosts();
@@ -178,13 +278,17 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
         { event: 'UPDATE', schema: 'public', table: 'posts' },
         (payload) => {
           const updated = payload.new as Post;
-          setPosts(prev => prev.map(p => (p.id === updated.id ? { ...p, ...updated } : p)));
+          setItems(prev => prev.map(item =>
+            item.post.id === updated.id
+              ? { ...item, post: { ...item.post, ...updated } }
+              : item
+          ));
         }
       )
       .on(
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'posts' },
-        (payload) => setPosts(prev => prev.filter(p => p.id !== payload.old.id))
+        (payload) => setItems(prev => prev.filter(item => item.post.id !== payload.old.id))
       )
       .subscribe();
 
@@ -278,7 +382,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
       )}
 
       {/* Posts */}
-      {posts.length === 0 ? (
+      {items.length === 0 ? (
         <div className="text-center py-16 px-4">
           <div className="bg-card rounded-3xl border border-border/60 shadow-sm shadow-black/[0.03] p-8 max-w-sm mx-auto">
             <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
@@ -296,10 +400,11 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
         </div>
       ) : (
         <div className="space-y-4">
-          {posts.map((post, index) => (
-            <div key={post.id} className="animate-fade-in" style={{ animationDelay: `${Math.min(index * 40, 240)}ms` }}>
+          {items.map((item, index) => (
+            <div key={`${item.type}-${item.post.id}-${index}`} className="animate-fade-in" style={{ animationDelay: `${Math.min(index * 40, 240)}ms` }}>
               <PostCard
-                post={post}
+                post={item.post}
+                reposter={item.reposter}
                 onPostDeleted={handlePostDeleted}
                 onStarChange={handleStarChange}
               />
@@ -309,7 +414,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
       )}
 
       {/* Load More */}
-      {hasMore && posts.length > 0 && (
+      {hasMore && items.length > 0 && (
         <div className="text-center py-6">
           <Button
             variant="outline"

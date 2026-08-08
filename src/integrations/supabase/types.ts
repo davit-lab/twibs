@@ -1230,6 +1230,7 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          is_edited: boolean
           is_pinned: boolean | null
           star_count: number | null
           updated_at: string
@@ -1241,6 +1242,7 @@ export type Database = {
           content: string
           created_at?: string
           id?: string
+          is_edited?: boolean
           is_pinned?: boolean | null
           star_count?: number | null
           updated_at?: string
@@ -1252,6 +1254,7 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          is_edited?: boolean
           is_pinned?: boolean | null
           star_count?: number | null
           updated_at?: string

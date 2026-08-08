@@ -1,26 +1,26 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import GroupCard from '@/components/groups/GroupCard';
 import CreateGroupDialog from '@/components/groups/CreateGroupDialog';
-import { useGroups, useGroupActions } from '@/hooks/useGroups';
-import { Users, Search, X, Plus, Globe, Lock } from 'lucide-react';
+import { useGroups, useGroupActions, Group } from '@/hooks/useGroups';
+import { Users, Search, X, Plus, Globe, Lock, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type Tab = 'discover' | 'mine';
 type PrivacyFilter = 'all' | 'public' | 'private';
 
 const TABS: { value: Tab; label: string; icon: React.ElementType }[] = [
-  { value: 'discover', label: 'Discover', icon: Globe },
-  { value: 'mine', label: 'My Groups', icon: Lock },
+  { value: 'discover', label: 'Discover', icon: Sparkles },
+  { value: 'mine', label: 'My Groups', icon: Users },
 ];
 
-const PRIVACY_FILTERS: { value: PrivacyFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'public', label: 'Public' },
-  { value: 'private', label: 'Private' },
+const PRIVACY_FILTERS: { value: PrivacyFilter; label: string; icon: React.ElementType }[] = [
+  { value: 'all', label: 'All', icon: Globe },
+  { value: 'public', label: 'Public', icon: Globe },
+  { value: 'private', label: 'Private', icon: Lock },
 ];
 
 export default function Groups() {
@@ -28,10 +28,27 @@ export default function Groups() {
   const [search, setSearch] = useState('');
   const [privacy, setPrivacy] = useState<PrivacyFilter>('all');
   const [createOpen, setCreateOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const { groups, isLoading, error } = useGroups(search);
-  const { joinGroup, leaveGroup } = useGroupActions();
+  const { joinGroup, requestJoinGroup, leaveGroup } = useGroupActions();
 
   const [joiningId, setJoiningId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const el = document.activeElement;
+      if (e.key === '/' && el?.tagName !== 'INPUT' && el?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      if (e.key === 'Escape' && document.activeElement === searchInputRef.current) {
+        setSearch('');
+        searchInputRef.current?.blur();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const mine = useMemo(() => groups.filter((g) => !!g.membership), [groups]);
 
@@ -50,10 +67,19 @@ export default function Groups() {
     [groups]
   );
 
-  const handleJoin = async (groupId: string) => {
-    setJoiningId(groupId);
+  const pendingRequests = useMemo(() => {
+    const ids = new Set<string>();
+    groups.forEach((g) => {
+      if (g.join_request?.status === 'pending') ids.add(g.id);
+    });
+    return ids.size;
+  }, [groups]);
+
+  const handleJoin = async (group: Group) => {
+    setJoiningId(group.id);
     try {
-      await joinGroup.mutateAsync(groupId);
+      if (group.privacy === 'private') await requestJoinGroup.mutateAsync(group.id);
+      else await joinGroup.mutateAsync(group.id);
     } finally {
       setJoiningId(null);
     }
@@ -68,6 +94,8 @@ export default function Groups() {
     }
   };
 
+  const trimmed = search.trim();
+
   return (
     <MainLayout>
       <div className="min-h-screen bg-background pb-24">
@@ -76,29 +104,46 @@ export default function Groups() {
           <div className="max-w-5xl mx-auto px-4 py-10 md:py-14">
             <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-primary mb-4">Communities</p>
             <div className="flex items-end justify-between gap-6 flex-wrap">
-              <h1 className="text-5xl md:text-6xl font-black tracking-tight leading-none">Groups</h1>
-              <Button onClick={() => setCreateOpen(true)} className="h-11 px-5 rounded-xl font-bold">
+              <div>
+                <h1 className="text-5xl md:text-6xl font-black tracking-tight leading-none">Groups</h1>
+                <p className="text-muted-foreground text-sm font-medium mt-3 max-w-md leading-relaxed">
+                  Find your people. Join public communities or request access to private ones.
+                </p>
+              </div>
+              <Button onClick={() => setCreateOpen(true)} className="h-11 px-5 rounded-xl font-bold shadow-lg shadow-primary/20">
                 <Plus className="h-4 w-4 mr-2" />
                 Create Group
               </Button>
             </div>
 
-            <div className="relative mt-8">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input
-                placeholder="Search groups..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-12 pr-12 h-12 text-base bg-card border border-border/60 focus:border-primary/50 rounded-xl font-medium"
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch('')}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              )}
+            {/* Redesigned search bar */}
+            <div className="relative mt-8 group/search">
+              <div className="absolute -inset-1 bg-gradient-to-r from-primary/30 via-accent/20 to-primary/10 rounded-2xl blur-md opacity-0 group-focus-within/search:opacity-100 transition-opacity duration-300" />
+              <div className="relative flex items-center bg-card border border-border/70 focus-within:border-primary/50 rounded-2xl shadow-sm focus-within:shadow-lg focus-within:shadow-primary/10 transition-all duration-300 overflow-hidden">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                  ref={searchInputRef}
+                  placeholder="Search groups..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-12 pr-20 h-14 text-base bg-transparent border-0 shadow-none focus-visible:ring-0 rounded-2xl font-medium"
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                  {search ? (
+                    <button
+                      onClick={() => setSearch('')}
+                      className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-surface-2 transition-colors"
+                      aria-label="Clear search"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  ) : (
+                    <kbd className="hidden sm:inline-flex items-center h-6 px-2 rounded-md bg-surface-2 text-[10px] font-bold text-muted-foreground border border-border/60">
+                      /
+                    </kbd>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Stats strip */}
@@ -119,57 +164,101 @@ export default function Groups() {
           </div>
         </div>
 
-        {/* Underline tabs */}
-        <div className="max-w-5xl mx-auto px-4 pt-5">
-          <div className="flex items-center gap-6 overflow-x-auto scrollbar-hide border-b border-border">
-            {TABS.map(({ value, label, icon: Icon }) => {
-              const active = tab === value;
-              const count = value === 'mine' ? mine.length : groups.length;
-              return (
-                <button
-                  key={value}
-                  onClick={() => setTab(value)}
-                  className={cn(
-                    'relative flex items-center gap-2 pb-3 text-sm font-bold whitespace-nowrap transition-colors',
-                    active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  <Icon className={cn('h-4 w-4', active && 'text-primary')} />
-                  {label}
-                  <span className="text-xs font-bold text-muted-foreground/70">{count}</span>
-                  {active && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />}
-                </button>
-              );
-            })}
+        {/* Segmented tabs */}
+        <div className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b border-border">
+          <div className="max-w-5xl mx-auto px-4">
+            <div className="flex items-center gap-2 py-3 overflow-x-auto scrollbar-hide">
+              {TABS.map(({ value, label, icon: Icon }) => {
+                const active = tab === value;
+                const count = value === 'mine' ? mine.length : groups.length;
+                return (
+                  <button
+                    key={value}
+                    onClick={() => setTab(value)}
+                    className={cn(
+                      'flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-bold whitespace-nowrap transition-all duration-200',
+                      active
+                        ? 'bg-foreground text-background shadow-sm'
+                        : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {label}
+                    <span
+                      className={cn(
+                        'rounded-full px-1.5 py-0.5 text-[10px] font-black tabular-nums',
+                        active ? 'bg-background/20 text-background' : 'bg-surface-2 text-muted-foreground'
+                      )}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
 
-            {/* Privacy chips */}
-            <div className="flex items-center gap-1.5 ml-auto pb-2 overflow-x-auto scrollbar-hide">
-              {PRIVACY_FILTERS.map((f) => (
-                <button
-                  key={f.value}
-                  onClick={() => setPrivacy(f.value)}
-                  className={cn(
-                    'px-3 py-1.5 rounded-full text-xs font-bold border transition-colors whitespace-nowrap',
-                    privacy === f.value
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-card text-muted-foreground border-border/60 hover:text-foreground hover:border-border'
-                  )}
-                >
-                  {f.label}
-                  <span className="ml-1 opacity-60">{counts[f.value]}</span>
-                </button>
-              ))}
+              <div className="ml-auto flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+                {PRIVACY_FILTERS.map(({ value, label, icon: Icon }) => {
+                  const active = privacy === value;
+                  return (
+                    <button
+                      key={value}
+                      onClick={() => setPrivacy(value)}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-bold whitespace-nowrap transition-all duration-200',
+                        active
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
+                      )}
+                    >
+                      {value !== 'all' && <Icon className="h-3.5 w-3.5" />}
+                      {label}
+                      <span className={cn('tabular-nums', active ? 'text-primary-foreground/70' : 'text-muted-foreground/60')}>
+                        {counts[value]}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
 
         {/* Content */}
-        <div className="max-w-5xl mx-auto px-4 space-y-5 pt-6">
+        <div className="max-w-5xl mx-auto px-4 pt-6">
           {/* Search meta */}
-          {search.trim() && !isLoading && (
-            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-              {visible.length} result{visible.length === 1 ? '' : 's'} for “{search.trim()}”
-            </p>
+          {trimmed && !isLoading && (
+            <div className="flex items-center justify-between gap-4 mb-5">
+              <p className="text-sm font-semibold text-muted-foreground min-w-0 truncate">
+                Results for <span className="font-black text-foreground">“{trimmed}”</span>
+                <span className="ml-2 text-xs text-muted-foreground whitespace-nowrap">
+                  · {visible.length} group{visible.length === 1 ? '' : 's'}
+                </span>
+              </p>
+              <button onClick={() => setSearch('')} className="text-xs font-bold text-primary hover:underline flex-shrink-0">
+                Clear
+              </button>
+            </div>
+          )}
+
+          {/* Pending requests banner */}
+          {!isLoading && pendingRequests > 0 && tab === 'discover' && privacy === 'all' && (
+            <div className="mb-5 flex items-center justify-between gap-4 rounded-2xl border border-primary/20 bg-primary/[0.06] px-4 py-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-60 animate-ping" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
+                </span>
+                <p className="text-sm font-semibold min-w-0 truncate">
+                  {pendingRequests} request{pendingRequests === 1 ? '' : 's'} awaiting approval
+                </p>
+              </div>
+              <button
+                onClick={() => setPrivacy('private')}
+                className="text-xs font-bold text-primary hover:underline flex-shrink-0"
+              >
+                View private
+              </button>
+            </div>
           )}
 
           {isLoading ? (
@@ -194,7 +283,7 @@ export default function Groups() {
           ) : visible.length === 0 ? (
             <div className="text-center py-16">
               <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground mb-3">
-                {search.trim()
+                {trimmed
                   ? 'No matches'
                   : privacy !== 'all'
                     ? `No ${privacy} groups`
@@ -203,8 +292,8 @@ export default function Groups() {
                       : 'Nothing here'}
               </p>
               <h3 className="font-black text-2xl tracking-tight mb-2">
-                {search.trim()
-                  ? `No groups found for “${search.trim()}”`
+                {trimmed
+                  ? `No groups found for “${trimmed}”`
                   : privacy !== 'all'
                     ? `No ${privacy} groups to show`
                     : tab === 'mine'
@@ -212,13 +301,13 @@ export default function Groups() {
                       : 'No groups found'}
               </h3>
               <p className="text-sm text-muted-foreground font-medium max-w-sm mx-auto">
-                {search.trim()
+                {trimmed
                   ? 'Try a different search term, or clear the privacy filter.'
                   : tab === 'mine'
                     ? 'Discover groups or create your own community.'
                     : 'Create your own group and start a community.'}
               </p>
-              {!search.trim() && (
+              {!trimmed && (
                 <Button
                   onClick={() => {
                     if (tab === 'mine' && privacy !== 'all') setPrivacy('all');
@@ -242,7 +331,7 @@ export default function Groups() {
                 <GroupCard
                   key={group.id}
                   group={group}
-                  onJoin={handleJoin}
+                  onJoin={() => handleJoin(group)}
                   onLeave={handleLeave}
                   isJoining={joiningId === group.id}
                 />

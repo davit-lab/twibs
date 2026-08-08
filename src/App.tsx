@@ -28,6 +28,8 @@ const TvChannels = lazy(() => import('./pages/TvChannels'));
 const Groups = lazy(() => import('./pages/Groups'));
 const GroupDetail = lazy(() => import('./pages/GroupDetail'));
 const NotFound = lazy(() => import('./pages/NotFound'));
+const PostShare = lazy(() => import('./pages/PostShare'));
+const Interests = lazy(() => import('./pages/Interests'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -104,10 +106,10 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 }
 
 function AdminRoute({ children }: { children: ReactNode }) {
-  const { user, loading, isAdmin } = useAuth();
+  const { user, loading, isAdmin, isModerator } = useAuth();
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to="/auth" replace />;
-  if (!isAdmin) return <Navigate to="/" replace />;
+  if (!isAdmin && !isModerator) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -134,6 +136,7 @@ const App = () => (
                   }
                 />
                 <Route path="/explore" element={<Explore />} />
+                <Route path="/interests" element={<Interests />} />
                 <Route
                   path="/messages"
                   element={
@@ -175,6 +178,7 @@ const App = () => (
                 <Route path="/groups" element={<Groups />} />
                 <Route path="/groups/:slug" element={<GroupDetail />} />
                 <Route path="/reels" element={<Reels />} />
+                <Route path="/post/:postId" element={<PostShare />} />
                 <Route
                   path="/onboarding/interests"
                   element={

@@ -24,9 +24,32 @@ export interface Group {
     avatar_url: string | null;
   };
   membership?: GroupMembership | null;
+  join_request?: GroupJoinRequest | null;
 }
 
 export type GroupRole = 'owner' | 'admin' | 'moderator' | 'member';
+
+export type GroupJoinRequestStatus = 'pending' | 'approved' | 'declined' | 'cancelled';
+
+export interface GroupJoinRequest {
+  id: string;
+  group_id: string;
+  user_id: string;
+  status: GroupJoinRequestStatus;
+  created_at: string;
+  handled_at: string | null;
+  handled_by: string | null;
+}
+
+export interface GroupJoinRequestWithProfile extends GroupJoinRequest {
+  profiles?: {
+    user_id: string;
+    username: string;
+    display_name: string;
+    avatar_url: string | null;
+    is_verified: boolean;
+  };
+}
 
 export interface GroupMembership {
   group_id: string;
@@ -140,19 +163,38 @@ export function useGroups(search?: string) {
     enabled: !!user,
   });
 
+  const joinRequestsQuery = useQuery({
+    queryKey: ['group-join-requests-mine', user?.id],
+    queryFn: async (): Promise<Record<string, GroupJoinRequest>> => {
+      if (!user) return {};
+      const { data, error } = await (supabase as any)
+        .from('group_join_requests')
+        .select('id, group_id, user_id, status, created_at, handled_at, handled_by')
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      const map: Record<string, GroupJoinRequest> = {};
+      (data || []).forEach((r: GroupJoinRequest) => { map[r.group_id] = r; });
+      return map;
+    },
+    enabled: !!user,
+  });
+
   const groups = useMemo(
     () => (groupsQuery.data || []).map((g) => ({
       ...g,
       membership: membershipQuery.data?.[g.id] || null,
+      join_request: joinRequestsQuery.data?.[g.id] || null,
     })),
-    [groupsQuery.data, membershipQuery.data]
+    [groupsQuery.data, membershipQuery.data, joinRequestsQuery.data]
   );
 
   return {
     groups,
     memberships: membershipQuery.data || {},
+    joinRequests: joinRequestsQuery.data || {},
     isLoading: groupsQuery.isLoading || (!!user && membershipQuery.isLoading),
-    error: groupsQuery.error || membershipQuery.error,
+    error: groupsQuery.error || membershipQuery.error || joinRequestsQuery.error,
     refetch: groupsQuery.refetch,
   };
 }
@@ -202,12 +244,63 @@ export function useGroup(slug: string) {
     enabled: !!groupId && !!user,
   });
 
+  const joinRequestQuery = useQuery({
+    queryKey: ['group-join-request', groupId, user?.id],
+    queryFn: async (): Promise<GroupJoinRequest | null> => {
+      if (!groupId || !user) return null;
+      const { data, error } = await (supabase as any)
+        .from('group_join_requests')
+        .select('id, group_id, user_id, status, created_at, handled_at, handled_by')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      return (data as GroupJoinRequest) || null;
+    },
+    enabled: !!groupId && !!user,
+  });
+
   return {
     group: groupQuery.data || null,
     membership: membershipQuery.data || null,
+    joinRequest: joinRequestQuery.data || null,
     isLoading: groupQuery.isLoading || (!!groupId && !!user && membershipQuery.isLoading),
-    error: groupQuery.error || membershipQuery.error,
+    error: groupQuery.error || membershipQuery.error || joinRequestQuery.error,
   };
+}
+
+export function useGroupJoinRequests(groupId: string) {
+  return useQuery({
+    queryKey: ['group-join-requests', groupId],
+    queryFn: async (): Promise<GroupJoinRequestWithProfile[]> => {
+      const { data, error } = await (supabase as any)
+        .from('group_join_requests')
+        .select(`
+          id,
+          group_id,
+          user_id,
+          status,
+          created_at,
+          handled_at,
+          handled_by,
+          profiles!group_join_requests_user_id_fkey (
+            user_id,
+            username,
+            display_name,
+            avatar_url,
+            is_verified
+          )
+        `)
+        .eq('group_id', groupId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      return (data || []) as GroupJoinRequestWithProfile[];
+    },
+    enabled: !!groupId,
+  });
 }
 
 export function useGroupPosts(groupId: string, limit = 10) {
@@ -317,6 +410,7 @@ export function useGroupActions() {
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['groups'] });
     queryClient.invalidateQueries({ queryKey: ['group-memberships'] });
+    queryClient.invalidateQueries({ queryKey: ['group-join-requests'] });
     queryClient.invalidateQueries({ queryKey: ['group'] });
     queryClient.invalidateQueries({ queryKey: ['group-posts'] });
   };
@@ -377,6 +471,91 @@ export function useGroupActions() {
       toast({
         variant: 'destructive',
         title: 'Failed to join',
+        description: error.message,
+      });
+    },
+  });
+
+  const requestJoinGroup = useMutation({
+    mutationFn: async (groupId: string): Promise<'joined' | 'requested'> => {
+      if (!user) throw new Error('Not authenticated');
+      const { data, error } = await (supabase as any)
+        .rpc('request_to_join_group', { target_group_id: groupId });
+      if (error) throw error;
+      return data as 'joined' | 'requested';
+    },
+    onSuccess: (result) => {
+      invalidateAll();
+      toast(
+        result === 'joined'
+          ? { title: 'Joined!', description: 'You joined the group.' }
+          : { title: 'Request sent', description: 'An admin or moderator will review your request.' }
+      );
+    },
+    onError: (error: any) => {
+      toast({
+        variant: 'destructive',
+        title: 'Request failed',
+        description: error.message,
+      });
+    },
+  });
+
+  const approveJoinRequest = useMutation({
+    mutationFn: async (requestId: string) => {
+      if (!user) throw new Error('Not authenticated');
+      const { error } = await (supabase as any)
+        .rpc('approve_group_join_request', { request_id: requestId });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidateAll();
+      toast({ title: 'Request approved', description: 'The member has been added to the group.' });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to approve',
+        description: error.message,
+      });
+    },
+  });
+
+  const declineJoinRequest = useMutation({
+    mutationFn: async (requestId: string) => {
+      if (!user) throw new Error('Not authenticated');
+      const { error } = await (supabase as any)
+        .rpc('decline_group_join_request', { request_id: requestId });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidateAll();
+      toast({ title: 'Request declined', description: 'The request has been declined.' });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to decline',
+        description: error.message,
+      });
+    },
+  });
+
+  const cancelJoinRequest = useMutation({
+    mutationFn: async (requestId: string) => {
+      if (!user) throw new Error('Not authenticated');
+      const { error } = await (supabase as any)
+        .rpc('cancel_group_join_request', { request_id: requestId });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidateAll();
+      toast({ title: 'Request cancelled' });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to cancel request',
         description: error.message,
       });
     },
@@ -669,6 +848,10 @@ export function useGroupActions() {
     createGroup,
     joinGroup,
     leaveGroup,
+    requestJoinGroup,
+    approveJoinRequest,
+    declineJoinRequest,
+    cancelJoinRequest,
     deleteGroup,
     updateGroup,
     setMemberRole,

@@ -1,11 +1,10 @@
 project_id = "mroudkddozvlpcxedank"
 
-# [auth]
 # Require email confirmation on signup (prevents anonymous/unconfirmed
-# accounts from being created). This must be pushed to the linked
-# project (`supabase link` + `supabase db push` / dashboard > Auth)
-# to take effect on the live database.
-mailer_autoconfirm = false
+# accounts from being created). This must be set in the linked project's
+# Auth settings (dashboard > Authentication > Providers > Email, or
+# `supabase link` + `supabase config push`) to take effect on the live
+# database.
 
 [functions.create-checkout]
 verify_jwt = false

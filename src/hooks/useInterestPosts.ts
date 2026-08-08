@@ -49,15 +49,16 @@ export interface InterestPostComment {
 interface UseInterestPostsOptions {
   userId?: string;
   categoryId?: string;
+  categoryIds?: string[];
   limit?: number;
 }
 
 export function useInterestPosts(options: UseInterestPostsOptions = {}) {
-  const { userId, categoryId, limit = 10 } = options;
+  const { userId, categoryId, categoryIds, limit = 10 } = options;
   const { user } = useAuth();
 
   return useInfiniteQuery({
-    queryKey: ['interest-posts', userId, categoryId],
+    queryKey: ['interest-posts', userId, categoryId, categoryIds?.slice().sort()],
     queryFn: async ({ pageParam }): Promise<{ posts: InterestPost[]; nextCursor: string | null }> => {
       let query = (supabase as any)
         .from('interest_posts')
@@ -86,6 +87,14 @@ export function useInterestPosts(options: UseInterestPostsOptions = {}) {
 
       if (categoryId) {
         query = query.eq('category_id', categoryId);
+      }
+
+      if (!categoryId && categoryIds && categoryIds.length > 0) {
+        query = query.in('category_id', categoryIds);
+      }
+
+      if (!categoryId && (!categoryIds || categoryIds.length === 0)) {
+        return { posts: [], nextCursor: null };
       }
 
       // Cursor-based pagination using created_at
@@ -169,12 +178,16 @@ export function useInterestPostActions() {
       });
     },
     onError: (error: any) => {
+      const message = error?.message || 'Something went wrong. Please try again.';
       toast({
         variant: 'destructive',
         title: 'Failed to post',
-        description: error.message?.includes('has_premium_access') 
-          ? 'Premium subscription required to post to interests'
-          : error.message,
+        description:
+          message.includes('has_premium_access')
+            ? 'Premium subscription required to post to interests'
+            : message.includes('row-level security')
+              ? 'Your account cannot post to interests right now. Please try again in a moment.'
+              : message,
       });
     },
   });

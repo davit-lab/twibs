@@ -103,6 +103,7 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
   const toggleScreenShareRef = useRef<() => Promise<boolean>>(async () => false);
   const isCleaningUpRef = useRef(false);
   const mountedRef = useRef(true);
+  const remoteAnswerAppliedRef = useRef(false);
 
   const cleanup = useCallback(() => {
     if (isCleaningUpRef.current) return;
@@ -133,6 +134,7 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
       addedIceCandidatesRef.current = new Set();
       activeSessionRef.current = null;
       screenSharingRef.current = false;
+      remoteAnswerAppliedRef.current = false;
 
       if (mountedRef.current) {
         setCallState(initialCallState);
@@ -325,16 +327,19 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
           const pc = peerConnectionRef.current;
           if (!pc) return;
 
-          if (isCaller && updated.sdp_answer && !pc.remoteDescription) {
-            try {
-              const answer = JSON.parse(updated.sdp_answer);
-              await pc.setRemoteDescription(new RTCSessionDescription(answer));
-              await processPendingIceCandidates();
-              await syncRemoteCandidates(sessionId, true);
-            } catch (error) {
-              console.error('[WebRTC] Failed to set remote answer:', error);
-              if (mountedRef.current) {
-                setCallState(prev => ({ ...prev, error: 'Failed to establish connection.' }));
+          if (isCaller && updated.sdp_answer && !remoteAnswerAppliedRef.current) {
+            if (pc.signalingState === 'have-local-offer') {
+              remoteAnswerAppliedRef.current = true;
+              try {
+                const answer = JSON.parse(updated.sdp_answer);
+                await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                await processPendingIceCandidates();
+                await syncRemoteCandidates(sessionId, true);
+              } catch (error) {
+                console.error('[WebRTC] Failed to set remote answer:', error);
+                if (mountedRef.current) {
+                  setCallState(prev => ({ ...prev, error: 'Failed to establish connection.' }));
+                }
               }
             }
           }

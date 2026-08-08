@@ -194,7 +194,6 @@ export function useExplore() {
       attachDistances(withCounts);
     }
     if (postsResult.data) setPosts(postsResult.data as unknown as ExplorePost[]);
-
     if (reelsResult.data) {
       const reelRows = (reelsResult.data as (Omit<ExploreReel, 'profiles'>)[]);
       const reelUserIds = [...new Set(reelRows.map(r => r.user_id))];
@@ -228,6 +227,20 @@ export function useExplore() {
   }, [fetchData, searchQuery]);
 
   const handleFollowChange = () => setRefreshKey(p => p + 1);
+
+  // Live-refresh the Explore feed when new content is published
+  useEffect(() => {
+    const channel = supabase
+      .channel('explore-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, () => setRefreshKey(p => p + 1))
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'posts' }, () => setRefreshKey(p => p + 1))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reels' }, () => setRefreshKey(p => p + 1))
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   return {
     users,

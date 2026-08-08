@@ -235,7 +235,7 @@ export default function GroupSettingsDialog({ open, onOpenChange, group }: Group
                 <SelectItem value="private">
                   <span className="flex items-center gap-2">
                     <Lock className="h-4 w-4" />
-                    Private — only members can see posts
+                    Private — visible to all · join needs approval
                   </span>
                 </SelectItem>
               </SelectContent>

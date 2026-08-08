@@ -236,7 +236,7 @@ export function useStories(options: UseStoriesOptions = {}) {
     }
   };
 
-  const uploadStory = async (file: File, caption?: string, music?: { name: string; url: string | null }) => {
+  const uploadStory = async (file: File, caption?: string, music?: { name: string; url: string | null }, duration?: number) => {
     if (!user) throw new Error('Not authenticated');
 
     const fileExt = file.name.split('.').pop();
@@ -262,7 +262,7 @@ export function useStories(options: UseStoriesOptions = {}) {
         media_url: urlData.publicUrl,
         media_type: mediaType,
         caption,
-        duration: mediaType === 'video' ? 15 : 5,
+        duration: mediaType === 'video' ? (duration ?? 15) : 5,
         music_url: music?.url ?? null,
         music_name: music?.name ?? null,
       })

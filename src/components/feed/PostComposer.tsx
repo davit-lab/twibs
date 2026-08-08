@@ -10,6 +10,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import CameraModal from '@/components/media/CameraModal';
+import type { MediaEditorResult } from '@/components/media/FilterEditor';
 import { useToast } from '@/hooks/use-toast';
 import EmojiPicker from '@/components/messaging/EmojiPicker';
 import GifPicker from '@/components/messaging/GifPicker';
@@ -28,6 +30,7 @@ import {
   Play,
   Plus,
   Clock,
+  Camera,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -38,7 +41,7 @@ interface MediaPreview {
   file: File | null;
   preview: string;
   type: 'image' | 'video';
-  source: 'upload' | 'gif';
+  source: 'upload' | 'gif' | 'camera';
 }
 
 interface PostComposerProps {
@@ -72,6 +75,7 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [justPosted, setJustPosted] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   const getInitials = (name: string) => {
     return name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
@@ -163,9 +167,31 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
     setMediaFiles((prev) => {
       const next = prev.filter((m) => m.id !== id);
       const removed = prev.find((m) => m.id === id);
-      if (removed?.source === 'upload') URL.revokeObjectURL(removed.preview);
+      if (removed?.source === 'upload' || removed?.source === 'camera') URL.revokeObjectURL(removed.preview);
       return next;
     });
+  };
+
+  const handleCameraDone = (_file: File, result: MediaEditorResult) => {
+    setCameraOpen(false);
+    if (mediaFiles.length >= MAX_MEDIA) {
+      toast({
+        variant: 'destructive',
+        title: 'Media limit reached',
+        description: `You can attach up to ${MAX_MEDIA} media items per post.`,
+      });
+      return;
+    }
+    setMediaFiles((prev) => [
+      ...prev,
+      {
+        id: `camera-${Date.now()}`,
+        file: result.file,
+        preview: URL.createObjectURL(result.file),
+        type: result.kind,
+        source: 'camera',
+      },
+    ]);
   };
 
   const handleGifSelect = (gifUrl: string) => {
@@ -296,7 +322,7 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
       localStorage.removeItem(DRAFT_KEY);
       setContent('');
       setMediaFiles((prev) => {
-        prev.forEach((m) => { if (m.source === 'upload') URL.revokeObjectURL(m.preview); });
+        prev.forEach((m) => { if (m.source === 'upload' || m.source === 'camera') URL.revokeObjectURL(m.preview); });
         return [];
       });
       setVisibility('public');
@@ -480,6 +506,15 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
                 >
                   <ImageIcon className="h-5 w-5" />
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setCameraOpen(true)}
+                  disabled={mediaFiles.length >= MAX_MEDIA || isSubmitting}
+                  title="Take photo or record video"
+                  className="p-2.5 rounded-full text-primary hover:bg-primary/10 transition-colors disabled:opacity-40"
+                >
+                  <Camera className="h-5 w-5" />
+                </button>
                 <div className="relative">
                   <button
                     type="button"
@@ -609,6 +644,15 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
           )}
         </div>
       </div>
+
+      <CameraModal
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        mode="post"
+        startMode="photo"
+        maxVideoDuration={30}
+        onDone={handleCameraDone}
+      />
     </div>
   );
 }

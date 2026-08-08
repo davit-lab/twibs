@@ -8,6 +8,8 @@ import StoriesBar from '@/components/stories/StoriesBar';
 import PullToRefresh from '@/components/feed/PullToRefresh';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import Landing from '@/components/landing/Landing';
+import WhoToFollow from '@/components/social/WhoToFollow';
+import TrendingList from '@/components/social/TrendingList';
 import { Loader2 } from 'lucide-react';
 
 export default function Index() {
@@ -67,17 +69,26 @@ export default function Index() {
           progress={progress}
           shouldRefresh={shouldRefresh}
         >
-          <div className="max-w-xl mx-auto pb-24 lg:pb-8">
-            <div className="border-b border-border">
-              <StoriesBar />
+          <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[minmax(0,600px)_1fr] gap-8 px-4 pb-24 lg:pb-8">
+            <div className="mx-auto w-full max-w-xl">
+              <div className="border-b border-border">
+                <StoriesBar />
+              </div>
+              <div className="p-4 border-b border-border">
+                <PostComposer onPostCreated={handlePostCreated} />
+              </div>
+              <Feed
+                refreshTrigger={refreshTrigger}
+                onRefreshComplete={() => setIsRefreshingFeed(false)}
+              />
             </div>
-            <div className="p-4 border-b border-border">
-              <PostComposer onPostCreated={handlePostCreated} />
-            </div>
-            <Feed
-              refreshTrigger={refreshTrigger}
-              onRefreshComplete={() => setIsRefreshingFeed(false)}
-            />
+
+            <aside className="hidden lg:block pt-2">
+              <div className="sticky top-20 space-y-5">
+                <WhoToFollow />
+                <TrendingList />
+              </div>
+            </aside>
           </div>
         </PullToRefresh>
       </MainLayout>

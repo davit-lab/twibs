@@ -3,9 +3,11 @@ import { useStories, GroupedStories } from '@/hooks/useStories';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import { Plus, Loader2, X, ChevronLeft, ChevronRight, Pause, Play, Volume2, VolumeX, Trash2, Music } from 'lucide-react';
+import CameraModal from '@/components/media/CameraModal';
+import type { MediaEditorResult } from '@/components/media/FilterEditor';
+import { Plus, Loader2, X, ChevronLeft, ChevronRight, Pause, Play, Volume2, VolumeX, Trash2, Music, Camera, Video, ImagePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -21,6 +23,9 @@ export default function StoriesBar() {
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
   const [musicMuted, setMusicMuted] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraMode, setCameraMode] = useState<'photo' | 'video'>('photo');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const touchStartX = useRef<number | null>(null);
@@ -59,6 +64,22 @@ export default function StoriesBar() {
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleCameraDone = async (file: File, result: MediaEditorResult) => {
+    setCameraOpen(false);
+    setUploading(true);
+    try {
+      await uploadStory(file, result.caption, result.music, result.duration);
+    } catch (error: unknown) {
+      toast({
+        variant: 'destructive',
+        title: 'Story upload failed',
+        description: error instanceof Error ? error.message : 'Failed to upload story.',
+      });
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -171,7 +192,7 @@ export default function StoriesBar() {
           <div className="flex gap-4 px-4">
             {user && (
               <button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => setOptionsOpen(true)}
                 className="flex flex-col items-center gap-2 min-w-[72px]"
                 disabled={uploading}
               >
@@ -225,6 +246,57 @@ export default function StoriesBar() {
         accept="image/*,video/*"
         onChange={handleFileSelect}
         className="hidden"
+      />
+
+      {/* ─── Create story options ─── */}
+      <Dialog open={optionsOpen} onOpenChange={setOptionsOpen}>
+        <DialogContent hideCloseButton className="max-w-[360px] p-0 border-none overflow-hidden rounded-[2rem] bg-transparent">
+          <DialogTitle className="sr-only">Add to your story</DialogTitle>
+          <div className="rounded-[2rem] bg-background overflow-hidden border border-border/50 shadow-2xl">
+            <div className="p-5 pb-3">
+              <p className="font-bold text-lg">Add to your story</p>
+              <p className="text-sm text-muted-foreground">Take a photo, record a video, or pick from your library.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 p-4 pt-1">
+              <button
+                onClick={() => { setOptionsOpen(false); setCameraMode('photo'); setCameraOpen(true); }}
+                className="flex flex-col items-center gap-2 py-4 rounded-2xl bg-muted/60 hover:bg-primary/10 hover:text-primary transition-colors"
+              >
+                <div className="h-11 w-11 rounded-full bg-primary/15 flex items-center justify-center">
+                  <Camera className="h-5 w-5 text-primary" />
+                </div>
+                <span className="text-xs font-semibold">Take Photo</span>
+              </button>
+              <button
+                onClick={() => { setOptionsOpen(false); setCameraMode('video'); setCameraOpen(true); }}
+                className="flex flex-col items-center gap-2 py-4 rounded-2xl bg-muted/60 hover:bg-primary/10 hover:text-primary transition-colors"
+              >
+                <div className="h-11 w-11 rounded-full bg-primary/15 flex items-center justify-center">
+                  <Video className="h-5 w-5 text-primary" />
+                </div>
+                <span className="text-xs font-semibold">Record Video</span>
+              </button>
+              <button
+                onClick={() => { setOptionsOpen(false); fileInputRef.current?.click(); }}
+                className="flex flex-col items-center gap-2 py-4 rounded-2xl bg-muted/60 hover:bg-primary/10 hover:text-primary transition-colors"
+              >
+                <div className="h-11 w-11 rounded-full bg-primary/15 flex items-center justify-center">
+                  <ImagePlus className="h-5 w-5 text-primary" />
+                </div>
+                <span className="text-xs font-semibold">Upload</span>
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <CameraModal
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        mode="story"
+        startMode={cameraMode}
+        maxVideoDuration={15}
+        onDone={handleCameraDone}
       />
 
       {/* ─── Story Theater ─── */}

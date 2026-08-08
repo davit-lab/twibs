@@ -18,6 +18,10 @@ export interface UserInterest {
   created_at: string;
 }
 
+export interface UserInterestWithCategory extends UserInterest {
+  interest_categories: InterestCategory;
+}
+
 export function useInterestCategories() {
   return useQuery({
     queryKey: ['interest-categories'],
@@ -40,7 +44,7 @@ export function useUserInterests(userId?: string) {
 
   return useQuery({
     queryKey: ['user-interests', targetUserId],
-    queryFn: async () => {
+    queryFn: async (): Promise<UserInterestWithCategory[]> => {
       if (!targetUserId) return [];
 
       const { data, error } = await (supabase as any)
@@ -59,7 +63,7 @@ export function useUserInterests(userId?: string) {
         .eq('user_id', targetUserId);
 
       if (error) throw error;
-      return data || [];
+      return (data || []) as UserInterestWithCategory[];
     },
     enabled: !!targetUserId,
   });

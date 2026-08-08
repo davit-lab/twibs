@@ -38,6 +38,10 @@ import {
   Clapperboard,
   Play,
   Eye,
+  Flag,
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -109,6 +113,41 @@ interface ReelData {
   };
 }
 
+interface ReportData {
+  id: string;
+  reporter_id: string;
+  target_type: string;
+  target_id: string;
+  reason: string;
+  details: string | null;
+  status: string;
+  created_at: string;
+  reporter?: {
+    display_name: string;
+    username: string;
+    avatar_url: string | null;
+  } | null;
+  target?: {
+    type: string;
+    preview?: string;
+    userId?: string;
+    userName?: string;
+  } | null;
+}
+
+interface VerificationRequestData {
+  id: string;
+  user_id: string;
+  message: string | null;
+  status: string;
+  created_at: string;
+  profile?: {
+    display_name: string;
+    username: string;
+    avatar_url: string | null;
+  } | null;
+}
+
 export default function Admin() {
   const { user: currentUser, isAdmin, isModerator, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -127,6 +166,10 @@ export default function Admin() {
   const [banDuration, setBanDuration] = useState<string>('7d');
   const [banLoading, setBanLoading] = useState(false);
   const [purgeLoading, setPurgeLoading] = useState(false);
+  const [reports, setReports] = useState<ReportData[]>([]);
+  const [verificationRequests, setVerificationRequests] = useState<VerificationRequestData[]>([]);
+  const [processingReportId, setProcessingReportId] = useState<string | null>(null);
+  const [processingVerificationId, setProcessingVerificationId] = useState<string | null>(null);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalPosts: 0,
@@ -285,6 +328,63 @@ export default function Admin() {
         verifiedUsers: profilesData?.filter(p => p.is_verified).length || 0,
         bannedUsers: bansData?.length || 0,
       });
+
+      // Fetch open reports
+      const { data: reportsData } = await supabase
+        .from('reports')
+        .select('*')
+        .in('status', ['open', 'reviewing'])
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (reportsData && reportsData.length > 0) {
+        const reporterIds = [...new Set(reportsData.map(r => r.reporter_id))];
+        const { data: reporterProfiles } = await supabase
+          .from('profiles')
+          .select('user_id, display_name, username, avatar_url')
+          .in('user_id', reporterIds);
+
+        const reporterMap = new Map((reporterProfiles || []).map(p => [p.user_id, p]));
+
+        const reportsWithInfo = await Promise.all(
+          reportsData.map(async (report) => {
+            const info: ReportData = {
+              ...report,
+              reporter: reporterMap.get(report.reporter_id) || null,
+              target: await resolveReportTarget(report.target_type, report.target_id),
+            };
+            return info;
+          })
+        );
+
+        setReports(reportsWithInfo);
+      } else {
+        setReports([]);
+      }
+
+      // Fetch pending verification requests
+      const { data: verifData } = await supabase
+        .from('verification_requests')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (verifData && verifData.length > 0) {
+        const verifUserIds = [...new Set(verifData.map(v => v.user_id))];
+        const { data: verifProfiles } = await supabase
+          .from('profiles')
+          .select('user_id, display_name, username, avatar_url')
+          .in('user_id', verifUserIds);
+
+        const verifProfileMap = new Map((verifProfiles || []).map(p => [p.user_id, p]));
+        setVerificationRequests(verifData.map(v => ({
+          ...v,
+          profile: verifProfileMap.get(v.user_id) || null,
+        })));
+      } else {
+        setVerificationRequests([]);
+      }
 
     } catch (error) {
       console.error('Error fetching admin data:', error);
@@ -644,6 +744,186 @@ export default function Admin() {
     }
   };
 
+  const resolveReportTarget = async (targetType: string, targetId: string) => {
+    try {
+      switch (targetType) {
+        case 'post': {
+          const { data: post } = await supabase
+            .from('posts')
+            .select('content, user_id')
+            .eq('id', targetId)
+            .maybeSingle();
+          if (!post) return null;
+          return { type: 'post', preview: post.content?.slice(0, 140), userId: post.user_id };
+        }
+        case 'interest_post': {
+          const { data: post } = await (supabase as any)
+            .from('interest_posts')
+            .select('content, user_id')
+            .eq('id', targetId)
+            .maybeSingle();
+          if (!post) return null;
+          return { type: 'interest_post', preview: post.content?.slice(0, 140), userId: post.user_id };
+        }
+        case 'profile': {
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('display_name, username, user_id')
+            .eq('user_id', targetId)
+            .maybeSingle();
+          if (!prof) return null;
+          return { type: 'profile', preview: `@${prof.username}`, userId: prof.user_id, userName: prof.display_name };
+        }
+        case 'reel': {
+          const { data: reel } = await supabase
+            .from('reels')
+            .select('caption, user_id')
+            .eq('id', targetId)
+            .maybeSingle();
+          if (!reel) return null;
+          return { type: 'reel', preview: reel.caption?.slice(0, 140), userId: reel.user_id };
+        }
+        case 'group': {
+          const { data: group } = await (supabase as any)
+            .from('groups')
+            .select('name')
+            .eq('id', targetId)
+            .maybeSingle();
+          if (!group) return null;
+          return { type: 'group', preview: group.name };
+        }
+        case 'comment': {
+          const { data: comment } = await (supabase as any)
+            .from('comments')
+            .select('content, user_id')
+            .eq('id', targetId)
+            .maybeSingle();
+          if (!comment) return null;
+          return { type: 'comment', preview: comment.content?.slice(0, 140), userId: comment.user_id };
+        }
+        default:
+          return null;
+      }
+    } catch {
+      return null;
+    }
+  };
+
+  const updateReportStatus = async (reportId: string, status: string) => {
+    setProcessingReportId(reportId);
+    try {
+      const { error } = await (supabase as any).rpc('update_report_status', {
+        report_id: reportId,
+        new_status: status,
+      });
+      if (error) throw error;
+
+      setReports(prev => prev.filter(r => r.id !== reportId));
+      toast({
+        title: 'Success',
+        description: `Report marked as ${status}.`,
+      });
+    } catch (error) {
+      console.error('Error updating report:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update report.',
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessingReportId(null);
+    }
+  };
+
+  const deleteReportedContent = async (report: ReportData) => {
+    setProcessingReportId(report.id);
+    try {
+      let error;
+      if (report.target_type === 'post') {
+        ({ error } = await supabase.from('posts').delete().eq('id', report.target_id));
+      } else if (report.target_type === 'interest_post') {
+        ({ error } = await (supabase as any).from('interest_posts').delete().eq('id', report.target_id));
+      } else if (report.target_type === 'reel') {
+        ({ error } = await supabase.from('reels').delete().eq('id', report.target_id));
+      } else if (report.target_type === 'comment') {
+        ({ error } = await (supabase as any).from('comments').delete().eq('id', report.target_id));
+      } else {
+        toast({
+          title: 'Cannot delete',
+          description: 'This content type cannot be removed here. Consider blocking the user instead.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (error) throw error;
+
+      await updateReportStatus(report.id, 'resolved');
+      toast({
+        title: 'Content removed',
+        description: 'Reported content has been deleted and the report resolved.',
+      });
+    } catch (error) {
+      console.error('Error deleting content:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete content.',
+        variant: 'destructive',
+      });
+      setProcessingReportId(null);
+    }
+  };
+
+  const blockReportedUser = async (report: ReportData) => {
+    const targetUserId = report.target?.userId;
+    if (!targetUserId) return;
+
+    setProcessingReportId(report.id);
+    try {
+      const { error } = await (supabase as any).rpc('block_user', { target_user_id: targetUserId });
+      if (error) throw error;
+
+      await updateReportStatus(report.id, 'resolved');
+      toast({
+        title: 'User blocked',
+        description: 'User blocked and report resolved.',
+      });
+    } catch (error) {
+      console.error('Error blocking user:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to block user.',
+        variant: 'destructive',
+      });
+      setProcessingReportId(null);
+    }
+  };
+
+  const handleVerification = async (requestId: string, approve: boolean) => {
+    setProcessingVerificationId(requestId);
+    try {
+      const { error } = await (supabase as any).rpc('handle_verification_request', {
+        request_id: requestId,
+        approve,
+      });
+      if (error) throw error;
+
+      setVerificationRequests(prev => prev.filter(v => v.id !== requestId));
+      toast({
+        title: 'Success',
+        description: approve ? 'Verification approved.' : 'Verification rejected.',
+      });
+    } catch (error) {
+      console.error('Error handling verification:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to process request.',
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessingVerificationId(null);
+    }
+  };
+
   const filteredUsers = users.filter(u =>
     u.display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     u.username.toLowerCase().includes(searchQuery.toLowerCase())
@@ -794,7 +1074,7 @@ export default function Admin() {
 
         {/* Tabs */}
         <Tabs defaultValue="users" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
             <TabsTrigger value="users" className="gap-2">
               <Users className="w-4 h-4" />
               Users
@@ -810,6 +1090,24 @@ export default function Admin() {
             <TabsTrigger value="books" className="gap-2">
               <BookOpen className="w-4 h-4" />
               Books
+            </TabsTrigger>
+            <TabsTrigger value="reports" className="gap-2">
+              <Flag className="w-4 h-4" />
+              Reports
+              {reports.length > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-xs font-bold">
+                  {reports.length}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="verification" className="gap-2">
+              <BadgeCheck className="w-4 h-4" />
+              Verify
+              {verificationRequests.length > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                  {verificationRequests.length}
+                </span>
+              )}
             </TabsTrigger>
           </TabsList>
 
@@ -1239,6 +1537,197 @@ export default function Admin() {
                     </TableBody>
                   </Table>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Reports Tab */}
+          <TabsContent value="reports">
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <CardTitle>Content Reports</CardTitle>
+                    <CardDescription>Review reports submitted by users</CardDescription>
+                  </div>
+                  {reports.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setReports([]);
+                        fetchData();
+                      }}
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Refresh
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {reports.length === 0 ? (
+                  <div className="text-center py-14">
+                    <div className="w-14 h-14 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-3">
+                      <CheckCircle2 className="w-7 h-7 text-success" />
+                    </div>
+                    <p className="font-bold text-lg mb-1">All caught up</p>
+                    <p className="text-sm text-muted-foreground">No open reports right now.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {reports.map((report) => (
+                      <div key={report.id} className="rounded-xl border border-border/60 p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-9 w-9">
+                              <AvatarImage src={report.reporter?.avatar_url || undefined} />
+                              <AvatarFallback className="text-xs">
+                                {getInitials(report.reporter?.display_name || 'U')}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="text-sm font-medium">
+                                Reported by {report.reporter?.display_name || 'Unknown'}{' '}
+                                <span className="text-muted-foreground">@{report.reporter?.username || 'unknown'}</span>
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {report.target_type} · {new Date(report.created_at).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                          <Badge variant={report.status === 'open' ? 'destructive' : 'secondary'}>
+                            {report.status}
+                          </Badge>
+                        </div>
+
+                        <div className="rounded-lg bg-muted/40 p-3 text-sm">
+                          <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold mb-1">
+                            Reason: <span className="normal-case font-medium text-foreground">{report.reason}</span>
+                          </p>
+                          {report.details && <p className="text-muted-foreground text-sm mt-1">{report.details}</p>}
+                          {report.target && (
+                            <p className="mt-2 text-foreground/80 border-t border-border/40 pt-2 line-clamp-3">
+                              <span className="font-semibold">{report.target.type}: </span>
+                              {report.target.preview || <span className="italic text-muted-foreground">(no preview)</span>}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => deleteReportedContent(report)}
+                            disabled={processingReportId === report.id || !report.target || ['profile', 'group'].includes(report.target_type)}
+                          >
+                            {processingReportId === report.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                            Delete content
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => blockReportedUser(report)}
+                            disabled={processingReportId === report.id || !report.target?.userId}
+                          >
+                            <Ban className="w-4 h-4 mr-1.5" />
+                            Block user
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => updateReportStatus(report.id, 'resolved')}
+                            disabled={processingReportId === report.id}
+                          >
+                            <CheckCircle2 className="w-4 h-4 mr-1.5 text-success" />
+                            Resolve
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => updateReportStatus(report.id, 'dismissed')}
+                            disabled={processingReportId === report.id}
+                          >
+                            <XCircle className="w-4 h-4 mr-1.5" />
+                            Dismiss
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Verification Requests Tab */}
+          <TabsContent value="verification">
+            <Card>
+              <CardHeader>
+                <CardTitle>Verification Requests</CardTitle>
+                <CardDescription>Approve or reject profile verification requests</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {verificationRequests.length === 0 ? (
+                  <div className="text-center py-14">
+                    <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+                      <BadgeCheck className="w-7 h-7 text-muted-foreground" />
+                    </div>
+                    <p className="font-bold text-lg mb-1">No pending requests</p>
+                    <p className="text-sm text-muted-foreground">Users can request verification from their profile.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {verificationRequests.map((request) => (
+                      <div key={request.id} className="rounded-xl border border-border/60 p-4 flex items-start justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src={request.profile?.avatar_url || undefined} />
+                            <AvatarFallback className="text-xs">
+                              {getInitials(request.profile?.display_name || 'U')}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <p className="font-medium flex items-center gap-1.5">
+                              {request.profile?.display_name || 'Unknown'}
+                              <BadgeCheck className="w-4 h-4 text-primary" />
+                            </p>
+                            <p className="text-sm text-muted-foreground">@{request.profile?.username || 'unknown'}</p>
+                            {request.message && (
+                              <p className="text-sm text-muted-foreground mt-1.5 rounded-lg bg-muted/40 p-2.5 line-clamp-3">
+                                {request.message}
+                              </p>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-1.5">
+                              Requested {new Date(request.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleVerification(request.id, true)}
+                            disabled={processingVerificationId === request.id}
+                            className="gap-1.5"
+                          >
+                            {processingVerificationId === request.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                            Approve
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleVerification(request.id, false)}
+                            disabled={processingVerificationId === request.id}
+                            className="gap-1.5"
+                          >
+                            <XCircle className="w-4 h-4" />
+                            Reject
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

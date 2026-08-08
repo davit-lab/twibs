@@ -17,6 +17,9 @@ import {
 } from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
 import CommentSection from '@/components/comments/CommentSection';
+import ReportDialog from '@/components/social/ReportDialog';
+import LikesDialog from '@/components/social/LikesDialog';
+import { useBlockedUsers, useMutedUsers, useSavedPosts, useRepostedPosts, useSafetyActions } from '@/hooks/useSafety';
 import { 
   Star, 
   MessageCircle, 
@@ -34,6 +37,11 @@ import {
   Check,
   X,
   Loader2,
+  Repeat,
+  Copy,
+  UserX,
+  VolumeX,
+  Volume2,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -58,9 +66,11 @@ interface PostData {
   visibility: 'public' | 'followers' | 'private';
   star_count: number;
   comment_count: number;
+  repost_count?: number;
   is_pinned: boolean;
   created_at: string;
   updated_at: string;
+  is_edited: boolean;
   user_id: string;
   profiles: PostProfile;
   post_media: PostMedia[];
@@ -71,6 +81,14 @@ interface PostCardProps {
   post: PostData;
   onPostDeleted?: () => void;
   onStarChange?: () => void;
+  reposter?: ReposterProfile | null;
+}
+
+interface ReposterProfile {
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  is_verified?: boolean;
 }
 
 const visibilityIcons = {
@@ -79,22 +97,34 @@ const visibilityIcons = {
   private: Lock,
 };
 
-export default function PostCard({ post, onPostDeleted, onStarChange }: PostCardProps) {
+export default function PostCard({ post, onPostDeleted, onStarChange, reposter }: PostCardProps) {
   const { user, profile: currentUserProfile } = useAuth();
   const { toast } = useToast();
   
   const [isStarred, setIsStarred] = useState(post.user_has_starred || false);
   const [starCount, setStarCount] = useState(post.star_count);
   const [commentCount, setCommentCount] = useState(post.comment_count);
+  const [repostCount, setRepostCount] = useState(post.repost_count || 0);
   const [isStarring, setIsStarring] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+
+  const { data: savedPostIds = [] } = useSavedPosts();
+  const { data: repostedPostIds = [] } = useRepostedPosts();
+  const { data: blockedIds = [] } = useBlockedUsers();
+  const { data: mutedIds = [] } = useMutedUsers();
+  const { blockUser, unblockUser, muteUser, unmuteUser, savePost, unsavePost, repostPost, unrepostPost } = useSafetyActions();
 
   const isOwnPost = currentUserProfile?.user_id === post.user_id;
-  const isEdited = !!post.updated_at && new Date(post.updated_at).getTime() !== new Date(post.created_at).getTime();
+  const isEdited = post.is_edited === true;
+  const isSaved = savedPostIds.includes(post.id);
+  const hasReposted = repostedPostIds.includes(post.id);
+  const isBlocked = blockedIds.includes(post.user_id);
+  const isMuted = mutedIds.includes(post.user_id);
 
   const getInitials = (name: string) => {
     return name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
@@ -190,6 +220,7 @@ export default function PostCard({ post, onPostDeleted, onStarChange }: PostCard
         .from('posts')
         .update({
           content: editContent.trim(),
+          is_edited: true,
           updated_at: new Date().toISOString(),
         })
         .eq('id', post.id)
@@ -236,6 +267,64 @@ export default function PostCard({ post, onPostDeleted, onStarChange }: PostCard
     }
   };
 
+  const handleCopyLink = async () => {
+    const postUrl = `${window.location.origin}/post/${post.id}`;
+    await navigator.clipboard.writeText(postUrl);
+    toast({
+      title: 'Link copied!',
+      description: 'Post link copied to clipboard.',
+    });
+  };
+
+  const handleSave = async () => {
+    if (!user) {
+      toast({
+        title: 'Sign in required',
+        description: 'Please sign in to save posts.',
+      });
+      return;
+    }
+    if (isSaved) {
+      await unsavePost(post.id);
+    } else {
+      await savePost(post.id);
+    }
+  };
+
+  const handleRepost = async () => {
+    if (!user) {
+      toast({
+        title: 'Sign in required',
+        description: 'Please sign in to repost.',
+      });
+      return;
+    }
+    if (hasReposted) {
+      const ok = await unrepostPost(post.id);
+      if (ok) setRepostCount(prev => Math.max(0, prev - 1));
+    } else {
+      const ok = await repostPost(post.id);
+      if (ok) setRepostCount(prev => prev + 1);
+    }
+  };
+
+  const handleMute = async () => {
+    if (isMuted) {
+      await unmuteUser(post.user_id);
+    } else {
+      await muteUser(post.user_id);
+    }
+  };
+
+  const handleBlock = async () => {
+    if (isBlocked) {
+      await unblockUser(post.user_id);
+    } else {
+      const ok = await blockUser(post.user_id);
+      if (ok) onStarChange?.();
+    }
+  };
+
   const VisibilityIcon = visibilityIcons[post.visibility];
 
   return (
@@ -243,6 +332,20 @@ export default function PostCard({ post, onPostDeleted, onStarChange }: PostCard
       "bg-card rounded-2xl border border-border/60 shadow-sm shadow-black/[0.03] overflow-hidden transition-all duration-200 hover:shadow-md hover:border-border/80",
       showComments && "ring-1 ring-primary/20 border-primary/20"
     )}>
+      {/* Repost banner */}
+      {reposter && (
+        <div className="flex items-center gap-1.5 px-4 pt-3.5 text-[13px] text-muted-foreground">
+          <Repeat className="h-4 w-4 flex-shrink-0" />
+          <Link
+            to={`/profile/${reposter.username}`}
+            className="font-semibold hover:text-foreground transition-colors truncate"
+          >
+            {reposter.display_name}
+          </Link>
+          <span>reposted</span>
+        </div>
+      )}
+
       {/* Post Header */}
       <div className="flex items-start gap-3 p-4 pb-3">
         <Link to={`/profile/${post.profiles.username}`} className="flex-shrink-0">
@@ -304,6 +407,13 @@ export default function PostCard({ post, onPostDeleted, onStarChange }: PostCard
                   <Pencil className="h-4 w-4" />
                   Edit post
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2 text-sm rounded-lg"
+                  onClick={handleCopyLink}
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy link
+                </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-border/30" />
                 <DropdownMenuItem
                   className="gap-2 text-destructive focus:text-destructive text-sm rounded-lg"
@@ -315,10 +425,37 @@ export default function PostCard({ post, onPostDeleted, onStarChange }: PostCard
                 </DropdownMenuItem>
               </>
             ) : (
-              <DropdownMenuItem className="gap-2 text-sm rounded-lg">
-                <Flag className="h-4 w-4" />
-                Report post
-              </DropdownMenuItem>
+              <>
+                <DropdownMenuItem
+                  className="gap-2 text-sm rounded-lg"
+                  onClick={() => setReportOpen(true)}
+                >
+                  <Flag className="h-4 w-4" />
+                  Report post
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2 text-sm rounded-lg"
+                  onClick={handleMute}
+                >
+                  {isMuted ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                  {isMuted ? 'Unmute @' : 'Mute @'}{post.profiles.username}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2 text-destructive focus:text-destructive text-sm rounded-lg"
+                  onClick={handleBlock}
+                >
+                  {isBlocked ? <Volume2 className="h-4 w-4" /> : <UserX className="h-4 w-4" />}
+                  {isBlocked ? 'Unblock @' : 'Block @'}{post.profiles.username}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-border/30" />
+                <DropdownMenuItem
+                  className="gap-2 text-sm rounded-lg"
+                  onClick={handleCopyLink}
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy link
+                </DropdownMenuItem>
+              </>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -426,8 +563,28 @@ export default function PostCard({ post, onPostDeleted, onStarChange }: PostCard
                 isStarred && "fill-primary scale-110"
               )}
             />
-            {starCount > 0 && <span className="text-xs tabular-nums font-semibold">{starCount}</span>}
           </button>
+
+          {/* Star count -> who starred */}
+          {starCount > 0 && (
+            <LikesDialog
+              postId={post.id}
+              source="stars"
+              title="Starred by"
+              emptyLabel="No one has starred this post yet"
+              signInLabel="Sign in to see who starred this post"
+              trigger={
+                <button
+                  className={cn(
+                    "px-1.5 py-2 rounded-full text-xs tabular-nums font-semibold transition-colors hover:text-primary",
+                    isStarred ? "text-primary" : "text-muted-foreground"
+                  )}
+                >
+                  {starCount}
+                </button>
+              }
+            />
+          )}
 
           {/* Comment Button */}
           <button
@@ -443,6 +600,25 @@ export default function PostCard({ post, onPostDeleted, onStarChange }: PostCard
             {commentCount > 0 && <span className="text-xs tabular-nums font-semibold">{commentCount}</span>}
           </button>
 
+          {/* Repost Button */}
+          <button
+            onClick={handleRepost}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition-all duration-200 active:scale-95",
+              hasReposted
+                ? "bg-accent/10 text-accent"
+                : "text-muted-foreground hover:bg-surface-3 hover:text-accent"
+            )}
+          >
+            <Repeat
+              className={cn(
+                "h-5 w-5 transition-transform duration-200",
+                hasReposted && "fill-accent scale-110"
+              )}
+            />
+            {repostCount > 0 && <span className="text-xs tabular-nums font-semibold">{repostCount}</span>}
+          </button>
+
           {/* Share Button */}
           <button
             onClick={handleShare}
@@ -453,8 +629,16 @@ export default function PostCard({ post, onPostDeleted, onStarChange }: PostCard
         </div>
 
         {/* Right Actions */}
-        <button className="p-2 rounded-full text-muted-foreground hover:bg-surface-3 hover:text-primary transition-all duration-200 active:scale-95">
-          <Bookmark className="h-5 w-5" />
+        <button
+          onClick={handleSave}
+          className={cn(
+            "p-2 rounded-full transition-all duration-200 active:scale-95",
+            isSaved
+              ? "text-primary"
+              : "text-muted-foreground hover:bg-surface-3 hover:text-primary"
+          )}
+        >
+          <Bookmark className={cn("h-5 w-5", isSaved && "fill-primary")} />
         </button>
       </div>
 
@@ -466,6 +650,14 @@ export default function PostCard({ post, onPostDeleted, onStarChange }: PostCard
           </div>
         </CollapsibleContent>
       </Collapsible>
+
+      <ReportDialog
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        targetType="post"
+        targetId={post.id}
+        targetLabel="post"
+      />
     </article>
   );
 }

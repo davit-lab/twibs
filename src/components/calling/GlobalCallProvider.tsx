@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useIncomingCalls } from '@/hooks/useIncomingCalls';
 import { supabase } from '@/integrations/supabase/client';
 import IncomingCallModal from '@/components/messaging/IncomingCallModal';
@@ -8,7 +8,6 @@ import HeldCallsIndicator from '@/components/calling/HeldCallsIndicator';
 
 export default function GlobalCallProvider() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { 
     incomingCall, 
     callerProfile, 
@@ -18,11 +17,6 @@ export default function GlobalCallProvider() {
     declineQueuedCall,
     endHeldCall,
   } = useIncomingCalls();
-
-  // Check if we're already on the messages page with this conversation
-  const isOnMessagesPage = location.pathname === '/messages';
-  const currentConvId = new URLSearchParams(location.search).get('conv');
-  const isAlreadyInConversation = isOnMessagesPage && currentConvId === incomingCall?.conversation_id;
 
   const handleAnswerCall = useCallback(async () => {
     if (!incomingCall) return;
@@ -98,7 +92,7 @@ export default function GlobalCallProvider() {
       />
 
       {/* Main incoming call modal */}
-      {incomingCall && !isAlreadyInConversation && (
+      {incomingCall && (
         <IncomingCallModal
           session={incomingCall}
           callerProfile={callerProfile}

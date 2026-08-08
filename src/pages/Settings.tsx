@@ -4,6 +4,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useLoginSessions } from '@/hooks/useLoginSessions';
 import { useCallBlocks } from '@/hooks/useCallBlocks';
+import { useUserInterests, useInterestCategories, useInterestActions } from '@/hooks/useInterests';
+import { useAccountChangeUsage, useEmailVerification, maskEmail } from '@/hooks/useAccountSecurity';
+import InterestCard from '@/components/onboarding/InterestCard';
+import VerifyCodeDialog from '@/components/settings/VerifyCodeDialog';
+import OtpInput from '@/components/settings/OtpInput';
 import { supabase } from '@/integrations/supabase/client';
 import MainLayout from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -23,11 +28,13 @@ import {
   Globe, Moon, Smartphone, Laptop, MapPin,
   LogOut, Trash2, Key, AlertTriangle, Check, Mail, Upload,
   PhoneOff, UserX, ChevronRight, ChevronLeft, Settings2,
-  MessageSquare, Heart, Bookmark, Search, Accessibility
+  MessageSquare, Heart, Bookmark, Search, Accessibility, BadgeCheck,
+  Sparkles, ShieldCheck, KeyRound
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { getAllLanguages } from '@/lib/languageDetection';
+import { validateEmail } from '@/lib/emailValidation';
 
 const LANGUAGES = getAllLanguages();
 
@@ -48,6 +55,7 @@ const COLOR_ACCENTS = [
 
 type SettingsSection =
   | 'account'
+  | 'interests'
   | 'appearance'
   | 'content'
   | 'notifications'
@@ -59,6 +67,7 @@ type SettingsSection =
 
 const NAV_ITEMS: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
   { id: 'account', label: 'Account', icon: User },
+  { id: 'interests', label: 'Interests', icon: Sparkles },
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'content', label: 'Content & Feed', icon: Eye },
   { id: 'notifications', label: 'Notifications', icon: Bell },
@@ -81,10 +90,33 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
-  const [passwordMode, setPasswordMode] = useState<'password' | 'email'>('password');
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [nameVerifyOpen, setNameVerifyOpen] = useState(false);
+  const [nameVerified, setNameVerified] = useState(false);
+  const [passwordStep, setPasswordStep] = useState<'form' | 'code'>('form');
+  const [passwordDigits, setPasswordDigits] = useState<string[]>(Array(6).fill(''));
+  const passwordVerification = useEmailVerification(user?.email || '');
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailStep, setEmailStep] = useState<'form' | 'code'>('form');
+  const [newEmail, setNewEmail] = useState('');
+  const [emailDigits, setEmailDigits] = useState<string[]>(Array(6).fill(''));
+  const [emailLoading, setEmailLoading] = useState(false);
+  const emailVerification = useEmailVerification(user?.email || '');
+
+  const { data: changeUsage } = useAccountChangeUsage();
+
+  const getRemaining = (type: 'username' | 'display_name') => {
+    const row = changeUsage?.find((u) => u.change_type === type);
+    return row?.remaining ?? -1;
+  };
+
+  const getUsedLabel = (type: 'username' | 'display_name') => {
+    const row = changeUsage?.find((u) => u.change_type === type);
+    if (!row) return '';
+    return `${row.used} of ${row.change_limit} used this month`;
+  };
 
   const [formData, setFormData] = useState({
     display_name: '',
@@ -116,9 +148,34 @@ export default function Settings() {
     }
   }, [profile]);
 
-  const handleSave = async () => {
-    setSaving(true);
+  const usernameChanged = !!profile && formData.username !== profile.username;
+  const displayNameChanged = !!profile && formData.display_name !== profile.display_name;
+  const nameChanged = usernameChanged || displayNameChanged;
 
+  const performSave = async () => {
+    const { error } = await updateProfile({
+      display_name: formData.display_name,
+      username: formData.username,
+      bio: formData.bio,
+      location: formData.location,
+      website: formData.website,
+      privacy: formData.privacy,
+      email_notifications: formData.email_notifications,
+      push_notifications: formData.push_notifications,
+    });
+
+    setSaving(false);
+
+    if (error) {
+      toast({ variant: 'destructive', title: 'Error saving settings', description: error.message });
+    } else {
+      toast({ title: 'Settings saved', description: 'Your profile has been updated successfully.' });
+      setNameVerified(false);
+      if (formData.username !== profile?.username) navigate(`/profile/${formData.username}`);
+    }
+  };
+
+  const handleSave = async () => {
     if (formData.username !== profile?.username) {
       const usernameRegex = /^[a-zA-Z0-9_]{3,30}$/;
       if (!usernameRegex.test(formData.username)) {
@@ -139,25 +196,27 @@ export default function Settings() {
       }
     }
 
-    const { error } = await updateProfile({
-      display_name: formData.display_name,
-      username: formData.username,
-      bio: formData.bio,
-      location: formData.location,
-      website: formData.website,
-      privacy: formData.privacy,
-      email_notifications: formData.email_notifications,
-      push_notifications: formData.push_notifications,
-    });
-
-    setSaving(false);
-
-    if (error) {
-      toast({ variant: 'destructive', title: 'Error saving settings', description: error.message });
-    } else {
-      toast({ title: 'Settings saved', description: 'Your profile has been updated successfully.' });
-      if (formData.username !== profile?.username) navigate(`/profile/${formData.username}`);
+    if (!nameVerified && nameChanged) {
+      if (usernameChanged && getRemaining('username') <= 0) {
+        toast({ variant: 'destructive', title: 'Monthly limit reached', description: 'You can only change your username once per month. Try again next month.' });
+        return;
+      }
+      if (displayNameChanged && getRemaining('display_name') <= 0) {
+        toast({ variant: 'destructive', title: 'Monthly limit reached', description: 'You can only change your display name twice per month. Try again next month.' });
+        return;
+      }
+      setNameVerifyOpen(true);
+      return;
     }
+
+    setSaving(true);
+    await performSave();
+  };
+
+  const onNameVerified = async () => {
+    setNameVerified(true);
+    setSaving(true);
+    await performSave();
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -188,36 +247,131 @@ export default function Settings() {
     }
   };
 
-  const handlePasswordChange = async () => {
-    if (passwordMode === 'password') {
-      if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-        toast({ variant: 'destructive', title: 'Passwords do not match', description: 'Please make sure both passwords are the same.' });
-        return;
-      }
-      if (passwordForm.newPassword.length < 6) {
-        toast({ variant: 'destructive', title: 'Password too short', description: 'Password must be at least 6 characters.' });
-        return;
-      }
-      setPasswordLoading(true);
-      const { error } = await supabase.auth.updateUser({ password: passwordForm.newPassword });
+  const openPasswordDialog = () => {
+    setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    setPasswordDigits(Array(6).fill(''));
+    setPasswordStep('form');
+    passwordVerification.reset();
+    setPasswordDialogOpen(true);
+  };
+
+  const handlePasswordContinue = async () => {
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast({ variant: 'destructive', title: 'Passwords do not match', description: 'Please make sure both passwords are the same.' });
+      return;
+    }
+    if (passwordForm.newPassword.length < 6) {
+      toast({ variant: 'destructive', title: 'Password too short', description: 'Password must be at least 6 characters.' });
+      return;
+    }
+    if (!passwordForm.currentPassword) {
+      toast({ variant: 'destructive', title: 'Current password required', description: 'Enter your current password to continue.' });
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      await passwordVerification.sendCode();
+      setPasswordStep('code');
+    } catch {
+      /* error surfaced by verification state */
+    } finally {
       setPasswordLoading(false);
-      if (error) {
-        toast({ variant: 'destructive', title: 'Failed to change password', description: error.message });
-      } else {
-        toast({ title: 'Password changed', description: 'Your password has been updated.' });
-        setPasswordDialogOpen(false);
-        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      }
-    } else {
-      setPasswordLoading(true);
-      const { error } = await supabase.auth.resetPasswordForEmail(user?.email || '', { redirectTo: `${window.location.origin}/settings` });
+    }
+  };
+
+  const handlePasswordVerify = async () => {
+    const code = passwordDigits.join('');
+    if (code.length !== 6 || !passwordForm.currentPassword) return;
+
+    setPasswordLoading(true);
+    try {
+      await passwordVerification.verify(code);
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user?.email || '',
+        password: passwordForm.currentPassword,
+      });
+      if (signInError) throw signInError;
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: passwordForm.newPassword,
+      });
+      if (updateError) throw updateError;
+
+      toast({ title: 'Password changed', description: 'Your password has been updated.' });
+      setPasswordDialogOpen(false);
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setPasswordDigits(Array(6).fill(''));
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to change password',
+        description: err?.message?.includes('Monthly limit')
+          ? err.message
+          : err?.message || 'Something went wrong. Please try again.',
+      });
+    } finally {
       setPasswordLoading(false);
-      if (error) {
-        toast({ variant: 'destructive', title: 'Failed to send email', description: error.message });
-      } else {
-        toast({ title: 'Email sent', description: 'Check your email for the password reset link.' });
-        setPasswordDialogOpen(false);
-      }
+    }
+  };
+
+  const openEmailDialog = () => {
+    setNewEmail('');
+    setEmailDigits(Array(6).fill(''));
+    setEmailStep('form');
+    emailVerification.reset();
+    setEmailDialogOpen(true);
+  };
+
+  const handleEmailContinue = async () => {
+    const emailValidation = validateEmail(newEmail);
+    if (!emailValidation.valid) {
+      toast({ variant: 'destructive', title: 'Invalid email', description: emailValidation.error || 'Please enter a valid email address.' });
+      return;
+    }
+    if (newEmail.toLowerCase() === (user?.email || '').toLowerCase()) {
+      toast({ variant: 'destructive', title: 'Same email', description: 'That is already your current email address.' });
+      return;
+    }
+
+    setEmailLoading(true);
+    try {
+      await emailVerification.sendCode();
+      setEmailStep('code');
+    } catch {
+      /* error surfaced by verification state */
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const handleEmailVerify = async () => {
+    const code = emailDigits.join('');
+    if (code.length !== 6) return;
+
+    setEmailLoading(true);
+    try {
+      await emailVerification.verify(code);
+
+      const { error } = await supabase.auth.updateUser({ email: newEmail });
+      if (error) throw error;
+
+      toast({
+        title: 'Email change requested',
+        description: `A confirmation email has been sent to ${newEmail}. Follow the link there to finish the change.`,
+      });
+      setEmailDialogOpen(false);
+      setNewEmail('');
+      setEmailDigits(Array(6).fill(''));
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to change email',
+        description: err?.message || 'Something went wrong. Please try again.',
+      });
+    } finally {
+      setEmailLoading(false);
     }
   };
 
@@ -282,8 +436,17 @@ export default function Settings() {
                 avatarInputRef={avatarInputRef}
                 onUploadAvatar={handleAvatarUpload}
                 onSave={handleSave}
-                onChangePassword={() => setPasswordDialogOpen(true)}
+                onChangePassword={openPasswordDialog}
+                onChangeEmail={openEmailDialog}
+                usernameUsageLabel={getUsedLabel('username')}
+                usernameRemaining={getRemaining('username')}
+                nameUsageLabel={getUsedLabel('display_name')}
+                nameRemaining={getRemaining('display_name')}
               />
+            )}
+
+            {activeSection === 'interests' && (
+              <InterestsSection />
             )}
 
             {activeSection === 'appearance' && (
@@ -349,61 +512,220 @@ export default function Settings() {
       </div>
 
       {/* Password Dialog */}
-      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+      <Dialog open={passwordDialogOpen} onOpenChange={(open) => { if (!open) passwordVerification.reset(); setPasswordDialogOpen(open); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Change Password</DialogTitle>
-            <DialogDescription>Choose how you want to change your password</DialogDescription>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+              Change Password
+            </DialogTitle>
+            <DialogDescription>
+              {passwordStep === 'form'
+                ? 'Enter your current password and choose a new one.'
+                : `We sent a one-time code to ${maskEmail(user?.email || '')}.`}
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setPasswordMode('password')}
-                className={cn(
-                  "p-3 rounded-lg border text-center transition-all text-sm",
-                  passwordMode === 'password' ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
-                )}
-              >
-                <Key className="h-5 w-5 mx-auto mb-1.5" />
-                <p className="font-medium">Use Password</p>
-              </button>
-              <button
-                onClick={() => setPasswordMode('email')}
-                className={cn(
-                  "p-3 rounded-lg border text-center transition-all text-sm",
-                  passwordMode === 'email' ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
-                )}
-              >
-                <Mail className="h-5 w-5 mx-auto mb-1.5" />
-                <p className="font-medium">Email Link</p>
-              </button>
+
+          {passwordStep === 'form' ? (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="current-password">Current Password</Label>
+                <Input
+                  id="current-password"
+                  type="password"
+                  placeholder="Enter your current password"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="new-password">New Password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  placeholder="Min 6 characters"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="confirm-password">Confirm New Password</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 text-xs text-muted-foreground">
+                <KeyRound className="h-4 w-4 flex-shrink-0" />
+                <span>
+                  You can change your password as often as you like. We'll send a one-time code to{' '}
+                  <strong className="text-foreground">{maskEmail(user?.email || '')}</strong> to confirm the change.
+                </span>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setPasswordDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handlePasswordContinue} disabled={passwordLoading}>
+                  {passwordLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Continue
+                </Button>
+              </DialogFooter>
             </div>
-            {passwordMode === 'password' ? (
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="new-password">New Password</Label>
-                  <Input id="new-password" type="password" placeholder="Min 6 characters" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="confirm-password">Confirm Password</Label>
-                  <Input id="confirm-password" type="password" placeholder="Confirm new password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} />
-                </div>
+          ) : (
+            <div className="space-y-4">
+              <OtpInput value={passwordDigits} onChange={setPasswordDigits} autoFocus />
+
+              {passwordVerification.error && (
+                <p className="text-sm text-destructive font-medium text-center">
+                  {passwordVerification.error}
+                </p>
+              )}
+
+              <DialogFooter>
+                <Button
+                  variant="ghost"
+                  onClick={() => setPasswordStep('form')}
+                  disabled={passwordLoading}
+                >
+                  Back
+                </Button>
+                <Button
+                  onClick={handlePasswordVerify}
+                  disabled={passwordDigits.join('').length !== 6 || passwordLoading}
+                >
+                  {passwordLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Verify & Change Password
+                </Button>
+              </DialogFooter>
+
+              <div className="text-center">
+                {passwordVerification.resendIn > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Resend code in {passwordVerification.resendIn}s
+                  </p>
+                ) : (
+                  <button
+                    onClick={handlePasswordContinue}
+                    disabled={passwordLoading}
+                    className="text-xs font-bold text-primary hover:underline disabled:opacity-50"
+                  >
+                    Resend code
+                  </button>
+                )}
               </div>
-            ) : (
-              <div className="p-4 rounded-lg bg-muted/50 text-center text-sm text-muted-foreground">
-                We'll send a password reset link to <strong>{user?.email}</strong>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPasswordDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handlePasswordChange} disabled={passwordLoading}>
-              {passwordLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {passwordMode === 'password' ? 'Change Password' : 'Send Reset Link'}
-            </Button>
-          </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
+
+      {/* Change Email Dialog */}
+      <Dialog
+        open={emailDialogOpen}
+        onOpenChange={(open) => { if (!open) emailVerification.reset(); setEmailDialogOpen(open); }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+              Change Email
+            </DialogTitle>
+            <DialogDescription>
+              {emailStep === 'form'
+                ? 'Enter the email address you want to use.'
+                : `We sent a one-time code to ${maskEmail(user?.email || '')}.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          {emailStep === 'form' ? (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="new-email">New Email</Label>
+                <Input
+                  id="new-email"
+                  type="email"
+                  placeholder="name@example.com"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleEmailContinue(); }}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 text-xs text-muted-foreground">
+                <Mail className="h-4 w-4 flex-shrink-0" />
+                <span>
+                  We'll send a one-time code to <strong className="text-foreground">{maskEmail(user?.email || '')}</strong>{' '}
+                  to confirm it's really you.
+                </span>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEmailDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleEmailContinue} disabled={emailLoading}>
+                  {emailLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Continue
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <OtpInput value={emailDigits} onChange={setEmailDigits} autoFocus />
+
+              {emailVerification.error && (
+                <p className="text-sm text-destructive font-medium text-center">
+                  {emailVerification.error}
+                </p>
+              )}
+
+              <DialogFooter>
+                <Button
+                  variant="ghost"
+                  onClick={() => setEmailStep('form')}
+                  disabled={emailLoading}
+                >
+                  Back
+                </Button>
+                <Button
+                  onClick={handleEmailVerify}
+                  disabled={emailDigits.join('').length !== 6 || emailLoading}
+                >
+                  {emailLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Verify & Change Email
+                </Button>
+              </DialogFooter>
+
+              <div className="text-center">
+                {emailVerification.resendIn > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Resend code in {emailVerification.resendIn}s
+                  </p>
+                ) : (
+                  <button
+                    onClick={handleEmailContinue}
+                    disabled={emailLoading}
+                    className="text-xs font-bold text-primary hover:underline disabled:opacity-50"
+                  >
+                    Resend code
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Name/Username change verification */}
+      <VerifyCodeDialog
+        open={nameVerifyOpen}
+        onOpenChange={setNameVerifyOpen}
+        email={user?.email || ''}
+        title="Confirm your identity"
+        description="To keep your account secure, we need to confirm it's really you before updating your name or username."
+        onVerified={onNameVerified}
+      />
 
       {/* Delete Account Dialog */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
@@ -450,7 +772,7 @@ function SettingRow({ label, description, children, className }: { label: string
   );
 }
 
-function AccountSection({ profile, formData, setFormData, user, saving, uploadingAvatar, avatarInputRef, onUploadAvatar, onSave, onChangePassword }: any) {
+function AccountSection({ profile, formData, setFormData, user, saving, uploadingAvatar, avatarInputRef, onUploadAvatar, onSave, onChangePassword, onChangeEmail, usernameUsageLabel, usernameRemaining, nameUsageLabel, nameRemaining }: any) {
   return (
     <div className="space-y-5">
       <SectionCard title="Profile Information" description="Update your public profile details">
@@ -480,20 +802,32 @@ function AccountSection({ profile, formData, setFormData, user, saving, uploadin
         </div>
 
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="display_name">Display Name</Label>
-              <Input id="display_name" value={formData.display_name} onChange={(e) => setFormData({ ...formData, display_name: e.target.value })} placeholder="Your display name" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="username">Username</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
-                <Input id="username" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })} placeholder="username" className="pl-7" maxLength={30} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="display_name">Display Name</Label>
+                <Input id="display_name" value={formData.display_name} onChange={(e) => setFormData({ ...formData, display_name: e.target.value })} placeholder="Your display name" />
+                {nameUsageLabel && (
+                  <p className={cn('text-xs', nameRemaining <= 0 ? 'text-destructive font-medium' : 'text-muted-foreground')}>
+                    {nameRemaining <= 0 ? 'No display name changes left this month' : `${nameUsageLabel} · ${nameRemaining} left`}
+                  </p>
+                )}
               </div>
-              <p className="text-xs text-muted-foreground">3-30 characters. Letters, numbers, underscores only.</p>
+              <div className="space-y-1.5">
+                <Label htmlFor="username">Username</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
+                  <Input id="username" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })} placeholder="username" className="pl-7" maxLength={30} />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  3-30 characters. Letters, numbers, underscores only.
+                  {usernameUsageLabel && (
+                    <span className={cn('ml-1', usernameRemaining <= 0 ? 'text-destructive font-medium' : '')}>
+                      · {usernameRemaining <= 0 ? 'no changes left this month' : `${usernameUsageLabel}, ${usernameRemaining} left`}
+                    </span>
+                  )}
+                </p>
+              </div>
             </div>
-          </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="bio">Bio</Label>
@@ -521,7 +855,7 @@ function AccountSection({ profile, formData, setFormData, user, saving, uploadin
             </div>
             <span className="text-sm font-medium">{user?.email}</span>
           </div>
-          <Button variant="outline" size="sm">Change Email</Button>
+          <Button variant="outline" size="sm" onClick={onChangeEmail}>Change Email</Button>
         </div>
       </SectionCard>
 
@@ -540,11 +874,158 @@ function AccountSection({ profile, formData, setFormData, user, saving, uploadin
         </div>
       </SectionCard>
 
+      <SectionCard title="Verification" description="Get the blue badge for your account">
+        <VerificationRequestCard profile={profile} />
+      </SectionCard>
+
       <div className="flex justify-end">
         <Button onClick={onSave} disabled={saving}>
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           Save Changes
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function VerificationRequestCard({ profile }: { profile: { is_verified?: boolean } | null }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const isVerified = !!profile?.is_verified;
+
+  const submit = async () => {
+    setLoading(true);
+    const { error } = await (supabase as any).rpc('request_verification', { message: reason || null });
+    setLoading(false);
+    if (error) {
+      toast({ variant: 'destructive', title: 'Could not request verification', description: error.message });
+      return;
+    }
+    toast({ title: 'Request submitted', description: 'Our team will review your request.' });
+    setOpen(false);
+    setReason('');
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className={cn('p-2 rounded-lg', isVerified ? 'bg-primary/10' : 'bg-muted')}>
+            <BadgeCheck className={cn('h-4 w-4', isVerified ? 'text-primary' : 'text-muted-foreground')} />
+          </div>
+          <div>
+            <p className="text-sm font-medium flex items-center gap-1.5">
+              {isVerified ? 'Verified' : 'Not verified'}
+              {isVerified && <BadgeCheck className="h-3.5 w-3.5 text-primary" />}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {isVerified
+                ? 'Your profile is verified.'
+                : 'Request verification to get the blue badge on your profile.'}
+            </p>
+          </div>
+        </div>
+        {!isVerified && (
+          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+            Request Verification
+          </Button>
+        )}
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Request Verification</DialogTitle>
+            <DialogDescription>
+              Tell us why you should be verified. Our team will review your request.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="verification-reason">Reason (optional)</Label>
+            <Textarea
+              id="verification-reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. I'm a public figure, artist, or brand..."
+              className="min-h-[90px]"
+              maxLength={500}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button onClick={submit} disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Submit Request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function InterestsSection() {
+  const { data: userInterests, isLoading } = useUserInterests();
+  const { data: categories } = useInterestCategories();
+  const { saveInterests } = useInterestActions();
+  const [selected, setSelected] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (userInterests) {
+      setSelected(userInterests.map((ui) => ui.category_id));
+    }
+  }, [userInterests]);
+
+  const toggle = (id: string) => {
+    setSelected((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  return (
+    <div className="space-y-5">
+      <SectionCard
+        title="Your Interests"
+        description="These topics fill your Interests feed. Add or remove any you like."
+      >
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            {categories?.map((category) => (
+              <InterestCard
+                key={category.id}
+                name={category.name}
+                icon={category.icon}
+                color={category.color}
+                selected={selected.includes(category.id)}
+                onToggle={() => toggle(category.id)}
+              />
+            ))}
+          </div>
+        )}
+      </SectionCard>
+
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-xs text-muted-foreground font-medium">
+          {selected.length} {selected.length === 1 ? 'interest' : 'interests'} selected
+        </p>
+        <div className="flex justify-end">
+          <Button
+            onClick={() => saveInterests.mutate(selected)}
+            disabled={selected.length === 0 || saveInterests.isPending}
+          >
+            {saveInterests.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : null}
+            Save Interests
+          </Button>
+        </div>
       </div>
     </div>
   );

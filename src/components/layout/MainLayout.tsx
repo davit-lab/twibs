@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserBan } from '@/hooks/useUserBan';
 import { usePresence } from '@/hooks/usePresence';
+import { usePremiumStatus } from '@/hooks/usePremiumStatus';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -36,6 +37,8 @@ import {
   Plus,
   Radio,
   Users,
+  Sparkles,
+  ChevronRight,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -47,6 +50,7 @@ interface MainLayoutProps {
 const navItems = [
   { icon: Home, label: 'Home', href: '/', id: 'home' },
   { icon: Compass, label: 'Explore', href: '/explore', id: 'explore' },
+  { icon: Sparkles, label: 'Interests', href: '/interests', id: 'interests' },
   { icon: Clapperboard, label: 'Reels', href: '/reels', id: 'reels' },
   { icon: MessageCircle, label: 'Messages', href: '/messages', id: 'messages' },
   { icon: Heart, label: 'Notifications', href: '/notifications', id: 'notifications' },
@@ -332,6 +336,12 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
                         <Link to="/groups" className="cursor-pointer">
                           <Users className="mr-3 h-4 w-4" />
                           Groups
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/interests" className="cursor-pointer">
+                          <Sparkles className="mr-3 h-4 w-4" />
+                          Interests
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>

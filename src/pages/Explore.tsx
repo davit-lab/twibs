@@ -10,6 +10,8 @@ import { BadgeCheck, Search, Users, Sparkles, X, Crown, Star, Eye, Play, FileTex
 import { cn } from '@/lib/utils';
 import { usePremiumStatus } from '@/hooks/usePremiumStatus';
 import { useExplore, ExploreTab, ExploreUser, ExplorePost, ExploreReel } from '@/hooks/useExplore';
+import { useMutedUsers } from '@/hooks/useSafety';
+import TrendingList from '@/components/social/TrendingList';
 import { formatDistanceKm } from '@/lib/geolocation';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -276,8 +278,10 @@ function ReelCard({ reel, grid }: { reel: ExploreReel; grid?: boolean }) {
 export default function Explore() {
   const { profile: currentUserProfile } = useAuth();
   const { users, posts, reels, loading, searchQuery, setSearchQuery, activeTab, setActiveTab, handleFollowChange, hasAny, viewerLocationKnown, distancesReady, distancesLoading } = useExplore();
+  const { data: mutedIds = [] } = useMutedUsers();
+  const visiblePosts = posts.filter(p => !mutedIds.includes(p.user_id));
   const trimmedQuery = searchQuery.trim();
-  const counts = { people: users.length, posts: posts.length, reels: reels.length };
+  const counts = { people: users.length, posts: visiblePosts.length, reels: reels.length };
 
   const searchPlaceholder = {
     all: 'Search people, posts, reels...',
@@ -357,11 +361,11 @@ export default function Explore() {
         <div className="space-y-10">
           {reelsRail(reels.slice(0, 10))}
 
-          {posts.length > 0 && (
+          {visiblePosts.length > 0 && (
             <section>
               <SectionHeader title="Popular Posts" seeAll={() => setActiveTab('posts')} />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {posts.slice(0, 6).map(p => <PostCard key={p.id} post={p} />)}
+                {visiblePosts.slice(0, 6).map(p => <PostCard key={p.id} post={p} />)}
               </div>
             </section>
           )}
@@ -375,6 +379,10 @@ export default function Explore() {
               </div>
             </section>
           )}
+
+          <section>
+            <TrendingList />
+          </section>
         </div>
       );
     }
@@ -392,7 +400,7 @@ export default function Explore() {
         );
     }
 
-    if (activeTab === 'posts') return posts.length === 0 ? empty('posts') : <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{posts.map(p => <PostCard key={p.id} post={p} />)}</div>;
+    if (activeTab === 'posts') return visiblePosts.length === 0 ? empty('posts') : <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{visiblePosts.map(p => <PostCard key={p.id} post={p} />)}</div>;
     return users.length === 0
       ? empty('people')
       : (

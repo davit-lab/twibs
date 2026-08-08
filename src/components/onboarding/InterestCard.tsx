@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import {
   Laptop,
@@ -16,6 +15,7 @@ import {
   Briefcase,
   FlaskConical,
   Leaf,
+  Check,
   LucideIcon,
 } from 'lucide-react';
 
@@ -55,59 +55,56 @@ export default function InterestCard({
   const Icon = iconMap[icon] || Laptop;
 
   return (
-    <motion.button
+    <button
       type="button"
       onClick={onToggle}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-      className={cn(
-        'relative flex flex-col items-center justify-center gap-3 p-5 rounded-xl',
-        'border-2 transition-all duration-200',
-        'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
+      aria-pressed={selected}
+      style={
         selected
-          ? 'border-primary bg-primary/10 shadow-lg'
-          : 'border-border hover:border-primary/50 bg-card hover:bg-accent/50'
+          ? ({
+              '--cat': color,
+              background: `linear-gradient(160deg, ${color} 0%, ${color}E6 100%)`,
+              boxShadow: `0 14px 34px -12px ${color}CC, inset 0 0 0 1px rgba(255,255,255,0.22)`,
+            } as React.CSSProperties)
+          : ({ '--cat': color } as React.CSSProperties)
+      }
+      className={cn(
+        'group relative flex flex-col items-center justify-center gap-2.5 w-full p-4 sm:p-5 rounded-2xl border transition-all duration-200 ease-out',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
+        selected
+          ? 'border-transparent -translate-y-0.5'
+          : 'border-border/80 bg-card hover:-translate-y-0.5 hover:border-border hover:shadow-[0_12px_28px_-14px_var(--cat)]'
       )}
     >
-      {/* Check indicator */}
       {selected && (
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          className="absolute top-2 right-2 w-5 h-5 rounded-full bg-primary flex items-center justify-center"
-        >
-          <svg
-            className="w-3 h-3 text-primary-foreground"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={3}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-        </motion.div>
+        <span className="absolute top-2 right-2 grid place-items-center w-5 h-5 rounded-full bg-white/95 shadow-sm">
+          <Check className="w-3 h-3" style={{ color }} strokeWidth={3.5} />
+        </span>
       )}
 
-      {/* Icon with color */}
-      <div
-        className={cn(
-          'w-14 h-14 rounded-full flex items-center justify-center transition-all',
-          selected ? 'scale-110' : ''
-        )}
-        style={{ backgroundColor: `${color}20` }}
+      <span
+        className="grid place-items-center w-12 h-12 sm:w-14 sm:h-14 rounded-xl transition-all duration-200 group-hover:scale-105"
+        style={{
+          backgroundColor: selected ? 'rgba(255,255,255,0.24)' : `${color}18`,
+        }}
       >
-        <Icon className="w-7 h-7" style={{ color }} />
-      </div>
+        <Icon
+          className={cn('w-6 h-6 sm:w-7 sm:h-7 transition-transform duration-200', selected && 'scale-110')}
+          style={{ color: selected ? '#ffffff' : color }}
+          strokeWidth={selected ? 2.25 : 2}
+        />
+      </span>
 
-      {/* Name */}
       <span
         className={cn(
-          'font-medium text-sm text-center transition-colors',
-          selected ? 'text-foreground' : 'text-muted-foreground'
+          'text-[13px] sm:text-sm leading-tight text-center transition-colors duration-200',
+          selected
+            ? 'font-bold text-white'
+            : 'font-semibold text-muted-foreground group-hover:text-foreground'
         )}
       >
         {name}
       </span>
-    </motion.button>
+    </button>
   );
 }

@@ -7,6 +7,8 @@ import Feed from '@/components/feed/Feed';
 import InterestsFeed from '@/components/feed/InterestsFeed';
 import FollowButton from '@/components/social/FollowButton';
 import FollowersFollowingModal from '@/components/social/FollowersFollowingModal';
+import ProfileActionsMenu from '@/components/social/ProfileActionsMenu';
+import ShareProfileDialog from '@/components/social/ShareProfileDialog';
 import { useFollowStats } from '@/hooks/useFollowStats';
 import { useStories } from '@/hooks/useStories';
 import { useMutualConnections } from '@/hooks/useMutualConnections';
@@ -106,6 +108,7 @@ export default function Profile() {
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [coverDialogOpen, setCoverDialogOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   // Story states
   const [uploading, setUploading] = useState(false);
@@ -194,6 +197,10 @@ export default function Profile() {
 
   const handleFollowChange = () => {
     setRefreshKey(prev => prev + 1);
+  };
+
+  const handleShareProfile = () => {
+    setShareOpen(true);
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -371,13 +378,6 @@ export default function Profile() {
                   </Button>
                 </>
               )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="rounded-xl bg-black/50 hover:bg-black/70 text-white border border-white/10"
-              >
-                <MoreHorizontal className="h-5 w-5" />
-              </Button>
             </div>
           </div>
 
@@ -463,37 +463,49 @@ export default function Profile() {
 
                 {/* Desktop action buttons */}
                 <div className="hidden md:flex items-center gap-2">
-                  {isOwnProfile ? (
-                    <>
-                      <Button variant="outline" asChild className="rounded-xl font-semibold h-9">
-                        <Link to="/settings">Edit Profile</Link>
+              {isOwnProfile ? (
+                <>
+                  <Button variant="outline" asChild className="rounded-xl font-semibold h-9">
+                    <Link to="/settings">Edit Profile</Link>
+                  </Button>
+                  <Button variant="ghost" size="icon" className="rounded-xl h-9 w-9" onClick={handleShareProfile}>
+                    <Share2 className="h-4 w-4" />
+                  </Button>
+                </>
+              ) : user ? (
+                <>
+                  <FollowButton
+                    targetUserId={profileData.user_id}
+                    targetUsername={profileData.username}
+                    isPrivateAccount={profileData.privacy === 'private'}
+                    onFollowChange={handleFollowChange}
+                  />
+                  <Button variant="outline" asChild className="rounded-xl font-semibold h-9">
+                    <Link to={`/messages?new=${profileData.user_id}`}>
+                      <MessageCircle className="h-4 w-4 mr-2" />
+                      Message
+                    </Link>
+                  </Button>
+                  <ProfileActionsMenu
+                    userId={profileData.user_id}
+                    username={profileData.username}
+                    displayName={profileData.display_name}
+                    avatarUrl={profileData.avatar_url}
+                    onBlocked={() => navigate('/')}
+                    trigger={
+                      <Button variant="ghost" size="icon" className="rounded-xl h-9 w-9" title="More actions">
+                        <MoreHorizontal className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="rounded-xl h-9 w-9">
-                        <Share2 className="h-4 w-4" />
-                      </Button>
-                    </>
-                  ) : user ? (
-                    <>
-                      <FollowButton
-                        targetUserId={profileData.user_id}
-                        targetUsername={profileData.username}
-                        isPrivateAccount={profileData.privacy === 'private'}
-                        onFollowChange={handleFollowChange}
-                      />
-                      <Button variant="outline" asChild className="rounded-xl font-semibold h-9">
-                        <Link to={`/messages?new=${profileData.user_id}`}>
-                          <MessageCircle className="h-4 w-4 mr-2" />
-                          Message
-                        </Link>
-                      </Button>
-                    </>
-                  ) : (
-                    <Button className="font-semibold rounded-xl h-9" asChild>
-                      <Link to="/auth">Follow</Link>
-                    </Button>
-                  )}
-                </div>
-              </div>
+                    }
+                  />
+                </>
+              ) : (
+                <Button className="font-semibold rounded-xl h-9" asChild>
+                  <Link to="/auth">Follow</Link>
+                </Button>
+              )}
+            </div>
+          </div>
 
               {/* Bio */}
               {profileData.bio && (
@@ -579,7 +591,7 @@ export default function Profile() {
                     <Button variant="outline" className="flex-1 rounded-xl font-semibold h-10" asChild>
                       <Link to="/settings">Edit Profile</Link>
                     </Button>
-                    <Button variant="outline" size="icon" className="rounded-xl h-10 w-10">
+                    <Button variant="outline" size="icon" className="rounded-xl h-10 w-10" onClick={handleShareProfile}>
                       <Share2 className="h-4 w-4" />
                     </Button>
                   </>
@@ -598,6 +610,18 @@ export default function Profile() {
                         Message
                       </Link>
                     </Button>
+                    <ProfileActionsMenu
+                      userId={profileData.user_id}
+                      username={profileData.username}
+                      displayName={profileData.display_name}
+                      avatarUrl={profileData.avatar_url}
+                      onBlocked={() => navigate('/')}
+                      trigger={
+                        <Button variant="outline" size="icon" className="rounded-xl h-10 w-10" title="More actions">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      }
+                    />
                   </>
                 ) : (
                   <Button className="flex-1 rounded-xl font-semibold h-10" asChild>
@@ -832,6 +856,16 @@ export default function Profile() {
           setProfileData(prev => prev ? { ...prev, cover_url: url } : null);
         }}
       />
+
+      {profileData && (
+        <ShareProfileDialog
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          displayName={profileData.display_name}
+          username={profileData.username}
+          avatarUrl={profileData.avatar_url}
+        />
+      )}
 
       <style>{`
         @keyframes story-progress {

@@ -283,8 +283,8 @@ export default function CreateGroupDialog({ open, onOpenChange }: CreateGroupDia
             <FieldLabel>Privacy</FieldLabel>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {([
-                { value: 'public' as const, icon: Globe, title: 'Public', desc: 'Anyone can see and join' },
-                { value: 'private' as const, icon: Lock, title: 'Private', desc: 'Members only' },
+                { value: 'public' as const, icon: Globe, title: 'Public', desc: 'Anyone can see and join instantly' },
+                { value: 'private' as const, icon: Lock, title: 'Private', desc: 'Visible to all · join needs approval' },
               ]).map((opt) => {
                 const active = privacy === opt.value;
                 const Icon = opt.icon;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -386,7 +386,7 @@ export function useBookActions() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const createBook = async (title: string, description?: string) => {
+  const createBook = useCallback(async (title: string, description?: string) => {
     if (!user) return null;
 
     try {
@@ -413,9 +413,9 @@ export function useBookActions() {
       });
       return null;
     }
-  };
+  }, [user, toast]);
 
-  const updateBook = async (bookId: string, updates: Partial<Book>) => {
+  const updateBook = useCallback(async (bookId: string, updates: Partial<Book>) => {
     try {
       const { error } = await supabase
         .from('books')
@@ -435,9 +435,9 @@ export function useBookActions() {
       });
       return false;
     }
-  };
+  }, [toast]);
 
-  const publishBook = async (bookId: string) => {
+  const publishBook = useCallback(async (bookId: string) => {
     try {
       const { error } = await supabase
         .from('books')
@@ -460,9 +460,9 @@ export function useBookActions() {
       });
       return false;
     }
-  };
+  }, [toast]);
 
-  const deleteBook = async (bookId: string) => {
+  const deleteBook = useCallback(async (bookId: string) => {
     try {
       const { error } = await supabase
         .from('books')
@@ -482,9 +482,9 @@ export function useBookActions() {
       });
       return false;
     }
-  };
+  }, [toast]);
 
-  const addToLibrary = async (bookId: string) => {
+  const addToLibrary = useCallback(async (bookId: string) => {
     if (!user) return false;
 
     try {
@@ -505,9 +505,9 @@ export function useBookActions() {
       });
       return false;
     }
-  };
+  }, [user, toast]);
 
-  const removeFromLibrary = async (bookId: string) => {
+  const removeFromLibrary = useCallback(async (bookId: string) => {
     if (!user) return false;
 
     try {
@@ -525,9 +525,9 @@ export function useBookActions() {
       console.error('Error removing from library:', error);
       return false;
     }
-  };
+  }, [user, toast]);
 
-  const updateProgress = async (
+  const updateProgress = useCallback(async (
     bookId: string,
     chapterId: string | null,
     scrollPosition?: number,
@@ -572,9 +572,9 @@ export function useBookActions() {
     } catch (error) {
       console.error('Error updating progress:', error);
     }
-  };
+  }, [user]);
 
-  return {
+  return useMemo(() => ({
     createBook,
     updateBook,
     publishBook,
@@ -582,7 +582,15 @@ export function useBookActions() {
     addToLibrary,
     removeFromLibrary,
     updateProgress,
-  };
+  }), [
+    createBook,
+    updateBook,
+    publishBook,
+    deleteBook,
+    addToLibrary,
+    removeFromLibrary,
+    updateProgress,
+  ]);
 }
 
 export function useChapterActions() {
