@@ -91,10 +91,14 @@ export function useBooks(filters?: { status?: string; genre?: string; authorId?:
 
       // Fetch chapter counts
       const bookIds = booksData?.map((b) => b.id) || [];
-      const { data: chapterCounts } = await supabase
-        .from('chapters')
-        .select('book_id')
-        .in('book_id', bookIds);
+      let chapterCounts: { book_id: string }[] | null = [];
+      if (bookIds.length > 0) {
+        const { data } = await supabase
+          .from('chapters')
+          .select('book_id')
+          .in('book_id', bookIds);
+        chapterCounts = data;
+      }
 
       const chapterCountMap = new Map<string, number>();
       chapterCounts?.forEach((c) => {

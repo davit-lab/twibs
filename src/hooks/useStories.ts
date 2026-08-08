@@ -163,10 +163,14 @@ export function useStories(options: UseStoriesOptions = {}) {
 
       // Fetch profiles
       const userIds = [...new Set((storiesData || []).map(s => s.user_id))];
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('user_id, username, display_name, avatar_url')
-        .in('user_id', userIds);
+      let profiles: { user_id: string; username: string; display_name: string | null; avatar_url: string | null }[] | null = [];
+      if (userIds.length > 0) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('user_id, username, display_name, avatar_url')
+          .in('user_id', userIds);
+        profiles = data;
+      }
 
       // Fetch user's viewed stories
       const { data: views } = await supabase

@@ -69,10 +69,14 @@ export function useLibraryItems(userId?: string) {
 
       // Fetch profiles for all items
       const userIds = [...new Set(data?.map(d => d.user_id) || [])];
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('user_id, username, display_name, avatar_url, is_verified')
-        .in('user_id', userIds);
+      let profiles: { user_id: string; username: string; display_name: string | null; avatar_url: string | null; is_verified: boolean }[] | null = [];
+      if (userIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('user_id, username, display_name, avatar_url, is_verified')
+          .in('user_id', userIds);
+        profiles = profilesData;
+      }
 
       const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
 
