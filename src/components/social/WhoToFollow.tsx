@@ -19,7 +19,7 @@ export default function WhoToFollow() {
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
         <h3 className="font-bold text-sm flex items-center gap-2">
           <Users className="h-4 w-4 text-primary" />
-          Who to follow
+          Suggested for you
         </h3>
         {users.length > 0 && (
           <button
@@ -68,7 +68,7 @@ export default function WhoToFollow() {
                   {user.is_verified && <BadgeCheck className="h-3.5 w-3.5 text-primary flex-shrink-0" />}
                 </Link>
                 <p className="text-xs text-muted-foreground truncate">
-                  @{user.username}
+                  {user.username}
                   {user.follower_count > 0 && (
                     <> · {user.follower_count.toLocaleString()} followers</>
                   )}

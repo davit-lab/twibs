@@ -13,7 +13,7 @@ export default function TrendingList() {
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
         <h3 className="font-bold text-sm flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-accent" />
-          Trending this week
+          Popular now
         </h3>
       </div>
 
@@ -42,7 +42,7 @@ export default function TrendingList() {
                   to={`/profile/${post.profiles.username}`}
                   className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-primary transition-colors min-w-0"
                 >
-                  <span className="truncate">@{post.profiles.username}</span>
+                  <span className="truncate">{post.profiles.username}</span>
                   {post.profiles.is_verified && <BadgeCheck className="h-3.5 w-3.5 text-primary flex-shrink-0" />}
                   <span className="text-muted-foreground/50 ml-auto text-xs whitespace-nowrap">
                     {formatDistanceToNow(new Date(post.created_at))}

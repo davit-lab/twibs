@@ -38,7 +38,6 @@ import {
   Radio,
   Users,
   Sparkles,
-  ChevronRight,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -108,98 +107,103 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Desktop Sidebar */}
+      {/* Desktop Top Navigation */}
       {user && !immersive && (
-        <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-screen w-[220px] xl:w-[245px] bg-background border-r border-border px-3 py-5 z-40">
-          <Link to="/" className="px-3 mb-6 flex items-center">
-            <BrandLogo className="h-9" />
-          </Link>
+        <header className="hidden lg:block sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-xl">
+          <div className="mx-auto max-w-7xl px-5 flex items-center gap-2 h-16">
+            <Link to="/" className="flex items-center flex-shrink-0 mr-2">
+              <BrandLogo className="h-8" />
+            </Link>
 
-          <nav className="flex-1 space-y-0.5">
-            {navItems.map((item) => {
-              const active = isActive(item.href);
-              const isCreate = item.href === '#create';
+            <nav className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto scrollbar-hide">
+              {navItems.map((item) => {
+                const active = isActive(item.href);
 
-              if (isCreate) {
+                if (item.href === '#create') {
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setCreateDialogOpen(true)}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold bg-gradient-to-br from-primary to-accent text-white shadow-sm shadow-primary/25 hover:brightness-110 active:scale-95 transition-all flex-shrink-0"
+                    >
+                      <Plus className="h-4 w-4" strokeWidth={2.5} />
+                      Create
+                    </button>
+                  );
+                }
+
                 return (
-                  <button
+                  <Link
                     key={item.id}
-                    onClick={() => setCreateDialogOpen(true)}
-                    className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-[15px] transition-colors hover:bg-surface-2 text-foreground"
+                    to={item.href}
+                    className={cn(
+                      'flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap flex-shrink-0 transition-colors',
+                      active
+                        ? 'bg-primary/10 text-primary font-semibold'
+                        : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
+                    )}
                   >
-                    <item.icon className="h-5 w-5" strokeWidth={1.5} />
+                    <item.icon
+                      className={cn('h-5 w-5', active && 'text-primary')}
+                      strokeWidth={active ? 2.5 : 1.5}
+                      fill={active ? 'currentColor' : 'none'}
+                    />
                     <span>{item.label}</span>
-                  </button>
-                );
-              }
-
-              return (
-                <Link
-                  key={item.id}
-                  to={item.href}
-                  className={cn(
-                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-[15px] transition-colors',
-                    active
-                      ? 'font-semibold bg-surface-2'
-                      : 'text-foreground hover:bg-surface-2'
-                  )}
-                >
-                  <item.icon
-                    className={cn("h-5 w-5", active && "text-primary")}
-                    strokeWidth={active ? 2.5 : 1.5}
-                    fill={active ? 'currentColor' : 'none'}
-                  />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
-          </nav>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-[15px] transition-colors hover:bg-surface-2">
-                <Menu className="h-5 w-5" strokeWidth={1.5} />
-                <span>More</span>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-[200px]" align="start" side="top">
-              <DropdownMenuItem asChild>
-                <Link to="/settings" className="cursor-pointer">
-                  <Settings className="mr-3 h-4 w-4" />
-                  Settings
-                </Link>
-              </DropdownMenuItem>
-              {(isAdmin || isModerator) && (
-                <DropdownMenuItem asChild>
-                  <Link to="/admin" className="cursor-pointer">
-                    <Shield className="mr-3 h-4 w-4" />
-                    Admin
                   </Link>
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={signOut} className="cursor-pointer">
-                <LogOut className="mr-3 h-4 w-4" />
-                Log out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                );
+              })}
+            </nav>
 
-          <Link
-            to={`/profile/${profile?.username}`}
-            className="flex items-center gap-3 px-3 py-2.5 mt-2 rounded-lg transition-colors hover:bg-surface-2"
-          >
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={profile?.avatar_url || undefined} />
-              <AvatarFallback className="text-xs bg-surface-2">
-                {getInitials(profile?.display_name || 'U')}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{profile?.username}</p>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <NotificationDropdown className="text-muted-foreground hover:text-foreground hover:bg-surface-2" />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="rounded-full transition-opacity hover:opacity-85 flex-shrink-0 ml-1">
+                    <Avatar className="h-9 w-9 ring-2 ring-border hover:ring-primary/40 transition-shadow">
+                      <AvatarImage src={profile?.avatar_url || undefined} />
+                      <AvatarFallback className="text-xs bg-surface-2">
+                        {getInitials(profile?.display_name || 'U')}
+                      </AvatarFallback>
+                    </Avatar>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-[220px]" align="end" sideOffset={10}>
+                  <DropdownMenuItem asChild>
+                    <Link to={`/profile/${profile?.username}`} className="cursor-pointer">
+                      <User className="mr-3 h-4 w-4" />
+                      Profile
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/settings" className="cursor-pointer">
+                      <Settings className="mr-3 h-4 w-4" />
+                      Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/pricing" className="cursor-pointer">
+                      <Crown className="mr-3 h-4 w-4" />
+                      Premium
+                    </Link>
+                  </DropdownMenuItem>
+                  {(isAdmin || isModerator) && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/admin" className="cursor-pointer">
+                        <Shield className="mr-3 h-4 w-4" />
+                        Admin
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={signOut} className="cursor-pointer text-destructive">
+                    <LogOut className="mr-3 h-4 w-4" />
+                    Log out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-          </Link>
-        </aside>
+          </div>
+        </header>
       )}
 
       {/* Mobile Floating Nav - Notifications & Chats */}
@@ -241,10 +245,7 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
       )}
 
       {/* Main Content */}
-      <main className={cn(
-        'min-h-screen',
-        user && !immersive && 'lg:ml-[220px] xl:ml-[245px]'
-      )}>
+      <main className="min-h-screen">
         {isBanned && banInfo ? (
           <div className="max-w-md mx-auto py-20 px-4">
             <Card>
