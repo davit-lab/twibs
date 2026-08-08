@@ -3,6 +3,8 @@ export interface FilterPreset {
   name: string;
   css: string;
   accent: string;
+  vignette?: number;
+  grain?: number;
 }
 
 export interface CapturedMeta {
@@ -14,68 +16,27 @@ export interface CapturedMeta {
 
 export const FILTERS: FilterPreset[] = [
   { id: 'original', name: 'Original', css: '', accent: '#ffffff' },
-  { id: 'pinkglow', name: 'Pink Glow', css: 'brightness(1.08) saturate(1.25) contrast(0.95) sepia(0.12) hue-rotate(-15deg)', accent: '#ff8fb3' },
-  { id: 'blush', name: 'Blush', css: 'brightness(1.12) contrast(0.9) saturate(1.15) sepia(0.2) hue-rotate(-10deg)', accent: '#f7a8b8' },
-  { id: 'bubblegum', name: 'Bubblegum', css: 'saturate(1.5) brightness(1.1) contrast(0.95) hue-rotate(-15deg) sepia(0.08)', accent: '#ff9ecb' },
-  { id: 'cottoncandy', name: 'Cotton Candy', css: 'saturate(1.2) brightness(1.15) contrast(0.9) hue-rotate(-30deg) sepia(0.12)', accent: '#a8d8ea' },
-  { id: 'strawberry', name: 'Strawberry', css: 'sepia(0.2) saturate(1.35) brightness(1.08) contrast(0.98) hue-rotate(-25deg)', accent: '#ff6f91' },
-  { id: 'kawaii', name: 'Kawaii', css: 'saturate(1.55) brightness(1.18) contrast(0.92) sepia(0.08) hue-rotate(-12deg)', accent: '#ff9fd2' },
-  { id: 'doll', name: 'Doll', css: 'saturate(1.3) brightness(1.2) contrast(0.9) hue-rotate(-10deg)', accent: '#ffc9e0' },
-  { id: 'princess', name: 'Princess', css: 'brightness(1.15) saturate(1.1) contrast(0.95) sepia(0.15) hue-rotate(10deg)', accent: '#ffc3d8' },
-  { id: 'fairytale', name: 'Fairytale', css: 'sepia(0.2) brightness(1.15) contrast(0.88) saturate(1.15) hue-rotate(-5deg)', accent: '#f5b8d5' },
-  { id: 'sugared', name: 'Sugared', css: 'saturate(1.35) brightness(1.15) contrast(0.92) sepia(0.1) hue-rotate(-10deg)', accent: '#ffd1dc' },
-  { id: 'lavender', name: 'Lavender', css: 'sepia(0.25) saturate(1.3) brightness(1.08) contrast(0.92) hue-rotate(50deg)', accent: '#c3a6ff' },
-  { id: 'aurora', name: 'Aurora', css: 'saturate(1.25) brightness(1.08) contrast(0.95) hue-rotate(40deg) sepia(0.15)', accent: '#b8a6ff' },
-  { id: 'perfume', name: 'Perfume', css: 'sepia(0.15) saturate(1.2) brightness(1.1) contrast(0.94) hue-rotate(25deg)', accent: '#d3b7ff' },
-  { id: 'candy', name: 'Candy Pop', css: 'saturate(1.7) contrast(1.1) brightness(1.05)', accent: '#ff6b9d' },
-  { id: 'lollipop', name: 'Lollipop', css: 'saturate(1.65) brightness(1.06) contrast(1.02) hue-rotate(-18deg)', accent: '#ff4d9b' },
-  { id: 'milky', name: 'Milky', css: 'brightness(1.18) contrast(0.85) saturate(0.9)', accent: '#f2e9e4' },
-  { id: 'dreamy', name: 'Dreamy', css: 'brightness(1.12) contrast(0.88) saturate(1.05) blur(0.4px)', accent: '#dfd0ff' },
-  { id: 'peachy', name: 'Peachy', css: 'sepia(0.3) saturate(1.2) brightness(1.12) contrast(0.95) hue-rotate(-10deg)', accent: '#ffbe98' },
-  { id: 'sunset', name: 'Sunset', css: 'sepia(0.3) saturate(1.5) brightness(1.05) hue-rotate(-30deg)', accent: '#ff8e6e' },
-  { id: 'warm', name: 'Warm', css: 'sepia(0.25) brightness(1.1) contrast(0.98) saturate(1.1)', accent: '#ffb084' },
-  { id: 'glow', name: 'Glow', css: 'brightness(1.2) contrast(0.9) saturate(1.1) blur(0.3px)', accent: '#fff1c9' },
-  { id: 'sunshine', name: 'Sunshine', css: 'brightness(1.15) saturate(1.2) contrast(0.95) sepia(0.18) hue-rotate(-20deg)', accent: '#ffd166' },
-  { id: 'minty', name: 'Minty', css: 'sepia(0.25) saturate(1.2) brightness(1.1) contrast(0.95) hue-rotate(55deg)', accent: '#a5e3c0' },
-  { id: 'clarity', name: 'Clarity', css: 'contrast(1.12) saturate(1.12) brightness(1.02)', accent: '#6ee7b7' },
-  { id: 'vesper', name: 'Vesper', css: 'contrast(1.15) saturate(1.2) brightness(0.95) sepia(0.08)', accent: '#fbbf24' },
-  { id: 'elevate', name: 'Elevate', css: 'saturate(1.35) contrast(1.1) brightness(1.05)', accent: '#f472b6' },
-  { id: 'sierra', name: 'Sierra', css: 'saturate(0.95) contrast(0.95) brightness(1.08) sepia(0.12)', accent: '#d6b48f' },
-  { id: 'amaro', name: 'Amaro', css: 'sepia(0.2) contrast(1.15) brightness(1.05) saturate(1.15)', accent: '#c49a6c' },
-  { id: 'willow', name: 'Willow', css: 'grayscale(0.5) contrast(1.25) brightness(0.98)', accent: '#9ca3af' },
-  { id: 'mayfair', name: 'Mayfair', css: 'sepia(0.18) contrast(1.1) brightness(1.08) saturate(1.05)', accent: '#e8c39e' },
-  { id: 'nashville', name: 'Nashville', css: 'sepia(0.25) contrast(1.05) brightness(1.1) saturate(0.85) hue-rotate(-5deg)', accent: '#f0b9a7' },
-  { id: 'perpetua', name: 'Perpetua', css: 'contrast(1.1) brightness(1.05) saturate(1.1) hue-rotate(-8deg)', accent: '#a5c8e4' },
-  { id: 'aden', name: 'Aden', css: 'sepia(0.1) contrast(0.9) brightness(1.05) saturate(0.8) hue-rotate(15deg)', accent: '#b8c8c5' },
-  { id: 'gingham', name: 'Gingham', css: 'brightness(1.15) contrast(0.9) saturate(0.75)', accent: '#e4e0dc' },
-  { id: 'ludwig', name: 'Ludwig', css: 'sepia(0.1) saturate(0.8) contrast(1.05) brightness(1.1) hue-rotate(-5deg)', accent: '#cbb9a4' },
-  { id: 'ginza', name: 'Ginza', css: 'sepia(0.25) contrast(1.15) saturate(1.3) brightness(1.02) hue-rotate(-8deg)', accent: '#e0a458' },
-  { id: 'skyline', name: 'Skyline', css: 'saturate(1.25) contrast(1.1) hue-rotate(-12deg) brightness(1.05)', accent: '#7aa5c9' },
-  { id: 'dogpatch', name: 'Dogpatch', css: 'sepia(0.18) contrast(1.2) brightness(0.98) saturate(1.1) hue-rotate(-10deg)', accent: '#bf8f5f' },
-  { id: 'moon', name: 'Moon', css: 'grayscale(0.85) contrast(1.15) brightness(1.02)', accent: '#c6c8cc' },
-  { id: 'noire', name: 'Noire', css: 'grayscale(1) contrast(1.3) brightness(0.95)', accent: '#8b8f96' },
-  { id: 'earlybird', name: 'Earlybird', css: 'sepia(0.3) contrast(1.05) brightness(1.12) saturate(0.9)', accent: '#e9b872' },
-  { id: 'inkwell', name: 'Inkwell', css: 'grayscale(1) contrast(1.1) brightness(1.05)', accent: '#c0c4c9' },
-  { id: 'crema', name: 'Crema', css: 'sepia(0.15) brightness(1.12) contrast(0.92) saturate(0.9)', accent: '#e8d6b0' },
-  { id: 'slumber', name: 'Slumber', css: 'saturate(0.9) contrast(1.15) brightness(0.9) hue-rotate(20deg)', accent: '#6f88a8' },
-  { id: 'helena', name: 'Helena', css: 'saturate(1.1) contrast(1.05) brightness(1.02) hue-rotate(-20deg) sepia(0.05)', accent: '#a58bb5' },
-  { id: 'rise', name: 'Rise', css: 'sepia(0.2) brightness(1.1) contrast(0.98) saturate(1.05)', accent: '#ecc9a0' },
-  { id: 'valencia', name: 'Valencia', css: 'sepia(0.15) contrast(1.1) brightness(1.06) saturate(1.1)', accent: '#e58a6a' },
-  { id: 'xpro2', name: 'X-Pro II', css: 'sepia(0.25) contrast(1.2) brightness(1.05) saturate(1.2) hue-rotate(-5deg)', accent: '#d9634f' },
-  { id: 'hudson', name: 'Hudson', css: 'saturate(1.2) contrast(1.05) brightness(1.05) hue-rotate(-18deg)', accent: '#6fb3d9' },
-  { id: 'reyes', name: 'Reyes', css: 'sepia(0.2) contrast(0.95) brightness(1.1) saturate(0.8)', accent: '#d6b394' },
-  { id: 'juno', name: 'Juno', css: 'sepia(0.15) saturate(1.3) contrast(1.1) hue-rotate(-10deg)', accent: '#e88bb3' },
-  { id: 'lark', name: 'Lark', css: 'brightness(1.1) contrast(0.95) saturate(0.9)', accent: '#e7e0d2' },
-  { id: 'maven', name: 'Maven', css: 'sepia(0.15) saturate(0.75) contrast(1.05) brightness(1.02) hue-rotate(10deg)', accent: '#a99a82' },
-  { id: 'stinson', name: 'Stinson', css: 'sepia(0.25) contrast(0.9) brightness(1.12) saturate(0.85)', accent: '#d8b491' },
-  { id: 'charmes', name: 'Charmes', css: 'sepia(0.1) contrast(1.15) saturate(1.3) brightness(1.05) hue-rotate(-8deg)', accent: '#e07f5a' },
-  { id: 'pasadena', name: 'Pasadena', css: 'sepia(0.2) saturate(0.9) contrast(1.05) brightness(1.05) hue-rotate(35deg)', accent: '#8fae6b' },
-  { id: 'kelvin', name: 'Kelvin', css: 'sepia(0.35) contrast(1.1) brightness(1.1) saturate(1.15) hue-rotate(-15deg)', accent: '#ff9c47' },
-  { id: 'mister', name: 'Mister', css: 'saturate(0.9) contrast(1.02) brightness(1.02) hue-rotate(8deg)', accent: '#9aa8ad' },
-  { id: 'walden', name: 'Walden', css: 'sepia(0.15) brightness(1.1) contrast(1.05) saturate(1.05) hue-rotate(-12deg)', accent: '#a5c3d8' },
-  { id: 'temporal', name: 'Temporal', css: 'saturate(0.85) contrast(1.18) brightness(0.98)', accent: '#7c8aa0' },
-  { id: 'prisma', name: 'Prisma', css: 'saturate(1.5) contrast(1.15) hue-rotate(15deg)', accent: '#c084fc' },
-  { id: 'frost', name: 'Frost', css: 'saturate(0.7) brightness(1.12) contrast(1.05) hue-rotate(-30deg)', accent: '#9bd1e6' },
+  { id: 'portra', name: 'Portra', css: 'sepia(0.18) saturate(0.95) contrast(0.95) brightness(1.05)', accent: '#e0b48a', vignette: 0.12, grain: 0.1 },
+  { id: 'film', name: 'Film', css: 'sepia(0.12) contrast(1.1) brightness(1.03) saturate(0.9)', accent: '#c8b390', vignette: 0.2, grain: 0.22 },
+  { id: 'vintage', name: 'Vintage', css: 'sepia(0.3) saturate(0.7) brightness(1.12) contrast(0.85)', accent: '#d9b48c', vignette: 0.25, grain: 0.28 },
+  { id: 'retro', name: 'Retro', css: 'sepia(0.45) saturate(1.1) brightness(1.05) contrast(0.9) hue-rotate(-15deg)', accent: '#d89a5e', vignette: 0.22, grain: 0.25 },
+  { id: 'golden', name: 'Golden', css: 'sepia(0.35) saturate(1.15) brightness(1.1) contrast(0.95)', accent: '#e8a54f', vignette: 0.15, grain: 0.08 },
+  { id: 'dawn', name: 'Dawn', css: 'sepia(0.25) saturate(1.1) brightness(1.15) contrast(0.9) hue-rotate(-30deg)', accent: '#f6a78b', vignette: 0.12, grain: 0.1 },
+  { id: 'rose', name: 'Rose', css: 'sepia(0.2) saturate(1.2) brightness(1.08) hue-rotate(-20deg) contrast(0.95)', accent: '#e899a8', vignette: 0.18, grain: 0.1 },
+  { id: 'lilac', name: 'Lilac', css: 'sepia(0.12) saturate(1.15) brightness(1.1) contrast(0.92) hue-rotate(35deg)', accent: '#b39ddb', vignette: 0.12, grain: 0.08 },
+  { id: 'dusk', name: 'Dusk', css: 'sepia(0.15) saturate(1.1) brightness(0.95) hue-rotate(30deg) contrast(1.05)', accent: '#8b7bb8', vignette: 0.25, grain: 0.12 },
+  { id: 'tokyo', name: 'Tokyo', css: 'saturate(1.35) contrast(1.08) brightness(1.06) hue-rotate(-15deg)', accent: '#f472b6', vignette: 0.1, grain: 0.1 },
+  { id: 'neon', name: 'Neon', css: 'saturate(1.6) contrast(1.15) brightness(1.05)', accent: '#22d3ee', vignette: 0.12, grain: 0.1 },
+  { id: 'cinematic', name: 'Cinematic', css: 'sepia(0.25) saturate(1.15) contrast(1.12) brightness(0.97) hue-rotate(-10deg)', accent: '#b9a25f', vignette: 0.3, grain: 0.15 },
+  { id: 'velvet', name: 'Velvet', css: 'sepia(0.25) saturate(1.3) contrast(1.1) brightness(0.95) hue-rotate(-25deg)', accent: '#c0587a', vignette: 0.32, grain: 0.12 },
+  { id: 'mono', name: 'Mono', css: 'grayscale(1) contrast(1.2) brightness(1.03)', accent: '#9aa0a6', grain: 0.2, vignette: 0.22 },
+  { id: 'noir', name: 'Noir', css: 'grayscale(1) contrast(1.55) brightness(0.92)', accent: '#6f7479', vignette: 0.32, grain: 0.18 },
+  { id: 'graphite', name: 'Graphite', css: 'grayscale(0.9) contrast(1.05) brightness(1.1)', accent: '#a3a8ad', vignette: 0.18, grain: 0.22 },
+  { id: 'haze', name: 'Haze', css: 'brightness(1.15) contrast(0.85) saturate(1.05) blur(0.5px)', accent: '#cfc6e8', vignette: 0.1, grain: 0.12 },
+  { id: 'chill', name: 'Chill', css: 'sepia(0.1) saturate(0.95) brightness(1.05) hue-rotate(20deg)', accent: '#7aa2c9', vignette: 0.12, grain: 0.1 },
+  { id: 'summer', name: 'Summer', css: 'saturate(1.3) brightness(1.12) contrast(0.95) sepia(0.12)', accent: '#fbbf24', vignette: 0.08, grain: 0.05 },
+  { id: 'fresh', name: 'Fresh', css: 'saturate(1.2) contrast(1.08) brightness(1.05)', accent: '#4ade80', vignette: 0.05, grain: 0.05 },
+  { id: 'studio', name: 'Studio', css: 'contrast(0.98) brightness(1.08) saturate(0.95)', accent: '#cbd5e1', vignette: 0.08, grain: 0.06 },
 ];
 
 export function getFilter(id: string): FilterPreset {
@@ -103,8 +64,73 @@ export function canvasToFile(canvas: HTMLCanvasElement, fileName: string, qualit
   });
 }
 
+let grainTile: HTMLCanvasElement | null = null;
+
+function getGrainTile(): HTMLCanvasElement {
+  if (grainTile) return grainTile;
+  const size = 160;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const img = ctx.createImageData(size, size);
+    const data = img.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const v = 116 + Math.floor(Math.random() * 28);
+      data[i] = v;
+      data[i + 1] = v;
+      data[i + 2] = v;
+      data[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  grainTile = canvas;
+  return canvas;
+}
+
+export function applyFilmEffects(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  filter: FilterPreset,
+  intensity: number,
+) {
+  const amount = Math.min(Math.max(intensity, 0), 1);
+  if (filter.vignette && filter.vignette > 0) {
+    const strength = 0.55 * filter.vignette * amount;
+    const gradient = ctx.createRadialGradient(
+      width / 2,
+      height / 2,
+      Math.min(width, height) * 0.35,
+      width / 2,
+      height / 2,
+      Math.max(width, height) * 0.72,
+    );
+    gradient.addColorStop(0, 'rgba(0,0,0,0)');
+    gradient.addColorStop(1, `rgba(0,0,0,${strength})`);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+  }
+  if (filter.grain && filter.grain > 0) {
+    const alpha = 0.16 * filter.grain * amount;
+    if (alpha > 0.004) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      const pattern = ctx.createPattern(getGrainTile(), 'repeat');
+      if (pattern) {
+        ctx.fillStyle = pattern;
+        ctx.fillRect(0, 0, width, height);
+      }
+      ctx.restore();
+    }
+  }
+}
+
 export function drawWithIntensity(
   ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
   draw: (ctx: CanvasRenderingContext2D) => void,
   filter: FilterPreset,
   intensity: number,
@@ -117,6 +143,7 @@ export function drawWithIntensity(
     ctx.filter = 'none';
     ctx.globalAlpha = 1;
   }
+  applyFilmEffects(ctx, width, height, filter, intensity);
 }
 
 export async function bakeImageWithFilter(
@@ -133,7 +160,7 @@ export async function bakeImageWithFilter(
     const ctx = canvas.getContext('2d');
     if (!ctx) return file;
 
-    drawWithIntensity(ctx, (c) => c.drawImage(img, 0, 0), filter, intensity);
+    drawWithIntensity(ctx, img.naturalWidth, img.naturalHeight, (c) => c.drawImage(img, 0, 0), filter, intensity);
     const out = await canvasToFile(canvas, file.name.replace(/\.[^.]+$/, '.jpg'));
     return out || file;
   } finally {
@@ -300,7 +327,7 @@ export async function bakeVideoWithFilter(
   const duration = video.duration || 1;
   const drawFrame = () => {
     if (video.readyState >= 2) {
-      drawWithIntensity(ctx, (c) => c.drawImage(video, 0, 0, width, height), filter, intensity);
+      drawWithIntensity(ctx, width, height, (c) => c.drawImage(video, 0, 0, width, height), filter, intensity);
     }
   };
 

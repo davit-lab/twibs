@@ -42,6 +42,9 @@ interface FilterEditorProps {
 
 function FilteredMedia({ media, filter, intensity }: { media: MediaEditorMedia; filter: FilterPreset; intensity: number }) {
   const baseClass = 'absolute inset-0 w-full h-full object-contain';
+  const noiseSvg = encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>"
+  );
   return (
     <div className="relative w-full h-full">
       {media.type === 'image' ? (
@@ -58,6 +61,23 @@ function FilteredMedia({ media, filter, intensity }: { media: MediaEditorMedia; 
           )}
         </>
       )}
+      {filter.vignette ? (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: `radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,${(0.55 * filter.vignette * intensity).toFixed(3)}) 100%)`,
+          }}
+        />
+      ) : null}
+      {filter.grain ? (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,${noiseSvg}")`,
+            opacity: 0.16 * filter.grain * intensity,
+          }}
+        />
+      ) : null}
     </div>
   );
 }
