@@ -45,6 +45,7 @@ export function useCamera(): CameraState {
         setError('Camera is not supported on this device/browser.');
         return;
       }
+      setStream(null);
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: targetFacing,

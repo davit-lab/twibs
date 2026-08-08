@@ -28,7 +28,6 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
   const [flash, setFlash] = useState(false);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [booting, setBooting] = useState(false);
   const [torchToggling, setTorchToggling] = useState(false);
   const [pendingDuration, setPendingDuration] = useState<number | undefined>(undefined);
 
@@ -71,7 +70,6 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
     setCaptureMode(startMode);
     setMedia(null);
     setPendingDuration(undefined);
-    setBooting(true);
     start({ facing: 'user' });
     return () => {
       cleanupRecorder();
@@ -242,8 +240,8 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
               />
             )}
 
-            {/* Camera error / boot overlay */}
-            {(!stream || booting) && !error && (
+            {/* Camera boot overlay */}
+            {!stream && !error && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black">
                 <Loader2 className="h-8 w-8 animate-spin text-white/50" />
                 <p className="text-sm text-white/60">Starting camera…</p>
