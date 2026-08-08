@@ -69,13 +69,6 @@ export function useInterestPosts(options: UseInterestPostsOptions = {}) {
             name,
             icon,
             color
-          ),
-          profiles!interest_posts_user_id_fkey (
-            user_id,
-            username,
-            display_name,
-            avatar_url,
-            is_verified
           )
         `)
         .order('created_at', { ascending: false })
@@ -106,10 +99,26 @@ export function useInterestPosts(options: UseInterestPostsOptions = {}) {
 
       if (error) throw error;
 
+      // Fetch profiles separately (interest_posts has no FK to profiles,
+      // so PostgREST cannot embed it in the same select).
+      let postsWithProfiles = data || [];
+      const profileIds = [...new Set((data || []).map((p: any) => p.user_id))];
+      if (profileIds.length > 0) {
+        const { data: profiles } = await (supabase as any)
+          .from('profiles')
+          .select('user_id, username, display_name, avatar_url, is_verified')
+          .in('user_id', profileIds);
+        const profilesMap = new Map((profiles || []).map((pr: any) => [pr.user_id, pr]));
+        postsWithProfiles = (data || []).map((post: any) => ({
+          ...post,
+          profiles: profilesMap.get(post.user_id),
+        }));
+      }
+
       // Check if current user has liked each post
-      let postsWithLikes = data || [];
-      if (user && data?.length > 0) {
-        const postIds = data.map((p: any) => p.id);
+      let postsWithLikes = postsWithProfiles;
+      if (user && postsWithLikes.length > 0) {
+        const postIds = postsWithLikes.map((p: any) => p.id);
         const { data: likes } = await (supabase as any)
           .from('interest_post_likes')
           .select('post_id')
@@ -118,7 +127,7 @@ export function useInterestPosts(options: UseInterestPostsOptions = {}) {
 
         const likedPostIds = new Set(likes?.map((l: any) => l.post_id) || []);
         
-        postsWithLikes = data.map((post: any) => ({
+        postsWithLikes = postsWithLikes.map((post: any) => ({
           ...post,
           user_has_liked: likedPostIds.has(post.id),
         }));
@@ -261,19 +270,27 @@ export function useInterestPostComments(postId: string) {
     queryFn: async (): Promise<InterestPostComment[]> => {
       const { data, error } = await (supabase as any)
         .from('interest_post_comments')
-        .select(`
-          *,
-          profiles!interest_post_comments_user_id_fkey (
-            username,
-            display_name,
-            avatar_url
-          )
-        `)
+        .select('*')
         .eq('post_id', postId)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      return data || [];
+
+      // Fetch profiles separately (interest_post_comments has no FK to profiles).
+      const comments = data || [];
+      const profileIds = [...new Set(comments.map((c: any) => c.user_id))];
+      if (profileIds.length === 0) return [];
+
+      const { data: profiles } = await (supabase as any)
+        .from('profiles')
+        .select('user_id, username, display_name, avatar_url')
+        .in('user_id', profileIds);
+
+      const profilesMap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
+      return comments.map((c: any) => ({
+        ...c,
+        profiles: profilesMap.get(c.user_id),
+      }));
     },
     enabled: !!postId,
   });

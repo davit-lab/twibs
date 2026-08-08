@@ -139,8 +139,7 @@ export function useAuthorSales() {
         .from('book_purchases')
         .select(`
           *,
-          book:books(id, title, cover_url),
-          buyer:profiles!book_purchases_buyer_id_fkey(username, display_name, avatar_url)
+          book:books(id, title, cover_url)
         `)
         .eq('author_id', user.id)
         .eq('status', 'completed')
@@ -151,7 +150,19 @@ export function useAuthorSales() {
         return [];
       }
 
-      return data || [];
+      // Fetch buyer profiles separately (book_purchases has no FK to profiles)
+      const sales = (data || []) as any[];
+      const buyerIds = [...new Set(sales.map(s => s.buyer_id))];
+      if (buyerIds.length > 0) {
+        const { data: buyers } = await supabase
+          .from('profiles')
+          .select('user_id, username, display_name, avatar_url')
+          .in('user_id', buyerIds);
+        const buyersMap = new Map((buyers || []).map((b: any) => [b.user_id, b]));
+        return sales.map((s: any) => ({ ...s, buyer: buyersMap.get(s.buyer_id) }));
+      }
+
+      return sales;
     },
     enabled: !!user,
   });

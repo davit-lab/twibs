@@ -38,17 +38,7 @@ export default function FollowRequests({ onRequestHandled }: FollowRequestsProps
     const fetchRequests = async () => {
       const { data, error } = await supabase
         .from('follows')
-        .select(`
-          id,
-          follower_id,
-          created_at,
-          profiles!follows_follower_id_fkey (
-            username,
-            display_name,
-            avatar_url,
-            is_verified
-          )
-        `)
+        .select('id, follower_id, created_at')
         .eq('following_id', user.id)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
@@ -56,10 +46,21 @@ export default function FollowRequests({ onRequestHandled }: FollowRequestsProps
       if (error) {
         console.error('Error fetching follow requests:', error);
       } else {
-        const transformedData = (data || []).map(item => ({
-          ...item,
-          profiles: Array.isArray(item.profiles) ? item.profiles[0] : item.profiles,
-        })) as FollowRequest[];
+        // Fetch profiles separately (follows has no FK to profiles)
+        const rows = (data || []) as { id: string; follower_id: string; created_at: string }[];
+        let transformedData = rows.map(item => ({ ...item, profiles: null })) as FollowRequest[];
+        const profileIds = [...new Set(rows.map(r => r.follower_id))];
+        if (profileIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('user_id, username, display_name, avatar_url, is_verified')
+            .in('user_id', profileIds);
+          const profilesMap = new Map((profiles || []).map(p => [p.user_id, p]));
+          transformedData = rows.map(item => ({
+            ...item,
+            profiles: profilesMap.get(item.follower_id) || null,
+          })) as FollowRequest[];
+        }
         setRequests(transformedData);
       }
       setLoading(false);
