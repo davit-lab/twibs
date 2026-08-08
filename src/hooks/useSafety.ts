@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 
 export type ReportTargetType = 'post' | 'profile' | 'group' | 'reel' | 'interest_post' | 'comment';
 
-function useIdList(key: string, table: string, column: string) {
+function useIdList(key: string, table: string, column: string, ownerColumn = 'user_id') {
   const { user } = useAuth();
   return useQuery({
     queryKey: [key],
@@ -14,7 +14,7 @@ function useIdList(key: string, table: string, column: string) {
       const { data, error } = await (supabase as any)
         .from(table)
         .select(column)
-        .eq('user_id', user.id);
+        .eq(ownerColumn, user.id);
       if (error) throw error;
       return (data || []).map((row: any) => row[column] as string);
     },
@@ -23,11 +23,11 @@ function useIdList(key: string, table: string, column: string) {
 }
 
 export function useBlockedUsers() {
-  return useIdList('blocked-users', 'blocks', 'blocked_id');
+  return useIdList('blocked-users', 'blocks', 'blocked_id', 'blocker_id');
 }
 
 export function useMutedUsers() {
-  return useIdList('muted-users', 'mutes', 'muted_id');
+  return useIdList('muted-users', 'mutes', 'muted_id', 'muter_id');
 }
 
 export function useSavedPosts() {

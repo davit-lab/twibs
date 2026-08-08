@@ -1,5 +1,5 @@
 /* Twibsers service worker — app shell cache for offline access */
-const CACHE = 'twibsers-shell-v1';
+const CACHE = 'twibsers-shell-v2';
 const SHELL = ['/', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {

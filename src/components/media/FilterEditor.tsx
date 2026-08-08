@@ -123,7 +123,7 @@ export default function FilterEditor({ media, mode, initialFilter, initialIntens
   };
 
   return (
-    <div className="relative flex flex-col h-full w-full bg-[#0d0c12] text-white">
+    <div className="relative flex flex-col h-full w-full min-w-0 bg-[#0d0c12] text-white">
       {/* Header */}
       <div className="relative z-20 flex items-center justify-between px-3 py-3">
         <div className="flex items-center gap-2">
@@ -182,8 +182,8 @@ export default function FilterEditor({ media, mode, initialFilter, initialIntens
       )}
 
       {/* Filter strip */}
-      <div className="pt-3">
-        <ScrollArea className="w-full">
+      <div className="pt-3 min-w-0">
+        <ScrollArea className="w-full min-w-0">
           <div className="flex gap-2.5 px-4 pb-1">
             {FILTERS.map((f) => {
               const active = f.id === selected.id;
@@ -237,7 +237,7 @@ export default function FilterEditor({ media, mode, initialFilter, initialIntens
 
       {/* Story caption + music */}
       {mode === 'story' && (
-        <div className="px-4 pt-3 space-y-3 pb-2">
+        <div className="px-4 pt-3 space-y-3 pb-2 min-w-0">
           <Textarea
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
