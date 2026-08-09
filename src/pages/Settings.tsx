@@ -6,6 +6,7 @@ import { useLoginSessions } from '@/hooks/useLoginSessions';
 import { useCallBlocks } from '@/hooks/useCallBlocks';
 import { useUserInterests, useInterestCategories, useInterestActions } from '@/hooks/useInterests';
 import { useAccountChangeUsage, useEmailVerification, maskEmail } from '@/hooks/useAccountSecurity';
+import { useAdminActions } from '@/hooks/useAdminActions';
 import InterestCard from '@/components/onboarding/InterestCard';
 import VerifyCodeDialog from '@/components/settings/VerifyCodeDialog';
 import OtpInput from '@/components/settings/OtpInput';
@@ -79,7 +80,8 @@ const NAV_ITEMS: { id: SettingsSection; label: string; icon: React.ElementType }
 export default function Settings() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, profile, loading: authLoading, updateProfile } = useAuth();
+  const { user, profile, loading: authLoading, updateProfile, signOut } = useAuth();
+  const { deleteOwnAccount } = useAdminActions();
   const { preferences, loading: prefsLoading, saving: prefsSaving, updatePreferences } = useUserPreferences();
   const { sessions, loading: sessionsLoading, revokeSession, revokeAllOtherSessions } = useLoginSessions();
   const { blockedUsers, loading: blocksLoading, unblockUser } = useCallBlocks();
@@ -93,6 +95,7 @@ export default function Settings() {
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [nameVerifyOpen, setNameVerifyOpen] = useState(false);
   const [nameVerified, setNameVerified] = useState(false);
   const [passwordStep, setPasswordStep] = useState<'form' | 'code'>('form');
@@ -733,12 +736,32 @@ export default function Settings() {
           <DialogHeader>
             <DialogTitle className="text-destructive">Delete Account</DialogTitle>
             <DialogDescription>
-              This action is permanent and cannot be undone. All your data will be permanently deleted.
+              This action is permanent and cannot be undone. Your profile and login will be removed immediately.
+              Your posts, reels and messages may be retained for up to 7 days so our support team can send you a
+              copy of your data before everything is permanently purged.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
-            <Button variant="destructive">Delete my account</Button>
+            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)} disabled={deleting}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleting}
+              onClick={async () => {
+                setDeleting(true);
+                const { error } = await deleteOwnAccount();
+                setDeleting(false);
+                if (error) {
+                  toast({ title: 'Failed to delete account', description: error, variant: 'destructive' });
+                  return;
+                }
+                setDeleteConfirmOpen(false);
+                await signOut();
+                navigate('/auth');
+              }}
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {deleting ? 'Deleting…' : 'Delete my account'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

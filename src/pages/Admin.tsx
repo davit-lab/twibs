@@ -20,6 +20,7 @@ import AdminReportsTab from '@/components/admin/AdminReportsTab';
 import AdminVerificationTab from '@/components/admin/AdminVerificationTab';
 import AdminSettingsTab from '@/components/admin/AdminSettingsTab';
 import AdminAuditTab from '@/components/admin/AdminAuditTab';
+import AdminDeletedUsersTab from '@/components/admin/AdminDeletedUsersTab';
 import PurgeAllUsersDialog from '@/components/admin/PurgeAllUsersDialog';
 
 export default function Admin() {
@@ -111,9 +112,12 @@ export default function Admin() {
         <AdminStats />
 
         <Tabs defaultValue="users" className="space-y-6">
-          <TabsList className="flex flex-wrap h-auto w-full lg:w-auto lg:inline-grid lg:grid-cols-8">
+          <TabsList className="flex flex-wrap h-auto w-full lg:w-auto lg:inline-grid lg:grid-cols-9">
             <TabsTrigger value="users" className="gap-2">
               <Users className="w-4 h-4" /> Users
+            </TabsTrigger>
+            <TabsTrigger value="deleted" className="gap-2">
+              <Trash className="w-4 h-4" /> Deleted
             </TabsTrigger>
             <TabsTrigger value="posts" className="gap-2">
               <FileText className="w-4 h-4" /> Posts
@@ -152,6 +156,10 @@ export default function Admin() {
 
           <TabsContent value="users">
             <AdminUsersTab />
+          </TabsContent>
+
+          <TabsContent value="deleted">
+            <AdminDeletedUsersTab />
           </TabsContent>
 
           <TabsContent value="posts">

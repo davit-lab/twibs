@@ -83,6 +83,7 @@ export default function AdminUsersTab() {
       let query = (supabase as any)
         .from('profiles')
         .select('*', { count: 'exact' })
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (currentSearch.trim()) {
@@ -258,7 +259,7 @@ export default function AdminUsersTab() {
     }
     setUsers(prev => prev.filter(u => u.user_id !== target.user_id));
     setBans(prev => prev.filter(b => b.user_id !== target.user_id));
-    toast({ title: 'User deleted', description: 'The account and all data were removed.' });
+    toast({ title: 'User deleted', description: 'Account removed. Content retained 7 days for export — see the Deleted tab.' });
   };
 
   const isBanned = (id: string) => bans.some(b => b.user_id === id && b.is_active);

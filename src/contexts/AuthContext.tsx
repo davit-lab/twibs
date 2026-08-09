@@ -18,6 +18,7 @@ interface Profile {
   is_verified: boolean;
   created_at: string;
   updated_at: string;
+  deleted_at: string | null;
 }
 
 interface UserRole {
@@ -62,7 +63,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (!error && data) {
       setProfile(data as Profile);
+      return data as Profile;
     }
+    return null;
   }, []);
 
   const fetchRoles = useCallback(async (userId: string) => {
@@ -76,6 +79,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // If the account was deleted (soft-deleted), revoke the session so the
+  // user is kicked back to the sign-in page.
+  const kickOutIfDeleted = useCallback(async (userId: string): Promise<boolean> => {
+    const profile = await fetchProfile(userId);
+    if (profile?.deleted_at) {
+      await supabase.auth.signOut();
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      setRoles([]);
+      return true;
+    }
+    return false;
+  }, [fetchProfile]);
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
@@ -84,9 +102,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (session?.user) {
           // Use microtask to avoid Supabase realtime deadlock
-          queueMicrotask(() => {
-            fetchProfile(session.user.id);
-            fetchRoles(session.user.id);
+          queueMicrotask(async () => {
+            const kicked = await kickOutIfDeleted(session.user.id);
+            if (!kicked) await fetchRoles(session.user.id);
           });
         } else {
           setProfile(null);
@@ -100,14 +118,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        await Promise.all([fetchProfile(session.user.id), fetchRoles(session.user.id)]);
+        const kicked = await kickOutIfDeleted(session.user.id);
+        if (!kicked) await fetchRoles(session.user.id);
       }
 
       setLoading(false);
     });
 
     return () => subscription.unsubscribe();
-  }, [fetchProfile, fetchRoles]);
+  }, [fetchProfile, fetchRoles, kickOutIfDeleted]);
 
   const signUp = async (email: string, password: string, displayName?: string) => {
     const redirectUrl = `${window.location.origin}/`;

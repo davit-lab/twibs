@@ -15,11 +15,11 @@ export default function AdminStats() {
         return q.then((r: any) => r.count ?? 0);
       };
       const [users, posts, books, reels, verified, banned] = await Promise.all([
-        countQuery('profiles'),
+        countQuery('profiles', (q) => q.is('deleted_at', null)),
         countQuery('posts'),
         countQuery('books', (q) => q.eq('status', 'published')),
         countQuery('reels'),
-        countQuery('profiles', (q) => q.eq('is_verified', true)),
+        countQuery('profiles', (q) => q.eq('is_verified', true).is('deleted_at', null)),
         countQuery('user_bans', (q) => q.eq('is_active', true)),
       ]);
       if (mounted) setStats({ users, posts, books, reels, verified, banned });

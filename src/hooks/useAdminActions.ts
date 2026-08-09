@@ -149,6 +149,67 @@ export function useAdminActions() {
     return { error: error?.message ?? null };
   }, [requireStaff]);
 
+  const getDeletions = useCallback(async () => {
+    const guard = requireStaff();
+    if (guard) return [];
+    const { data, error } = await (supabase as any)
+      .from('user_deletions')
+      .select('*')
+      .order('deleted_at', { ascending: false });
+    if (error) return [];
+    return (data || []) as Array<{
+      id: string;
+      user_id: string;
+      email: string | null;
+      display_name: string | null;
+      username: string | null;
+      reason: string | null;
+      deleted_by: string | null;
+      deleted_at: string;
+      purge_due_at: string;
+      purged_at: string | null;
+    }>;
+  }, [requireStaff]);
+
+  const exportUserData = useCallback(async (userId: string) => {
+    const guard = requireStaff();
+    if (guard) return { error: guard, blob: null };
+    const { data, error } = await (supabase as any).rpc('admin_get_user_data', {
+      p_user_id: userId,
+    });
+    if (error) return { error: error?.message ?? 'Export failed', blob: null };
+
+    const jszipModule = await import('jszip');
+    const zip = new jszipModule.default();
+    const uid = String(userId);
+    const safe = uid.replace(/[^a-zA-Z0-9_-]/g, '_');
+    zip.file(`${safe}/index.json`, JSON.stringify(data ?? {}, null, 2));
+    const blob = await zip.generateAsync({ type: 'blob' });
+    return { error: null, blob };
+  }, [requireStaff]);
+
+  const purgeUserData = useCallback(async (userId: string): Promise<RpcResult> => {
+    const guard = requireStaff();
+    if (guard) return { error: guard };
+    const { error } = await (supabase as any).rpc('admin_purge_user_data', {
+      p_user_id: userId,
+    });
+    return { error: error?.message ?? null };
+  }, [requireStaff]);
+
+  const purgeExpiredDeletions = useCallback(async (): Promise<RpcResult> => {
+    const guard = requireStaff();
+    if (guard) return { error: guard };
+    const { error } = await (supabase as any).rpc('purge_expired_user_deletions');
+    return { error: error?.message ?? null };
+  }, [requireStaff]);
+
+  const deleteOwnAccount = useCallback(async (): Promise<RpcResult> => {
+    if (!user) return { error: 'Not authenticated' };
+    const { error } = await (supabase as any).rpc('user_delete_own_account');
+    return { error: error?.message ?? null };
+  }, [user]);
+
   return {
     setRole,
     deleteUser,
@@ -161,5 +222,10 @@ export function useAdminActions() {
     getSessions,
     forcePasswordReset,
     writeAudit,
+    getDeletions,
+    exportUserData,
+    purgeUserData,
+    purgeExpiredDeletions,
+    deleteOwnAccount,
   };
 }
