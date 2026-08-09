@@ -816,9 +816,9 @@ $$;
 DO $$
 BEGIN
   BEGIN PERFORM cron.unschedule('red-button-worker'); EXCEPTION WHEN OTHERS THEN NULL; END;
-  BEGIN PERFORM cron.schedule('red-button-worker', '* * * * *', $$SELECT public.red_button_worker_tick()$$);
+  BEGIN PERFORM cron.schedule('red-button-worker', '* * * * *', $cron$SELECT public.red_button_worker_tick()$cron$);
   EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN PERFORM cron.unschedule('red-button-watchdog'); EXCEPTION WHEN OTHERS THEN NULL; END;
-  BEGIN PERFORM cron.schedule('red-button-watchdog', '* * * * *', $$SELECT public.red_button_watchdog_tick()$$);
+  BEGIN PERFORM cron.schedule('red-button-watchdog', '* * * * *', $cron$SELECT public.red_button_watchdog_tick()$cron$);
   EXCEPTION WHEN OTHERS THEN NULL; END;
 END $$;
