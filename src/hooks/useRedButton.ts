@@ -26,7 +26,8 @@ export function useRedButton() {
       return;
     }
     try {
-      setStatus(redButtonStatusSchema.parse(data));
+      const payload = Array.isArray(data) ? data[0] : data;
+      setStatus(redButtonStatusSchema.parse(payload));
       setError(null);
     } catch {
       setError('Invalid status payload');
@@ -47,7 +48,8 @@ export function useRedButton() {
     const { data, error: rpcError } = await (supabase as any).rpc('admin_red_button_begin_arming');
     if (rpcError) return { phrase: null, error: rpcError.message };
     try {
-      const parsed = armingPayloadSchema.parse(data);
+      const payload = Array.isArray(data) ? data[0] : data;
+      const parsed = armingPayloadSchema.parse(payload);
       return { phrase: parsed.phrase, error: null };
     } catch {
       return { phrase: null, error: 'Invalid arming response' };
@@ -61,7 +63,8 @@ export function useRedButton() {
         p_phrase: phrase,
       });
       if (rpcError) return { jobId: null, error: rpcError.message };
-      const parsed = data as TriggerResponse;
+      const payload = Array.isArray(data) ? data[0] : data;
+      const parsed = payload as TriggerResponse;
       return { jobId: parsed?.job_id ?? null, error: null };
     },
     [],

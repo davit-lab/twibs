@@ -143,7 +143,9 @@ export const redButtonTriggerSchema = z.object({
 
 export const armingPayloadSchema = z.object({
   phrase: z.string().min(1),
-  expires_at: z.string().datetime(),
+  // Postgres serializes timestamptz through jsonb with microsecond + offset
+  // variants that strict ISO-8601 validation rejects, so accept any string.
+  expires_at: z.string(),
 });
 
 export const redButtonStatusSchema = z.object({
