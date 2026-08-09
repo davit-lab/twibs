@@ -368,7 +368,7 @@ CREATE OR REPLACE FUNCTION public.admin_red_button_trigger(p_pin TEXT, p_phrase 
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE
   v_state public.emergency_state;
@@ -480,12 +480,14 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE v_state public.emergency_state;
 BEGIN
   IF NOT public.is_super_admin() THEN
     RAISE EXCEPTION 'not authorized';
   END IF;
 
-  IF public.emergency_get_state().mode <> 'recovery' THEN
+  v_state := public.emergency_get_state();
+  IF v_state.mode <> 'recovery' THEN
     RAISE EXCEPTION 'platform is not in recovery mode' USING ERRCODE = 'P0004';
   END IF;
 
