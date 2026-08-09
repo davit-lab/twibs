@@ -17,7 +17,7 @@ SET search_path = public
 AS $$
     SELECT EXISTS (
         SELECT 1 FROM public.user_roles
-        WHERE user_id = auth.uid() AND role = 'super_admin'
+        WHERE user_id = auth.uid() AND role::text = 'super_admin'
     )
 $$;
 
@@ -30,7 +30,7 @@ SET search_path = public
 AS $$
     SELECT EXISTS (
         SELECT 1 FROM public.user_roles
-        WHERE user_id = auth.uid() AND role IN ('admin', 'super_admin')
+        WHERE user_id = auth.uid() AND role::text IN ('admin', 'super_admin')
     )
 $$;
 
@@ -43,7 +43,7 @@ SET search_path = public
 AS $$
     SELECT EXISTS (
         SELECT 1 FROM public.user_roles
-        WHERE user_id = auth.uid() AND role IN ('moderator', 'admin', 'super_admin')
+        WHERE user_id = auth.uid() AND role::text IN ('moderator', 'admin', 'super_admin')
     )
 $$;
 
@@ -56,7 +56,7 @@ SET search_path = public
 AS $$
     SELECT EXISTS (
         SELECT 1 FROM public.user_roles
-        WHERE user_id = auth.uid() AND role IN ('admin', 'super_admin', 'moderator')
+        WHERE user_id = auth.uid() AND role::text IN ('admin', 'super_admin', 'moderator')
     )
 $$;
 
@@ -69,7 +69,7 @@ SET search_path = public
 AS $$
     SELECT EXISTS (
         SELECT 1 FROM public.user_roles
-        WHERE user_id = auth.uid() AND role IN ('super_admin', 'admin', 'moderator', 'support')
+        WHERE user_id = auth.uid() AND role::text IN ('super_admin', 'admin', 'moderator', 'support')
     )
 $$;
 
@@ -281,7 +281,7 @@ BEGIN
   END IF;
 
   DELETE FROM public.user_roles
-  WHERE user_id = p_user_id AND role IN ('super_admin', 'admin', 'moderator', 'support');
+  WHERE user_id = p_user_id AND role::text IN ('super_admin', 'admin', 'moderator', 'support');
 
   IF p_role <> 'user' THEN
     INSERT INTO public.user_roles (user_id, role) VALUES (p_user_id, p_role);
