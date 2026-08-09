@@ -51,10 +51,12 @@ interface UseInterestPostsOptions {
   categoryId?: string;
   categoryIds?: string[];
   limit?: number;
+  /** Fetch a user's posts in any category (e.g. profile feed), skipping the category filter. */
+  includeAll?: boolean;
 }
 
 export function useInterestPosts(options: UseInterestPostsOptions = {}) {
-  const { userId, categoryId, categoryIds, limit = 10 } = options;
+  const { userId, categoryId, categoryIds, limit = 10, includeAll = false } = options;
   const { user } = useAuth();
 
   return useInfiniteQuery({
@@ -78,16 +80,14 @@ export function useInterestPosts(options: UseInterestPostsOptions = {}) {
         query = query.eq('user_id', userId);
       }
 
-      if (categoryId) {
-        query = query.eq('category_id', categoryId);
-      }
-
-      if (!categoryId && categoryIds && categoryIds.length > 0) {
-        query = query.in('category_id', categoryIds);
-      }
-
-      if (!categoryId && (!categoryIds || categoryIds.length === 0)) {
-        return { posts: [], nextCursor: null };
+      if (!includeAll) {
+        if (categoryId) {
+          query = query.eq('category_id', categoryId);
+        } else if (categoryIds && categoryIds.length > 0) {
+          query = query.in('category_id', categoryIds);
+        } else {
+          return { posts: [], nextCursor: null };
+        }
       }
 
       // Cursor-based pagination using created_at

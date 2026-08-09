@@ -57,7 +57,7 @@ export default function InterestsFeed({ userId, isOwnProfile = false }: Interest
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useInterestPosts({ userId });
+  } = useInterestPosts({ userId, includeAll: true });
   const { createPost } = useInterestPostActions();
   const queryClient = useQueryClient();
   const { data: mutedIds = [] } = useMutedUsers();
