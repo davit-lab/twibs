@@ -11,9 +11,12 @@
 --   red_button_hour_limit, red_button_minute_limit, alert_webhook_url.
 -- ============================================================
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-CREATE EXTENSION IF NOT EXISTS pg_net;
-CREATE EXTENSION IF NOT EXISTS pg_cron;
+DO $$
+BEGIN
+  BEGIN CREATE EXTENSION IF NOT EXISTS pgcrypto; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN CREATE EXTENSION IF NOT EXISTS pg_net; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN CREATE EXTENSION IF NOT EXISTS pg_cron; EXCEPTION WHEN OTHERS THEN NULL; END;
+END $$;
 
 -- ------------------------------------------------------------
 -- 1. Mode enum + singleton state
