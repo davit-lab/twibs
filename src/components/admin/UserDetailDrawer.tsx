@@ -25,7 +25,7 @@ import {
 import { AdminUser, UserBan, getRoleLabel } from './types';
 
 interface UserDetailDrawerProps {
-  user: AdminUser;
+  user: AdminUser | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isBanned: boolean;
@@ -106,6 +106,8 @@ export default function UserDetailDrawer({
         { label: 'Verify requests', value: activity.verification_requests, icon: BadgeCheck },
       ]
     : [];
+
+  if (!user) return null;
 
   return (
     <>

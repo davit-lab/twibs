@@ -592,7 +592,7 @@ export default function AdminUsersTab() {
       </Dialog>
 
       <UserDetailDrawer
-        user={drawerUser!}
+        user={drawerUser}
         open={!!drawerUser}
         onOpenChange={(open) => !open && setDrawerUser(null)}
         isBanned={drawerUser ? isBanned(drawerUser.user_id) : false}
