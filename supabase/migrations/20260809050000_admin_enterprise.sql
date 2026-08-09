@@ -553,8 +553,8 @@ BEGIN
   DELETE FROM public.stories WHERE user_id = target_user_id;
 
   DELETE FROM public.library_likes WHERE user_id = target_user_id;
-  DELETE FROM public.book_purchases WHERE user_id = target_user_id;
-  DELETE FROM public.author_earnings WHERE author_id = target_user_id;
+  DELETE FROM public.book_purchases WHERE buyer_id = target_user_id;
+  DELETE FROM public.author_earnings WHERE user_id = target_user_id;
 
   DELETE FROM public.library_items WHERE user_id = target_user_id;
   DELETE FROM public.books WHERE id = ANY(target_book_ids);
