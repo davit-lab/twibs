@@ -2,7 +2,7 @@ import { useRef, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useUserInterests } from '@/hooks/useInterests';
+import { useUserInterests, useInterestCategories, useInterestActions } from '@/hooks/useInterests';
 import { useInterestPosts, useInterestPostActions } from '@/hooks/useInterestPosts';
 import { useMutedUsers } from '@/hooks/useSafety';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import InterestPostCard from './InterestPostCard';
+import InterestCard from '@/components/onboarding/InterestCard';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
@@ -30,6 +31,7 @@ import {
   ImagePlus,
   X,
   Sparkles,
+  Plus,
 } from 'lucide-react';
 
 interface MediaPreview {
@@ -47,6 +49,8 @@ export default function InterestsFeed({ userId, isOwnProfile = false }: Interest
   const { user } = useAuth();
   const { toast } = useToast();
   const { data: userInterests, isLoading: interestsLoading } = useUserInterests(userId);
+  const { data: allCategories } = useInterestCategories();
+  const { addInterest, removeInterest } = useInterestActions();
   const {
     data: postsData,
     isLoading: postsLoading,
@@ -59,6 +63,7 @@ export default function InterestsFeed({ userId, isOwnProfile = false }: Interest
   const { data: mutedIds = [] } = useMutedUsers();
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [addInterestsOpen, setAddInterestsOpen] = useState(false);
   const [newPostContent, setNewPostContent] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [mediaPreview, setMediaPreview] = useState<MediaPreview | null>(null);
@@ -228,28 +233,50 @@ export default function InterestsFeed({ userId, isOwnProfile = false }: Interest
 
   const interests = userInterests?.map((ui) => ui.interest_categories).filter(Boolean) || [];
   const availableCategories = interests;
+  const interestIds = new Set(interests.map((i) => i.id));
+
+  const toggleInterest = (categoryId: string) => {
+    if (interestIds.has(categoryId)) {
+      removeInterest.mutateAsync(categoryId).catch(() =>
+        toast({ variant: 'destructive', title: 'Failed', description: 'Could not remove interest.' })
+      );
+    } else {
+      addInterest.mutateAsync(categoryId).catch(() =>
+        toast({ variant: 'destructive', title: 'Failed', description: 'Could not add interest.' })
+      );
+    }
+  };
 
   return (
     <div className="space-y-5">
       {/* User's Interests Display */}
-      {interests.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {interests.map((interest) => (
-            <span
-              key={interest.id}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium"
-              style={{
-                backgroundColor: `${interest.color}20`,
-                color: interest.color,
-                borderColor: interest.color,
-                borderWidth: 1,
-              }}
-            >
-              {interest.name}
-            </span>
-          ))}
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {interests.map((interest) => (
+          <span
+            key={interest.id}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium"
+            style={{
+              backgroundColor: `${interest.color}20`,
+              color: interest.color,
+              borderColor: interest.color,
+              borderWidth: 1,
+            }}
+          >
+            {interest.name}
+          </span>
+        ))}
+
+        {isOwnProfile && (
+          <button
+            type="button"
+            onClick={() => setAddInterestsOpen(true)}
+            aria-label="Add interest"
+            className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-dashed border-muted-foreground/40 text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        )}
+      </div>
 
       {/* Create post entry (all users) */}
       {isOwnProfile && (
@@ -423,6 +450,37 @@ export default function InterestsFeed({ userId, isOwnProfile = false }: Interest
                 )}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add interests dialog */}
+      <Dialog open={addInterestsOpen} onOpenChange={setAddInterestsOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add interests</DialogTitle>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[55vh] overflow-y-auto pr-1">
+            {allCategories?.map((category) => (
+              <InterestCard
+                key={category.id}
+                name={category.name}
+                icon={category.icon}
+                color={category.color}
+                selected={interestIds.has(category.id)}
+                onToggle={() => toggleInterest(category.id)}
+              />
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between gap-3 pt-2">
+            <p className="text-sm text-muted-foreground font-medium">
+              {interests.length} {interests.length === 1 ? 'interest' : 'interests'} selected
+            </p>
+            <Button variant="outline" onClick={() => setAddInterestsOpen(false)}>
+              Done
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
