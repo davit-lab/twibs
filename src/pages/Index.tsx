@@ -9,7 +9,7 @@ import PullToRefresh from '@/components/feed/PullToRefresh';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import Landing from '@/components/landing/Landing';
 import WhoToFollow from '@/components/social/WhoToFollow';
-import TrendingList from '@/components/social/TrendingList';
+import ConfessionWall from '@/components/social/ConfessionWall';
 import { Loader2 } from 'lucide-react';
 
 export default function Index() {
@@ -86,7 +86,7 @@ export default function Index() {
             <aside className="hidden lg:block pt-2">
               <div className="sticky top-20 space-y-5">
                 <WhoToFollow />
-                <TrendingList />
+                <ConfessionWall />
               </div>
             </aside>
           </div>
