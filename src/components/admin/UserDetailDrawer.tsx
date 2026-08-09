@@ -63,7 +63,7 @@ export default function UserDetailDrawer({
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (!user || !open) return;
     setActivity(null);
     setSessions(null);
     setLoading(true);
@@ -72,7 +72,7 @@ export default function UserDetailDrawer({
       setSessions(s);
       setLoading(false);
     });
-  }, [open, user.user_id, getActivity, getSessions]);
+  }, [open, user?.user_id, getActivity, getSessions]);
 
   const runAction = async (
     key: string,
