@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import {
   Shield, Users, FileText, Clapperboard, BookOpen, Flag, BadgeCheck,
-  Settings, ScrollText, Loader2, Trash, Crown,
+  Settings, ScrollText, Loader2, Trash, Crown, ShieldAlert,
 } from 'lucide-react';
 import AdminStats from '@/components/admin/AdminStats';
 import AdminUsersTab from '@/components/admin/AdminUsersTab';
@@ -21,11 +21,14 @@ import AdminVerificationTab from '@/components/admin/AdminVerificationTab';
 import AdminSettingsTab from '@/components/admin/AdminSettingsTab';
 import AdminAuditTab from '@/components/admin/AdminAuditTab';
 import AdminDeletedUsersTab from '@/components/admin/AdminDeletedUsersTab';
+import RedButtonControl from '@/components/admin/security/RedButtonControl';
 import PurgeAllUsersDialog from '@/components/admin/PurgeAllUsersDialog';
 
 export default function Admin() {
   const { user, isStaff, isAdmin, isSuperAdmin, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState<string>((location.state as { openTab?: string } | null)?.openTab ?? 'users');
   const [openReportCount, setOpenReportCount] = useState(0);
   const [pendingVerifyCount, setPendingVerifyCount] = useState(0);
   const [purgeOpen, setPurgeOpen] = useState(false);
@@ -111,8 +114,8 @@ export default function Admin() {
 
         <AdminStats />
 
-        <Tabs defaultValue="users" className="space-y-6">
-          <TabsList className="flex flex-wrap h-auto w-full lg:w-auto lg:inline-grid lg:grid-cols-9">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="flex flex-wrap h-auto w-full lg:w-auto lg:inline-grid lg:grid-cols-10">
             <TabsTrigger value="users" className="gap-2">
               <Users className="w-4 h-4" /> Users
             </TabsTrigger>
@@ -147,6 +150,11 @@ export default function Admin() {
             {isAdmin && (
               <TabsTrigger value="settings" className="gap-2">
                 <Settings className="w-4 h-4" /> Settings
+              </TabsTrigger>
+            )}
+            {isSuperAdmin && (
+              <TabsTrigger value="security" className="gap-2">
+                <ShieldAlert className="w-4 h-4" /> Security
               </TabsTrigger>
             )}
             <TabsTrigger value="audit" className="gap-2">
@@ -185,6 +193,12 @@ export default function Admin() {
           {isAdmin && (
             <TabsContent value="settings">
               <AdminSettingsTab />
+            </TabsContent>
+          )}
+
+          {isSuperAdmin && (
+            <TabsContent value="security">
+              <RedButtonControl />
             </TabsContent>
           )}
 
