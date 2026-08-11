@@ -29,7 +29,7 @@ export default function Messages() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { conversations, loading: convsLoading, startConversation, createGroup, createCommunity, joinByCode } = useConversations();
+  const { conversations, loading: convsLoading, startConversation, createGroup, createCommunity, joinByCode, leaveConversation, deleteConversation } = useConversations();
   
   const selectedConvId = searchParams.get('conv');
   const newUserId = searchParams.get('new');
@@ -162,6 +162,18 @@ export default function Messages() {
     setSearchParams({ conv: convId });
   };
 
+  const handleRemoveChat = async (conv: Conversation) => {
+    const ok = await leaveConversation(conv.id);
+    if (ok && selectedConvId === conv.id) setSearchParams({});
+    return ok;
+  };
+
+  const handleDeleteChat = async (conv: Conversation) => {
+    const ok = await deleteConversation(conv.id);
+    if (ok && selectedConvId === conv.id) setSearchParams({});
+    return ok;
+  };
+
   const handleBack = () => {
     setSearchParams({});
   };
@@ -220,6 +232,9 @@ export default function Messages() {
               selectedId={selectedConvId || undefined}
               onSelect={handleSelectConversation}
               onNewChat={() => setShowNewChat(true)}
+              currentUserId={user.id}
+              onRemoveChat={handleRemoveChat}
+              onDeleteChat={handleDeleteChat}
             />
           ) : (
             <CallHistory />

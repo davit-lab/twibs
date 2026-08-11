@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppSettings } from '@/contexts/SystemSettingsContext';
 
 export interface MessageAttachment {
   id: string;
@@ -48,6 +49,7 @@ interface TypingUser {
 
 export function useMessages(conversationId: string | null) {
   const { user } = useAuth();
+  const { isEnabled } = useAppSettings();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
@@ -248,6 +250,7 @@ export function useMessages(conversationId: string | null) {
   const sendMessage = async (content: string, attachments: NewAttachment[] = [], replyToId: string | null = null) => {
     if (!conversationId || !user) return;
     if (!content.trim() && attachments.length === 0) return;
+    if (!isEnabled('direct_messages_enabled')) throw new Error('Direct messages are currently disabled by the admin.');
 
     try {
       const { data: inserted, error } = await supabase

@@ -585,8 +585,15 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="relative w-7 h-7">
-                  <svg className="w-7 h-7 -rotate-90" viewBox="0 0 32 32">
+                <div className="relative w-8 h-8 progress-ring">
+                  <svg className="w-8 h-8 -rotate-90" viewBox="0 0 32 32" aria-hidden>
+                    <defs>
+                      <linearGradient id="post-progress-grad" x1="0%" x2="100%">
+                        <stop offset="0%" stopColor="hsl(var(--primary))" />
+                        <stop offset="100%" stopColor="hsl(var(--accent))" />
+                      </linearGradient>
+                    </defs>
+
                     <circle
                       cx="16"
                       cy="16"
@@ -594,22 +601,27 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="3"
-                      className="text-muted"
+                      className="progress-ring__bg text-muted"
                     />
+
                     <circle
                       cx="16"
                       cy="16"
                       r="13.5"
                       fill="none"
-                      stroke="currentColor"
-                      strokeWidth="3"
+                      strokeWidth="3.5"
                       strokeLinecap="round"
                       strokeDasharray={2 * Math.PI * 13.5}
                       strokeDashoffset={2 * Math.PI * 13.5 * (1 - Math.min(charCount / MAX_CHARS, 1))}
                       className={cn(
-                        "transition-all duration-200",
-                        isOverLimit ? "text-destructive" : charCount > MAX_CHARS - 200 ? "text-amber-500" : "text-primary"
+                        "progress-ring__fg transition-all duration-200",
+                        isOverLimit
+                          ? "text-destructive"
+                          : charCount > MAX_CHARS - 200
+                          ? "text-amber-500"
+                          : "progress-ring--gradient"
                       )}
+                      stroke={isOverLimit || charCount > MAX_CHARS - 200 ? 'currentColor' : 'url(#post-progress-grad)'}
                     />
                   </svg>
                   {charCount > MAX_CHARS - 200 && (

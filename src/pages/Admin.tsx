@@ -2,16 +2,14 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layout/MainLayout';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import {
-  Shield, Users, FileText, Clapperboard, BookOpen, Flag, BadgeCheck,
-  Settings, ScrollText, Loader2, Trash, Crown, ShieldAlert,
+  Users, FileText, Clapperboard, BookOpen, Flag, BadgeCheck,
+  Settings, ScrollText, Loader2, Trash, ShieldAlert, ScanFace,
 } from 'lucide-react';
-import AdminStats from '@/components/admin/AdminStats';
+import AdminControlCenter from '@/components/admin/AdminControlCenter';
 import AdminUsersTab from '@/components/admin/AdminUsersTab';
 import AdminPostsTab from '@/components/admin/AdminPostsTab';
 import AdminReelsTab from '@/components/admin/AdminReelsTab';
@@ -21,8 +19,24 @@ import AdminVerificationTab from '@/components/admin/AdminVerificationTab';
 import AdminSettingsTab from '@/components/admin/AdminSettingsTab';
 import AdminAuditTab from '@/components/admin/AdminAuditTab';
 import AdminDeletedUsersTab from '@/components/admin/AdminDeletedUsersTab';
+import AdminFaceAuthTab from '@/components/admin/AdminFaceAuthTab';
 import RedButtonControl from '@/components/admin/security/RedButtonControl';
 import PurgeAllUsersDialog from '@/components/admin/PurgeAllUsersDialog';
+import { cn } from '@/lib/utils';
+
+const TABS: { value: string; icon: React.ElementType; label: string; staffOnly?: boolean; superOnly?: boolean }[] = [
+  { value: 'users', icon: Users, label: 'Users' },
+  { value: 'deleted', icon: Trash, label: 'Deleted' },
+  { value: 'posts', icon: FileText, label: 'Posts' },
+  { value: 'reels', icon: Clapperboard, label: 'Reels' },
+  { value: 'books', icon: BookOpen, label: 'Books' },
+  { value: 'reports', icon: Flag, label: 'Reports' },
+  { value: 'verification', icon: BadgeCheck, label: 'Verify' },
+  { value: 'settings', icon: Settings, label: 'Settings', staffOnly: true },
+  { value: 'biometric', icon: ScanFace, label: 'Biometric', staffOnly: true },
+  { value: 'security', icon: ShieldAlert, label: 'Security', superOnly: true },
+  { value: 'audit', icon: ScrollText, label: 'Audit' },
+];
 
 export default function Admin() {
   const { user, isStaff, isAdmin, isSuperAdmin, loading: authLoading } = useAuth();
@@ -50,8 +64,8 @@ export default function Admin() {
     let mounted = true;
     (async () => {
       const [{ count: reports }, { count: verif }] = await Promise.all([
-        (supabase as any).from('reports').select('*', { count: 'exact', head: true }).in('status', ['open', 'reviewing']),
-        (supabase as any).from('verification_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('reports').select('*', { count: 'exact', head: true }).in('status', ['open', 'reviewing']),
+        supabase.from('verification_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
       ]);
       if (mounted) {
         setOpenReportCount(reports ?? 0);
@@ -78,88 +92,40 @@ export default function Admin() {
 
   return (
     <MainLayout>
-      <div className="container py-6 px-4 max-w-7xl">
-        <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-neutral-800 flex items-center justify-center">
-              <Shield className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                Admin Panel
-                {isSuperAdmin && <Crown className="w-5 h-5 text-amber-500" />}
-              </h1>
-              <p className="text-muted-foreground">
-                {isSuperAdmin
-                  ? 'Super Admin · full control'
-                  : isAdmin
-                    ? 'Administrator access'
-                    : 'Moderator / support access'}
-              </p>
-            </div>
-          </div>
+      <div className="admin-scope container max-w-[1400px] px-4 py-6">
+        <AdminControlCenter
+          onNavigate={setActiveTab}
+          openReportCount={openReportCount}
+          pendingVerifyCount={pendingVerifyCount}
+          onPurge={() => setPurgeOpen(true)}
+          isSuperAdmin={!!isSuperAdmin}
+        />
 
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-xs">
-              {user?.email}
-            </Badge>
-            {isSuperAdmin && (
-              <Button variant="destructive" size="sm" className="gap-2" onClick={() => setPurgeOpen(true)}>
-                <Trash className="w-4 h-4" />
-                Delete All Users
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <AdminStats />
-
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="flex flex-wrap h-auto w-full lg:w-auto lg:inline-grid lg:grid-cols-10">
-            <TabsTrigger value="users" className="gap-2">
-              <Users className="w-4 h-4" /> Users
-            </TabsTrigger>
-            <TabsTrigger value="deleted" className="gap-2">
-              <Trash className="w-4 h-4" /> Deleted
-            </TabsTrigger>
-            <TabsTrigger value="posts" className="gap-2">
-              <FileText className="w-4 h-4" /> Posts
-            </TabsTrigger>
-            <TabsTrigger value="reels" className="gap-2">
-              <Clapperboard className="w-4 h-4" /> Reels
-            </TabsTrigger>
-            <TabsTrigger value="books" className="gap-2">
-              <BookOpen className="w-4 h-4" /> Books
-            </TabsTrigger>
-            <TabsTrigger value="reports" className="gap-2">
-              <Flag className="w-4 h-4" /> Reports
-              {openReportCount > 0 && (
-                <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-xs font-bold">
-                  {openReportCount}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="verification" className="gap-2">
-              <BadgeCheck className="w-4 h-4" /> Verify
-              {pendingVerifyCount > 0 && (
-                <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-bold">
-                  {pendingVerifyCount}
-                </span>
-              )}
-            </TabsTrigger>
-            {isAdmin && (
-              <TabsTrigger value="settings" className="gap-2">
-                <Settings className="w-4 h-4" /> Settings
-              </TabsTrigger>
-            )}
-            {isSuperAdmin && (
-              <TabsTrigger value="security" className="gap-2">
-                <ShieldAlert className="w-4 h-4" /> Security
-              </TabsTrigger>
-            )}
-            <TabsTrigger value="audit" className="gap-2">
-              <ScrollText className="w-4 h-4" /> Audit
-            </TabsTrigger>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-5">
+          <TabsList className="sticky top-16 z-20 flex h-auto w-full flex-wrap justify-start gap-1 rounded-2xl border border-border/70 bg-background/90 p-1.5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/75">
+            {TABS.filter((t) => !((t.staffOnly && !isAdmin) || (t.superOnly && !isSuperAdmin))).map((t) => {
+              const Icon = t.icon;
+              const count = t.value === 'reports' ? openReportCount : t.value === 'verification' ? pendingVerifyCount : 0;
+              return (
+                <TabsTrigger
+                  key={t.value}
+                  value={t.value}
+                  className={cn(
+                    'gap-2 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition-colors',
+                    'data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm',
+                    'hover:bg-muted hover:text-foreground',
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {t.label}
+                  {count > 0 && (
+                    <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[11px] font-bold text-white">
+                      {count}
+                    </span>
+                  )}
+                </TabsTrigger>
+              );
+            })}
           </TabsList>
 
           <TabsContent value="users">
@@ -193,6 +159,12 @@ export default function Admin() {
           {isAdmin && (
             <TabsContent value="settings">
               <AdminSettingsTab />
+            </TabsContent>
+          )}
+
+          {isAdmin && (
+            <TabsContent value="biometric">
+              <AdminFaceAuthTab />
             </TabsContent>
           )}
 

@@ -255,33 +255,51 @@ export default function StoriesBar() {
           <div className="rounded-[2rem] bg-background overflow-hidden border border-border/50 shadow-2xl">
             <div className="p-5 pb-3">
               <p className="font-bold text-lg">Add to your story</p>
-              <p className="text-sm text-muted-foreground">Take a photo, record a video, or pick from your library.</p>
+              <p className="text-sm text-muted-foreground max-w-xs">Take a photo, record a quick video, or choose one from your library.</p>
             </div>
-            <div className="grid grid-cols-3 gap-2 p-4 pt-1">
+
+            <div className="grid grid-cols-3 gap-3 p-4 pt-1">
               <button
                 onClick={() => { setOptionsOpen(false); setCameraMode('photo'); setCameraOpen(true); }}
-                className="flex flex-col items-center gap-2 py-4 rounded-2xl bg-muted/60 hover:bg-primary/10 hover:text-primary transition-colors"
+                className="group flex flex-col items-center gap-2 py-4 rounded-2xl bg-card border border-border/60 hover:shadow-lg transition-transform duration-300 transform hover:-translate-y-1"
               >
-                <div className="h-11 w-11 rounded-full bg-primary/15 flex items-center justify-center">
-                  <Camera className="h-5 w-5 text-primary" />
+                <div className="p-[2px] rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500">
+                  <div className="h-11 w-11 rounded-full bg-background flex items-center justify-center shadow-sm relative">
+                    <div className="absolute inset-0 rounded-full pointer-events-none">
+                      <div className="absolute -top-1 left-0 w-full h-5 rounded-t-full bg-white/6 blur-sm" />
+                    </div>
+                    <Camera className="h-5 w-5 text-primary" />
+                  </div>
                 </div>
                 <span className="text-xs font-semibold">Take Photo</span>
               </button>
+
               <button
                 onClick={() => { setOptionsOpen(false); setCameraMode('video'); setCameraOpen(true); }}
-                className="flex flex-col items-center gap-2 py-4 rounded-2xl bg-muted/60 hover:bg-primary/10 hover:text-primary transition-colors"
+                className="group flex flex-col items-center gap-2 py-4 rounded-2xl bg-card border border-border/60 hover:shadow-lg transition-transform duration-300 transform hover:-translate-y-1"
               >
-                <div className="h-11 w-11 rounded-full bg-primary/15 flex items-center justify-center">
-                  <Video className="h-5 w-5 text-primary" />
+                <div className="p-[2px] rounded-full bg-gradient-to-br from-sky-400 to-blue-600">
+                  <div className="h-11 w-11 rounded-full bg-background flex items-center justify-center shadow-sm relative">
+                    <div className="absolute inset-0 rounded-full pointer-events-none">
+                      <div className="absolute -top-1 left-0 w-full h-5 rounded-t-full bg-white/6 blur-sm" />
+                    </div>
+                    <Video className="h-5 w-5 text-primary" />
+                  </div>
                 </div>
                 <span className="text-xs font-semibold">Record Video</span>
               </button>
+
               <button
                 onClick={() => { setOptionsOpen(false); fileInputRef.current?.click(); }}
-                className="flex flex-col items-center gap-2 py-4 rounded-2xl bg-muted/60 hover:bg-primary/10 hover:text-primary transition-colors"
+                className="group flex flex-col items-center gap-2 py-4 rounded-2xl bg-card border border-border/60 hover:shadow-lg transition-transform duration-300 transform hover:-translate-y-1"
               >
-                <div className="h-11 w-11 rounded-full bg-primary/15 flex items-center justify-center">
-                  <ImagePlus className="h-5 w-5 text-primary" />
+                <div className="p-[2px] rounded-full bg-gradient-to-br from-pink-500 to-rose-500">
+                  <div className="h-11 w-11 rounded-full bg-background flex items-center justify-center shadow-sm relative">
+                    <div className="absolute inset-0 rounded-full pointer-events-none">
+                      <div className="absolute -top-1 left-0 w-full h-5 rounded-t-full bg-white/6 blur-sm" />
+                    </div>
+                    <ImagePlus className="h-5 w-5 text-primary" />
+                  </div>
                 </div>
                 <span className="text-xs font-semibold">Upload</span>
               </button>
@@ -310,28 +328,81 @@ export default function StoriesBar() {
 
             {currentStory && currentGroup && (
               <>
-                {/* Progress bars */}
-                <div className="absolute top-3 left-3 right-3 z-30 flex gap-1.5">
-                  {currentGroup.stories.map((story, i) => (
-                    <div key={story.id} className="flex-1 h-[3px] rounded-full bg-white/25 overflow-hidden">
-                      <div
-                        className={cn('h-full rounded-full', i === currentStoryIndex && 'story-progress-active')}
-                        style={
-                          i === currentStoryIndex
-                            ? { animationDuration: `${story.duration}s`, animationPlayState: paused ? 'paused' : 'running' }
-                            : i < currentStoryIndex
-                              ? { width: '100%' }
-                              : { width: '0%' }
-                        }
-                        onAnimationEnd={() => { if (currentStory.media_type === 'image') nextStory(); }}
-                      />
+                {/* Top: progress + header */}
+                <div className="absolute inset-x-0 top-0 z-30 px-3 pt-[max(env(safe-area-inset-top,0px),10px)]">
+                  <div className="flex gap-1.5">
+                    {currentGroup.stories.map((story, i) => (
+                      <div key={story.id} className="flex-1 h-[3px] rounded-full bg-white/25 overflow-hidden">
+                        <div
+                          className={cn('h-full rounded-full bg-white', i === currentStoryIndex && 'story-progress-active')}
+                          style={
+                            i === currentStoryIndex
+                              ? { animationDuration: `${story.duration}s`, animationPlayState: paused ? 'paused' : 'running' }
+                              : i < currentStoryIndex
+                                ? { width: '100%' }
+                                : { width: '0%' }
+                          }
+                          onAnimationEnd={() => { if (currentStory.media_type === 'image') nextStory(); }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-2.5 flex items-center justify-between gap-2">
+                    <a href={`/profile/${currentGroup.username}`} className="flex items-center gap-2.5 min-w-0">
+                      <div className="p-[2px] rounded-full bg-gradient-to-br from-primary via-fuchsia-500 to-primary/50 flex-shrink-0">
+                        <div className="p-[1.5px] rounded-full bg-black/50">
+                          <Avatar className="w-9 h-9">
+                            <AvatarImage src={currentGroup.avatar_url || undefined} />
+                            <AvatarFallback className="bg-neutral-800 text-white text-sm">
+                              {getInitials(currentGroup.display_name)}
+                            </AvatarFallback>
+                          </Avatar>
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-white font-bold text-sm leading-tight truncate">
+                          {currentGroup.display_name}
+                        </p>
+                        <p className="text-white/60 text-[11px] font-medium leading-tight">
+                          {formatDistanceToNow(new Date(currentStory.created_at), { addSuffix: true })}
+                          {currentGroup.user_id === user?.id && ` · ${currentStory.view_count} views`}
+                        </p>
+                      </div>
+                    </a>
+
+                    <div className="flex items-center gap-1 bg-black/45 backdrop-blur-md rounded-full p-1 flex-shrink-0">
+                      <Button variant="ghost" size="icon" onClick={() => setPaused(!paused)} className="h-8 w-8 rounded-full text-white hover:bg-white/20">
+                        {paused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                      </Button>
+                      {currentStory.media_type === 'video' && (
+                        <Button variant="ghost" size="icon" onClick={() => setMuted(!muted)} className="h-8 w-8 rounded-full text-white hover:bg-white/20">
+                          {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                        </Button>
+                      )}
+                      {currentGroup.user_id === user?.id && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            deleteStory(currentStory.id);
+                            nextStory();
+                          }}
+                          className="h-8 w-8 rounded-full text-white hover:bg-destructive/80"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="icon" onClick={() => setViewerOpen(false)} className="h-8 w-8 rounded-full text-white hover:bg-white/20">
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
-                  ))}
+                  </div>
                 </div>
 
                 {/* Media card */}
                 <div
-                  className="absolute inset-x-2 top-10 bottom-[88px] z-10"
+                  className="absolute inset-0 sm:inset-x-3 sm:top-[5.5rem] sm:bottom-24 z-10"
                   onTouchStart={e => { touchStartX.current = e.touches[0].clientX; }}
                   onTouchEnd={e => {
                     if (touchStartX.current == null) return;
@@ -342,14 +413,15 @@ export default function StoriesBar() {
                     }
                   }}
                 >
-                  <div className="relative w-full h-full rounded-[1.75rem] overflow-hidden ring-1 ring-white/15 shadow-2xl shadow-black/70 bg-black">
-                    <div className="absolute -inset-4 z-0 bg-primary/15 blur-3xl opacity-30 pointer-events-none" />
+                  <div className="relative w-full h-full sm:rounded-[1.5rem] overflow-hidden bg-black sm:ring-1 sm:ring-white/10 sm:shadow-2xl sm:shadow-black/70">
+                    <div className="absolute -inset-4 z-0 bg-primary/20 blur-3xl opacity-25 pointer-events-none" />
 
                     {currentStory.media_type === 'video' ? (
                       <video
+                        key={currentStory.id}
                         ref={videoRef}
                         src={currentStory.media_url}
-                        className="absolute inset-0 w-full h-full object-cover"
+                        className="absolute inset-0 w-full h-full object-cover story-enter"
                         autoPlay
                         loop={false}
                         muted={muted || !!currentStory.music_url}
@@ -361,110 +433,55 @@ export default function StoriesBar() {
                         key={currentStory.id}
                         src={currentStory.media_url}
                         alt=""
-                        className="absolute inset-0 w-full h-full object-cover story-kenburns"
+                        className="absolute inset-0 w-full h-full object-cover story-kenburns story-enter"
                         draggable={false}
                       />
                     )}
 
                     {/* Scrims */}
-                    <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/75 via-black/15 to-transparent z-10" />
-                    <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black/85 via-black/40 to-transparent z-10" />
+                    <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/70 via-black/10 to-transparent z-10" />
+                    <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-black/85 via-black/35 to-transparent z-10" />
 
-                    {/* Header */}
-                    <div className="absolute top-0 left-0 right-0 z-20 p-3 flex items-center justify-between gap-2">
-                      <a href={`/profile/${currentGroup.username}`} className="flex items-center gap-2.5 min-w-0">
-                        <Avatar className="w-9 h-9 ring-2 ring-white/40 flex-shrink-0">
-                          <AvatarImage src={currentGroup.avatar_url || undefined} />
-                          <AvatarFallback className="bg-neutral-800 text-white text-sm">
-                            {getInitials(currentGroup.display_name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0">
-                          <p className="text-white font-bold text-sm leading-tight truncate">
-                            {currentGroup.display_name}
-                          </p>
-                          <p className="text-white/60 text-[11px] font-medium">
-                            {formatDistanceToNow(new Date(currentStory.created_at), { addSuffix: true })}
-                          </p>
-                        </div>
-                      </a>
-
-                      <div className="flex items-center gap-1 bg-black/40 backdrop-blur-md rounded-full p-1 flex-shrink-0">
-                        <Button variant="ghost" size="icon" onClick={() => setPaused(!paused)} className="h-8 w-8 rounded-full text-white hover:bg-white/20">
-                          {paused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-                        </Button>
-                        {currentStory.media_type === 'video' && (
-                          <Button variant="ghost" size="icon" onClick={() => setMuted(!muted)} className="h-8 w-8 rounded-full text-white hover:bg-white/20">
-                            {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                          </Button>
+                    {/* Bottom stack: caption + music */}
+                    {(currentStory.caption || currentStory.music_url) && (
+                      <div className="absolute inset-x-4 bottom-24 sm:bottom-4 z-20 flex flex-col items-center gap-2 pointer-events-none">
+                        {currentStory.music_url && (
+                          <>
+                            <audio
+                              key={`music-${currentStory.id}`}
+                              src={currentStory.music_url}
+                              autoPlay
+                              loop
+                              muted={musicMuted}
+                              className="hidden"
+                            />
+                            <div className="pointer-events-auto flex items-center gap-2 bg-black/50 backdrop-blur-md rounded-full pl-3 pr-1.5 py-1.5">
+                              {!musicMuted && (
+                                <span className="flex items-end gap-[2px] h-4 w-4 story-eq">
+                                  <span /><span /><span />
+                                </span>
+                              )}
+                              <Music className={cn('h-4 w-4 flex-shrink-0', musicMuted ? 'text-white/40' : 'text-white')} />
+                              <span className="text-white text-xs font-medium max-w-[130px] truncate">
+                                {currentStory.music_name || 'Audio'}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setMusicMuted(!musicMuted)}
+                                className="h-7 w-7 rounded-full text-white hover:bg-white/20"
+                              >
+                                {musicMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                              </Button>
+                            </div>
+                          </>
                         )}
-                        {currentGroup.user_id === user?.id && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              deleteStory(currentStory.id);
-                              nextStory();
-                            }}
-                            className="h-8 w-8 rounded-full text-white hover:bg-destructive/80"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+
+                        {currentStory.caption && (
+                          <p className="text-white text-center text-sm font-medium bg-black/45 backdrop-blur-sm rounded-full px-4 py-1.5 max-w-full">
+                            {currentStory.caption}
+                          </p>
                         )}
-                        <Button variant="ghost" size="icon" onClick={() => setViewerOpen(false)} className="h-8 w-8 rounded-full text-white hover:bg-white/20">
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Music */}
-                    {currentStory.music_url && (
-                      <>
-                        <audio
-                          key={currentStory.id}
-                          src={currentStory.music_url}
-                          autoPlay
-                          loop
-                          muted={musicMuted}
-                          className="hidden"
-                        />
-                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-black/50 backdrop-blur-md rounded-full pl-3 pr-1.5 py-1.5">
-                          {!musicMuted && (
-                            <span className="flex items-end gap-[2px] h-4 w-4 story-eq">
-                              <span /><span /><span />
-                            </span>
-                          )}
-                          <Music className={cn('h-4 w-4 flex-shrink-0', musicMuted ? 'text-white/40' : 'text-white')} />
-                          <span className="text-white text-xs font-medium max-w-[140px] truncate">
-                            {currentStory.music_name || 'Audio'}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setMusicMuted(!musicMuted)}
-                            className="h-7 w-7 rounded-full text-white hover:bg-white/20"
-                          >
-                            {musicMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                          </Button>
-                        </div>
-                      </>
-                    )}
-
-                    {/* Caption */}
-                    {currentStory.caption && (
-                      <div className="absolute inset-x-4 bottom-4 z-20 flex justify-center pointer-events-none">
-                        <p className="text-white text-center text-sm font-medium bg-black/45 backdrop-blur-sm rounded-full px-4 py-1.5 max-w-full">
-                          {currentStory.caption}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Own story views */}
-                    {currentGroup.user_id === user?.id && (
-                      <div className="absolute top-16 left-3 z-20">
-                        <span className="text-white/70 text-xs font-semibold bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1">
-                          👁 {currentStory.view_count} views
-                        </span>
                       </div>
                     )}
 
@@ -475,8 +492,8 @@ export default function StoriesBar() {
                 </div>
 
                 {/* Story dock */}
-                <div className="absolute bottom-3 left-0 right-0 z-30 flex justify-center px-4">
-                  <div className="flex items-center gap-2.5 bg-white/10 backdrop-blur-xl border border-white/10 rounded-full px-3 py-2 overflow-x-auto scrollbar-hide max-w-full">
+                <div className="absolute bottom-0 left-0 right-0 z-30 flex justify-center px-4 pt-8 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] bg-gradient-to-t from-black/70 via-black/20 to-transparent pointer-events-none">
+                  <div className="pointer-events-auto flex items-center gap-2.5 bg-white/10 backdrop-blur-xl border border-white/10 rounded-full px-3 py-2 overflow-x-auto scrollbar-hide max-w-full shadow-lg shadow-black/30">
                     {groupedStories.map((group, i) => {
                       const active = i === currentGroupIndex;
                       return (
@@ -551,6 +568,13 @@ export default function StoriesBar() {
         }
         .story-kenburns {
           animation: story-kenburns 8s ease-out forwards;
+        }
+        @keyframes story-enter {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        .story-enter {
+          animation: story-enter 0.3s ease-out;
         }
         @keyframes story-ring {
           0% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.55); }

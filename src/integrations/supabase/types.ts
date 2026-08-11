@@ -2068,6 +2068,10 @@ export type Database = {
         Args: { conv_id: string }
         Returns: undefined
       }
+      delete_conversation: {
+        Args: { conv_id: string }
+        Returns: undefined
+      }
       set_conversation_wallpaper: {
         Args: { conv_id: string; wallpaper?: string | null }
         Returns: undefined

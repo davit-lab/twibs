@@ -11,20 +11,20 @@ import { toast } from '@/hooks/use-toast';
 import { useRedButton } from '@/hooks/useRedButton';
 import {
   ShieldAlert, Loader2, AlertTriangle, Archive, Code2, ShieldCheck, Upload, Flag, Swords,
-  CheckCircle2, XCircle, Clock, Trash2, BookOpen, ScrollText, RefreshCcw, Radar,
+  CheckCircle2, XCircle, Clock, Trash2, BookOpen, ScrollText, RefreshCcw,
 } from 'lucide-react';
 import {
-  EmergencyMode, JobStep, MODE_LABELS, STEP_LABELS, STEP_ORDER, isBusy, jobProgress, stepFor, triggerRejected,
+  EmergencyMode, JobStep, STEP_LABELS, STEP_ORDER, isBusy, jobProgress, stepFor, triggerRejected,
 } from '@/lib/security/redButton';
 import { cn } from '@/lib/utils';
 
 const MODE_PILL: Record<EmergencyMode, { label: string; className: string }> = {
-  online: { label: 'ONLINE', className: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
-  armed: { label: 'ARMED', className: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
-  backing_up: { label: 'BACKING_UP', className: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
-  locked_down: { label: 'LOCKED_DOWN', className: 'bg-rose-500/15 text-rose-400 border-rose-500/40' },
-  counter_active: { label: 'COUNTER_ACTIVE', className: 'bg-violet-500/15 text-violet-400 border-violet-500/40' },
-  recovery: { label: 'RECOVERY', className: 'bg-orange-500/15 text-orange-400 border-orange-500/40' },
+  online: { label: 'Online', className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+  armed: { label: 'Armed', className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+  backing_up: { label: 'Backing up', className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+  locked_down: { label: 'Locked down', className: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' },
+  counter_active: { label: 'Countermeasures active', className: 'bg-violet-500/10 text-violet-600 dark:text-violet-400' },
+  recovery: { label: 'Recovery', className: 'bg-orange-500/10 text-orange-600 dark:text-orange-400' },
 };
 
 const STEP_ICONS: Record<string, React.ElementType> = {
@@ -42,37 +42,41 @@ function StepRow({ step }: { step: JobStep }) {
   return (
     <div className="flex items-center gap-3 py-1.5">
       <div className="w-6 flex justify-center">
-        {step.status === 'done' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-        {step.status === 'failed' && <XCircle className="w-4 h-4 text-rose-500" />}
-        {running && <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />}
+        {step.status === 'done' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+        {step.status === 'failed' && <XCircle className="w-4 h-4 text-destructive" />}
+        {running && <Loader2 className="w-4 h-4 text-warning animate-spin" />}
         {step.status === 'pending' && <Icon className="w-4 h-4 text-muted-foreground/60" />}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium">{STEP_LABELS[step.key] ?? step.key}</p>
         {step.detail && <p className="text-xs text-muted-foreground truncate">{step.detail}</p>}
       </div>
-      <div className="w-24 h-1.5 rounded-full bg-neutral-800 overflow-hidden">
+      <div className="w-24 h-1.5 rounded-full bg-muted overflow-hidden">
         <div
           className={cn(
             'h-full rounded-full transition-all',
-            step.status === 'done' ? 'bg-emerald-500' : step.status === 'failed' ? 'bg-rose-500' : 'bg-amber-500',
+            step.status === 'done' ? 'bg-emerald-500' : step.status === 'failed' ? 'bg-destructive' : 'bg-warning',
           )}
           style={{ width: `${Math.max(0, Math.min(100, step.pct))}%` }}
         />
       </div>
-      <span className="w-8 text-right text-xs text-muted-foreground">{step.pct}%</span>
+      <span className="w-8 text-right text-xs text-muted-foreground tabular-nums">{step.pct}%</span>
     </div>
   );
 }
 
-function Pill({ label, value, className }: { label: string; value: string; className: string }) {
+const STAT_TONES = {
+  neutral: 'text-foreground',
+  success: 'text-emerald-600 dark:text-emerald-400',
+  danger: 'text-destructive',
+  warning: 'text-warning',
+} as const;
+
+function Stat({ label, value, tone = 'neutral' }: { label: string; value: string; tone?: keyof typeof STAT_TONES }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-border bg-neutral-900/60 px-3 py-2">
-      <span className="text-xs uppercase tracking-wider text-muted-foreground">{label}</span>
-      <Badge variant="outline" className={cn('gap-1.5', className)}>
-        <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-        {value}
-      </Badge>
+    <div className="flex-1 min-w-[150px] rounded-lg border border-border bg-card px-4 py-3">
+      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={cn('mt-1 text-sm font-semibold tabular-nums', STAT_TONES[tone])}>{value}</p>
     </div>
   );
 }
@@ -85,7 +89,6 @@ export default function RedButtonControl() {
   const [armStep, setArmStep] = useState(1);
   const [ack, setAck] = useState(false);
   const [phrase, setPhrase] = useState<string | null>(null);
-  const [phraseEntry, setPhraseEntry] = useState('');
   const [pin, setPin] = useState('');
   const [countdown, setCountdown] = useState(3);
   const [submitting, setSubmitting] = useState(false);
@@ -110,7 +113,6 @@ export default function RedButtonControl() {
     setPhrase(p);
     setAck(false);
     setPin('');
-    setPhraseEntry('');
     setArmStep(1);
     setCountdown(3);
     firedRef.current = false;
@@ -166,31 +168,36 @@ export default function RedButtonControl() {
       toast({ variant: 'destructive', title: 'Resume failed', description: err });
       return;
     }
-    toast({ title: 'Platform resumed', description: 'SYSTEM ONLINE.' });
+    toast({ title: 'Platform resumed', description: 'The platform is online again.' });
     refresh();
   }, [resume, refresh]);
 
   const rejection = status ? triggerRejected(status) : null;
 
+  const modeTone: keyof typeof STAT_TONES =
+    mode === 'online'
+      ? 'success'
+      : mode === 'locked_down' || mode === 'counter_active'
+        ? 'danger'
+        : 'warning';
+
   return (
-    <Card className="border-rose-500/25 bg-neutral-950/60 overflow-hidden">
+    <Card className="overflow-hidden">
       <CardHeader>
         <div className="flex flex-col lg:flex-row lg:items-center gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-rose-500 to-red-700 flex items-center justify-center shadow-[0_0_25px_rgba(244,63,94,0.5)]">
-              <ShieldAlert className="w-6 h-6 text-white" />
+            <div className="w-11 h-11 rounded-lg bg-destructive/10 text-destructive flex items-center justify-center">
+              <ShieldAlert className="w-6 h-6" />
             </div>
             <div>
               <CardTitle className="flex items-center gap-2">
-                Red Button
-                <Badge variant="outline" className={cn('gap-1.5', pill.className)}>
-                  <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                  SYSTEM {pill.label}
+                Emergency controls
+                <Badge variant="outline" className={cn('border-transparent', pill.className)}>
+                  {pill.label}
                 </Badge>
               </CardTitle>
               <CardDescription>
-                Emergency lockdown &amp; backup controller. One action backs up all data and code, flips the platform
-                into LOCKED_DOWN, and applies edge firewall rules against threat IPs.
+                Backup, lockdown and recovery controls for serious platform incidents.
               </CardDescription>
             </div>
           </div>
@@ -211,31 +218,22 @@ export default function RedButtonControl() {
       </CardHeader>
 
       <CardContent className="space-y-6">
-        {/* Status pills */}
+        {/* Status stats */}
         <div className="flex flex-wrap gap-3">
-          <Pill
-            label="SYSTEM MODE"
-            value={MODE_LABELS[mode]}
-            className={pill.className}
-          />
-          <Pill
-            label="LAST BACKUP"
+          <Stat label="Platform status" value={pill.label} tone={modeTone} />
+          <Stat
+            label="Last backup"
             value={status?.last_backup_at ? new Date(status.last_backup_at).toLocaleString() : 'Never'}
-            className="bg-neutral-500/15 text-neutral-300 border-neutral-500/30"
           />
-          <Pill
-            label="BLOCKED ATTACKS"
-            value={String(status?.blocked_attacks ?? 0)}
-            className="bg-rose-500/15 text-rose-400 border-rose-500/30"
-          />
+          <Stat label="Blocked attacks" value={String(status?.blocked_attacks ?? 0)} tone="danger" />
           {status && status.threat_count > 0 && (
-            <Pill label="THREAT IPs" value={String(status.threat_count)} className="bg-amber-500/15 text-amber-400 border-amber-500/30" />
+            <Stat label="Threat IPs" value={String(status.threat_count)} tone="warning" />
           )}
         </div>
 
         {/* Poll / auth error */}
         {error && (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+          <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">
             <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
             <span>Status unavailable: {error}</span>
           </div>
@@ -243,51 +241,56 @@ export default function RedButtonControl() {
 
         {loading && !status ? (
           <div className="flex items-center justify-center py-10">
-            <Loader2 className="h-6 w-6 animate-spin text-rose-500" />
+            <Loader2 className="h-6 w-6 animate-spin text-destructive" />
           </div>
         ) : (
-          <div className="grid lg:grid-cols-2 gap-6">
-            {/* Red Button */}
-            <div className="flex flex-col items-center justify-center gap-5 py-6">
-              <div className="relative">
-                {armable && (
-                  <motion.span
-                    className="absolute inset-0 rounded-full bg-rose-500/40"
-                    animate={{ scale: [1, 1.22, 1], opacity: [0.55, 0, 0.55] }}
-                    transition={{ duration: 2.2, repeat: Infinity, ease: 'easeOut' }}
-                  />
-                )}
-                <motion.button
-                  whileTap={armable ? { scale: 0.92 } : undefined}
-                  disabled={!armable || submitting}
-                  onClick={openArming}
-                  title={rejection ?? 'Arm the Red Button'}
-                  className={cn(
-                    'relative h-36 w-36 rounded-full flex flex-col items-center justify-center gap-1 border transition-all',
-                    'bg-gradient-to-br from-rose-500 to-red-700 text-white font-black tracking-widest',
-                    'shadow-[0_0_60px_rgba(244,63,94,0.5)] border-rose-300/40',
-                    armable ? 'cursor-pointer hover:shadow-[0_0_80px_rgba(244,63,94,0.7)]' : 'opacity-40 cursor-not-allowed',
-                  )}
-                >
-                  <ShieldAlert className="w-8 h-8" />
-                  <span className="text-sm">RED BUTTON</span>
-                </motion.button>
+          <div className="grid lg:grid-cols-[0.85fr_1.15fr] gap-6">
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                  <ShieldAlert className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">Lockdown action</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Use only during a confirmed incident. The system creates backups, locks public operations and applies firewall rules.
+                  </p>
+                </div>
               </div>
 
-              <div className="text-center space-y-1">
-                <p className="text-lg font-bold tracking-wide">
-                  SYSTEM {pill.label}
-                </p>
+              <div className="mt-4 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                This is a production-wide action and requires confirmation before it runs.
+              </div>
+
+              <motion.button
+                whileTap={armable ? { scale: 0.99 } : undefined}
+                disabled={!armable || submitting}
+                onClick={openArming}
+                title={rejection ?? 'Start emergency lockdown'}
+                className={cn(
+                  'mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-all',
+                  'bg-destructive text-destructive-foreground',
+                  armable
+                    ? 'cursor-pointer hover:bg-destructive/90'
+                    : 'cursor-not-allowed opacity-50',
+                )}
+              >
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
+                Start emergency lockdown
+              </motion.button>
+
+              <div className="mt-4 space-y-1">
+                <p className="text-sm font-medium text-foreground">Current status: {pill.label}</p>
                 {busy ? (
-                  <p className="text-xs text-muted-foreground">All controls locked while the pipeline is running.</p>
+                  <p className="text-sm text-muted-foreground">Controls are locked while the emergency workflow is running.</p>
                 ) : rejection ? (
-                  <p className="text-xs text-muted-foreground">{rejection}</p>
+                  <p className="text-sm text-muted-foreground">{rejection}</p>
                 ) : (
-                  <p className="text-xs text-muted-foreground">Armed and ready. Triggering backs up data + code, locks the platform, and applies firewall rules.</p>
+                  <p className="text-sm text-muted-foreground">Ready. Review the runbook before starting if this is not time-sensitive.</p>
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="mt-4 flex flex-wrap items-center gap-2">
                 {busy && !confirmRollback && (
                   <Button variant="destructive" size="sm" className="gap-2" onClick={() => setConfirmRollback(true)}>
                     <RefreshCcw className="w-4 h-4" /> Rollback
@@ -311,24 +314,23 @@ export default function RedButtonControl() {
               </div>
             </div>
 
-            {/* Pipeline progress */}
             <div className="space-y-4">
-              <div className="rounded-xl border border-border bg-neutral-900/60 p-4 space-y-3">
+              <div className="rounded-xl border border-border bg-card p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold flex items-center gap-2">
-                    <Radar className="w-4 h-4 text-rose-500" />
-                    {status?.active_job ? `Job ${status.active_job.status.toUpperCase()}` : 'Pipeline'}
+                    <ShieldCheck className="w-4 h-4 text-muted-foreground" />
+                    {status?.active_job ? `Workflow ${status.active_job.status}` : 'Emergency workflow'}
                   </p>
                   {status?.active_job && (
-                    <span className="text-xs text-muted-foreground">{progress.done}/{progress.total} steps · {progress.pct}%</span>
+                    <span className="text-xs text-muted-foreground tabular-nums">{progress.done}/{progress.total} steps · {progress.pct}%</span>
                   )}
                 </div>
 
-                <div className="h-2 w-full rounded-full bg-neutral-800 overflow-hidden">
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
                   <div
                     className={cn(
                       'h-full rounded-full transition-all duration-700',
-                      status?.active_job?.status === 'failed' ? 'bg-rose-500' : 'bg-rose-500',
+                      status?.active_job?.status === 'failed' ? 'bg-destructive' : 'bg-destructive',
                     )}
                     style={{ width: `${progress.pct}%` }}
                   />
@@ -341,27 +343,27 @@ export default function RedButtonControl() {
                 </div>
 
                 {status?.active_job?.status === 'failed' && status.active_job.error_detail && (
-                  <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+                  <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                     <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                    <span>Pipeline failed: {status.active_job.error_detail}. Platform moved to RECOVERY and the alert webhook was fired.</span>
+                    <span>Workflow failed: {status.active_job.error_detail}. The platform moved to recovery and the alert webhook was fired.</span>
                   </div>
                 )}
 
                 {mode === 'recovery' && !status?.active_job && (
-                  <div className="flex items-start gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-sm text-orange-300">
+                  <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">
                     <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                    <span>SYSTEM IN RECOVERY — the lockdown expired or failed. Review the audit log, then Resume operations.</span>
+                    <span>The platform is in recovery. Review the audit log, then resume operations.</span>
                   </div>
                 )}
               </div>
 
               {/* Runbook */}
               {runbookOpen && (
-                <div className="rounded-xl border border-border bg-neutral-900/60 p-4 text-sm text-muted-foreground space-y-1.5">
+                <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground space-y-1.5">
                   <p className="font-semibold text-foreground">Runbook</p>
                   <p>1. Confirm the incident with at least one other on-call admin.</p>
-                  <p>2. Add known attacker IPs under threat tracking, then arm the Red Button.</p>
-                  <p>3. The pipeline dumps the DB, archives code, verifies checksums, uploads offsite, flips LOCKED_DOWN, and applies firewall rules.</p>
+                  <p>2. Add known attacker IPs under threat tracking, then start emergency lockdown.</p>
+                  <p>3. The workflow backs up the database, archives code, verifies checksums, uploads offsite, locks the platform, and applies firewall rules.</p>
                   <p>4. Export the data archive and monitor blocked-attack counters.</p>
                   <p>5. When the threat is contained, press Rollback, then Resume.</p>
                 </div>
@@ -375,22 +377,22 @@ export default function RedButtonControl() {
       <AnimatePresence>
         {armingOpen && (
           <motion.div
-            className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={(e) => e.target === e.currentTarget && setArmingOpen(false)}
           >
             <motion.div
-              className="w-full max-w-md rounded-2xl border border-rose-500/30 bg-neutral-950 p-6 shadow-[0_0_60px_rgba(244,63,94,0.25)]"
-              initial={{ scale: 0.94, opacity: 0, y: 10 }}
+              className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl"
+              initial={{ scale: 0.96, opacity: 0, y: 8 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.94, opacity: 0, y: 10 }}
+              exit={{ scale: 0.96, opacity: 0, y: 8 }}
               transition={{ duration: 0.18 }}
             >
               <div className="flex items-center gap-2 mb-1">
-                <ShieldAlert className="w-5 h-5 text-rose-500" />
-                <h3 className="text-lg font-bold">Arm Red Button — Step {armStep} of 3</h3>
+                <ShieldAlert className="w-5 h-5 text-destructive" />
+                <h3 className="text-lg font-bold">Start emergency lockdown — Step {armStep} of 3</h3>
               </div>
               <p className="text-sm text-muted-foreground mb-5">
                 This locks the platform down. Impossible-to-miss confirmation required.
@@ -405,12 +407,12 @@ export default function RedButtonControl() {
                     exit={{ opacity: 0, x: -16 }}
                     className="space-y-4"
                   >
-                    <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-foreground">
                       Triggering will immediately: snapshot the database, archive the codebase, upload an offsite backup,
-                      flip the platform into LOCKED_DOWN mode, and apply firewall rules against all threat IPs.
+                      lock the platform, and apply firewall rules against all threat IPs.
                       This is a production-wide action.
                     </div>
-                    <label className="flex items-center justify-between gap-3 rounded-lg border border-border bg-neutral-900 p-3">
+                    <label className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/50 p-3">
                       <span className="text-sm">I understand this is a production-wide emergency action.</span>
                       <Switch checked={ack} onCheckedChange={setAck} />
                     </label>
@@ -427,10 +429,10 @@ export default function RedButtonControl() {
                   >
                     <div className="space-y-2">
                       <Label>Session challenge phrase</Label>
-                      <div className="rounded-lg border border-border bg-neutral-900 p-3 text-center">
-                        <p className="font-mono text-lg font-bold tracking-wider text-rose-400">{phrase ?? '…'}</p>
+                      <div className="rounded-lg border border-border bg-muted/50 p-3 text-center">
+                        <p className="font-mono text-lg font-bold tracking-wider text-foreground">{phrase ?? '…'}</p>
                         <p className="text-xs text-muted-foreground mt-1 flex items-center justify-center gap-1">
-                          <Clock className="w-3 h-3" /> Expires in 2 minutes. Enter it exactly as shown below.
+                          <Clock className="w-3 h-3" /> Expires in 2 minutes.
                         </p>
                       </div>
                     </div>
@@ -445,16 +447,12 @@ export default function RedButtonControl() {
                         onChange={(e) => setPin(e.target.value)}
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="red-phrase">Re-type the challenge phrase</Label>
-                      <Input
-                        id="red-phrase"
-                        autoComplete="off"
-                        placeholder="EMERALD-FALCON-TEMPEST"
-                        value={phraseEntry}
-                        onChange={(e) => setPhraseEntry(e.target.value.toUpperCase())}
-                      />
-                    </div>
+                    {!phrase && (
+                      <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                        Challenge phrase unavailable — cancel and start again.
+                      </p>
+                    )}
                   </motion.div>
                 )}
 
@@ -470,12 +468,12 @@ export default function RedButtonControl() {
                       key={countdown}
                       initial={{ scale: 1.4, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
-                      className="text-7xl font-black text-rose-500"
+                      className="text-7xl font-black text-destructive tabular-nums"
                     >
                       {countdown}
                     </motion.p>
-                    <p className="text-sm text-muted-foreground">Firing the Red Button…</p>
-                    {submitting && <Loader2 className="w-5 h-5 animate-spin text-rose-500" />}
+                    <p className="text-sm text-muted-foreground">Starting emergency lockdown…</p>
+                    {submitting && <Loader2 className="w-5 h-5 animate-spin text-destructive" />}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -498,7 +496,7 @@ export default function RedButtonControl() {
                   <Button
                     variant="destructive"
                     size="sm"
-                    disabled={pin.length < 4 || phraseEntry !== phrase}
+                    disabled={!phrase || pin.length < 4}
                     onClick={() => setArmStep(3)}
                   >
                     Begin countdown

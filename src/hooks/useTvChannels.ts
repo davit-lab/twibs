@@ -5,9 +5,11 @@ const M3U_SOURCES = [
   'https://iptv-org.github.io/iptv/countries/tr.m3u',
 ];
 const PAGE_SIZE = 60;
-const CACHE_KEY = 'tv_channels_v5';
+const CACHE_KEY = 'tv_channels_v7';
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-const PROBE_TIMEOUT = 3000; // per-channel live check cap
+const PROBE_TIMEOUT = 2000; // per-channel live check cap
+const POOL_SIZE = 8; // parallel live-check limit
+const MAX_ENRICH = 80; // how many extra channels are probed from playlists
 
 export interface TvChannel {
   id: string;
@@ -21,6 +23,7 @@ export interface TvChannel {
   quality: string;
   user_agent: string;
   referrer: string;
+  verified?: boolean;
 }
 
 interface RawM3uEntry {
@@ -127,20 +130,38 @@ const COUNTRY_MAP: Record<string, { name: string; flag: string }> = {
   ZM: { name: 'Zambia', flag: '🇿🇲' }, ZW: { name: 'Zimbabwe', flag: '🇿🇼' },
 };
 
-const DEFAULT_CHANNELS: TvChannel[] = [
-  { id: '1tv-georgia', name: '1TV Georgia', logo: 'https://i.imgur.com/FSkYLPK.png', group: 'General', stream_url: 'https://tv.cdn.xsg.ge/gpb-1tv/index.m3u8', country_code: 'GE', country_flag: '🇬🇪', category: 'General', quality: '720p', user_agent: '', referrer: '' },
-  { id: '2tv-georgia', name: '2TV Georgia', logo: 'https://i.imgur.com/FJBL6zI.png', group: 'General', stream_url: 'https://tv.cdn.xsg.ge/gpb-2tv/index.m3u8', country_code: 'GE', country_flag: '🇬🇪', category: 'General', quality: '720p', user_agent: '', referrer: '' },
-  { id: 'imedi-tv', name: 'Imedi TV', logo: 'https://i.imgur.com/94hNyxZ.png', group: 'General', stream_url: 'https://tv.cdn.xsg.ge/imedihd/index.m3u8', country_code: 'GE', country_flag: '🇬🇪', category: 'General', quality: '1080p', user_agent: '', referrer: '' },
-  { id: 'tv-formula', name: 'TV Formula', logo: 'https://i.imgur.com/fsqBn8G.png', group: 'News', stream_url: 'https://c4635.cdn.xsg.ge/c4635/TVFormula/index.m3u8', country_code: 'GE', country_flag: '🇬🇪', category: 'News', quality: '1080p', user_agent: '', referrer: '' },
-  { id: 'bmg-tv', name: 'BMG TV', logo: 'https://i.imgur.com/vGLkTPA.png', group: 'Business', stream_url: 'https://tv.nucast.tv/lb/ge/bmg/index.m3u8', country_code: 'GE', country_flag: '🇬🇪', category: 'Business', quality: '720p', user_agent: '', referrer: '' },
-  { id: 'ertsuylovneba', name: 'Ertsulovneba TV', logo: 'https://i.imgur.com/KuuODMM.png', group: 'Religious', stream_url: 'https://stream.sstv.ge/live/sstv/playlist.m3u8', country_code: 'GE', country_flag: '🇬🇪', category: 'Religious', quality: '720p', user_agent: '', referrer: '' },
-  { id: 'dw-news', name: 'DW News', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/DW_Logo_2012.svg/200px-DW_Logo_2012.svg.png', group: 'News', stream_url: 'https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8', country_code: 'DE', country_flag: '🇩🇪', category: 'News', quality: '720p', user_agent: '', referrer: '' },
-  { id: 'cbs-news', name: 'CBS News 24/7', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ee/CBS_News_logo.svg/200px-CBS_News_logo.svg.png', group: 'News', stream_url: 'https://cbsn-us.cbsnstream.cbsnews.com/out/v1/55a8648e8f134e82a470f83d562deeca/master.m3u8', country_code: 'US', country_flag: '🇺🇸', category: 'News', quality: '720p', user_agent: '', referrer: '' },
+// Curated channels, individually deep-tested (master playlist -> variant ->
+// media playlist -> video segment) to be CORS-playable in a browser.
+// They are always shown instantly; playlist probing only adds more behind the scenes.
+const VERIFIED_CHANNELS: TvChannel[] = [
+  { id: '1tv-georgia', name: '1TV Georgia', logo: 'https://i.imgur.com/FSkYLPK.png', group: 'General', stream_url: 'https://tv.cdn.xsg.ge/gpb-1tv/index.m3u8', country_code: 'GE', country_flag: '🇬🇪', category: 'General', quality: '720p', user_agent: '', referrer: '', verified: true },
+  { id: '2tv-georgia', name: '2TV Georgia', logo: 'https://i.imgur.com/FJBL6zI.png', group: 'General', stream_url: 'https://tv.cdn.xsg.ge/gpb-2tv/index.m3u8', country_code: 'GE', country_flag: '🇬🇪', category: 'General', quality: '720p', user_agent: '', referrer: '', verified: true },
+  { id: 'imedi-tv', name: 'Imedi TV', logo: 'https://i.imgur.com/94hNyxZ.png', group: 'News', stream_url: 'https://tv.cdn.xsg.ge/imedihd/index.m3u8', country_code: 'GE', country_flag: '🇬🇪', category: 'News', quality: '1080p', user_agent: '', referrer: '', verified: true },
+  { id: 'tv-formula', name: 'TV Formula', logo: 'https://i.imgur.com/fsqBn8G.png', group: 'News', stream_url: 'https://c4635.cdn.xsg.ge/c4635/TVFormula/index.m3u8', country_code: 'GE', country_flag: '🇬🇪', category: 'News', quality: '1080p', user_agent: '', referrer: '', verified: true },
+  { id: 'bmg-tv', name: 'BMG TV', logo: 'https://i.imgur.com/vGLkTPA.png', group: 'Business', stream_url: 'https://tv.nucast.tv/lb/ge/bmg/index.m3u8', country_code: 'GE', country_flag: '🇬🇪', category: 'Business', quality: '720p', user_agent: '', referrer: '', verified: true },
+  { id: 'ertsuylovneba', name: 'Ertsulovneba TV', logo: 'https://i.imgur.com/KuuODMM.png', group: 'Religious', stream_url: 'https://stream.sstv.ge/live/sstv/playlist.m3u8', country_code: 'GE', country_flag: '🇬🇪', category: 'Religious', quality: '720p', user_agent: '', referrer: '', verified: true },
+  { id: 'dw-news', name: 'DW News', logo: 'https://i.imgur.com/8MRNFb9.png', group: 'News', stream_url: 'https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8', country_code: 'DE', country_flag: '🇩🇪', category: 'News', quality: '720p', user_agent: '', referrer: '', verified: true },
+  { id: 'cbs-news', name: 'CBS News 24/7', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/CBS_News_247_logo.svg/960px-CBS_News_247_logo.svg.png', group: 'News', stream_url: 'https://cbsn-us.cbsnstream.cbsnews.com/out/v1/55a8648e8f134e82a470f83d562deeca/master.m3u8', country_code: 'US', country_flag: '🇺🇸', category: 'News', quality: '720p', user_agent: '', referrer: '', verified: true },
+  { id: 'red-bull-tv', name: 'Red Bull TV', logo: 'https://images.pluto.tv/channels/5e7cb84a172a0f0007da69e4/colorLogoPNG.png', group: 'Sports', stream_url: 'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8', country_code: 'AT', country_flag: '🇦🇹', category: 'Sports', quality: '1080p', user_agent: '', referrer: '', verified: true },
+  { id: 'trt-haber', name: 'TRT Haber', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/72/TRT_Haber_Eyl%C3%BCl_2020_Logo.svg/960px-TRT_Haber_Eyl%C3%BCl_2020_Logo.svg.png', group: 'News', stream_url: 'https://tv-trthaber.medya.trt.com.tr/master.m3u8', country_code: 'TR', country_flag: '🇹🇷', category: 'News', quality: '720p', user_agent: '', referrer: '', verified: true },
+  { id: 'trt-turk', name: 'TRT Türk', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/TRT_T%C3%BCrk_logo.svg/960px-TRT_T%C3%BCrk_logo.svg.png', group: 'General', stream_url: 'https://tv-trtturk.medya.trt.com.tr/master.m3u8', country_code: 'TR', country_flag: '🇹🇷', category: 'General', quality: '720p', user_agent: '', referrer: '', verified: true },
+  { id: 'trt-muzik', name: 'TRT Müzik', logo: 'https://i.imgur.com/JgUzRH8.png', group: 'Music', stream_url: 'https://tv-trtmuzik.medya.trt.com.tr/master.m3u8', country_code: 'TR', country_flag: '🇹🇷', category: 'Music', quality: '720p', user_agent: '', referrer: '', verified: true },
+  { id: 'trt-cocuk', name: 'TRT Çocuk', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/TRT_%C3%87ocuk_logo_%282021%29.svg/960px-TRT_%C3%87ocuk_logo_%282021%29.svg.png', group: 'Kids', stream_url: 'https://tv-trtcocuk.medya.trt.com.tr/master.m3u8', country_code: 'TR', country_flag: '🇹🇷', category: 'Kids', quality: '1080p', user_agent: '', referrer: '', verified: true },
+  { id: 'trt-diyanet-cocuk', name: 'TRT Diyanet Çocuk', logo: 'https://i.imgur.com/8PmXz9t.png', group: 'Kids', stream_url: 'https://tv-trtdiyanetcocuk.medya.trt.com.tr/master.m3u8', country_code: 'TR', country_flag: '🇹🇷', category: 'Kids', quality: '720p', user_agent: '', referrer: '', verified: true },
+  { id: 'tvnet', name: 'TVNET', logo: 'https://i.imgur.com/mQo8yWQ.png', group: 'News', stream_url: 'https://tvnet-live.lg.mncdn.com/tvnet/tvnet/playlist.m3u8', country_code: 'TR', country_flag: '🇹🇷', category: 'News', quality: '1080p', user_agent: '', referrer: '', verified: true },
+  { id: 'tv24', name: 'TV 24', logo: 'https://i.imgur.com/8FO41es.png', group: 'News', stream_url: 'https://turkmedya-live.ercdn.net/tv24/tv24.m3u8', country_code: 'TR', country_flag: '🇹🇷', category: 'News', quality: '720p', user_agent: '', referrer: '', verified: true },
+  { id: 'gzt', name: 'GZT', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ef/GZT_logo.svg/960px-GZT_logo.svg.png', group: 'News', stream_url: 'https://gzttv-live.lg.mncdn.com/gzttv/gzttv/playlist.m3u8', country_code: 'TR', country_flag: '🇹🇷', category: 'News', quality: '1080p', user_agent: '', referrer: '', verified: true },
+  { id: 'turkhaber', name: 'TürkHaber', logo: 'https://i.imgur.com/2AcRKdL.png', group: 'News', stream_url: 'https://edge1.socialsmart.tv/turkhaber/bant1/playlist.m3u8', country_code: 'TR', country_flag: '🇹🇷', category: 'News', quality: '720p', user_agent: '', referrer: '', verified: true },
+  { id: 'kanal23', name: 'Kanal 23', logo: 'https://i.imgur.com/3br8RCq.png', group: 'News', stream_url: 'https://cdn-kanal23.yayin.com.tr/kanal23/index.m3u8', country_code: 'TR', country_flag: '🇹🇷', category: 'News', quality: '1080p', user_agent: '', referrer: '', verified: true },
+  { id: 'power-tv', name: 'Power TV', logo: 'https://i.imgur.com/XSL1gd7.png', group: 'Music', stream_url: 'https://livetv.powerapp.com.tr/powerTV/powerhd.smil/playlist.m3u8', country_code: 'TR', country_flag: '🇹🇷', category: 'Music', quality: '1080p', user_agent: '', referrer: '', verified: true },
+  { id: 'number1-tv', name: 'Number 1 TV', logo: 'https://i.imgur.com/02cDIBi.png', group: 'Music', stream_url: 'https://b01c02nl.mediatriple.net/videoonlylive/mtkgeuihrlfwlive/broadcast_5c9e17cd59e8b.smil/playlist.m3u8', country_code: 'TR', country_flag: '🇹🇷', category: 'Music', quality: '720p', user_agent: '', referrer: '', verified: true },
+  { id: 'dream-turk', name: 'Dream Türk', logo: 'https://i.imgur.com/vJ8VaZi.png', group: 'Music', stream_url: 'https://live.duhnet.tv/S2/HLS_LIVE/dreamturknp/playlist.m3u8', country_code: 'TR', country_flag: '🇹🇷', category: 'Music', quality: '720p', user_agent: '', referrer: '', verified: true },
+  { id: 'diyanet-tv', name: 'Diyanet TV', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Diyanet_TV_logo.svg/960px-Diyanet_TV_logo.svg.png', group: 'Religious', stream_url: 'https://eustr73.mediatriple.net/videoonlylive/mtikoimxnztxlive/broadcast_5e3bf95a47e07.smil/playlist.m3u8', country_code: 'TR', country_flag: '🇹🇷', category: 'Religious', quality: '1080p', user_agent: '', referrer: '', verified: true },
 ];
 
 // Keep the curated (verified) channels always present, on top, deduped against fetched ones.
 function composeCatalog(fetched: TvChannel[]): TvChannel[] {
-  const merged = [...DEFAULT_CHANNELS, ...fetched];
+  const merged = [...VERIFIED_CHANNELS, ...fetched];
   const seen = new Set<string>();
   const result: TvChannel[] = [];
   for (const channel of merged) {
@@ -230,6 +251,8 @@ function enrichEntries(raw: RawM3uEntry[]): TvChannel[] {
   return raw
     .filter((e) => {
       if (e.url.startsWith('http://')) return false;
+      // Browsers forbid custom User-Agent/Referer headers, so these can never play.
+      if (e.user_agent || e.referrer) return false;
       if (/not 24\/7|geo-?blocked|restricted|offline|unknown/i.test(e.name)) return false;
       const key = `${e.name}|${e.group}`;
       if (seen.has(key)) return false;
@@ -320,16 +343,36 @@ async function probeChannel(channel: TvChannel): Promise<boolean> {
   }
 }
 
+// Probe a bounded set with a concurrency pool so refresh stays fast and polite.
 async function filterLiveChannels(channels: TvChannel[]): Promise<TvChannel[]> {
-  const results = await Promise.allSettled(channels.map(probeChannel));
-  return channels.filter(
-    (_, i) => results[i].status === 'fulfilled' && (results[i] as PromiseFulfilledResult<boolean>).value
+  const results = new Array(channels.length).fill(false);
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.min(POOL_SIZE, channels.length) },
+    async () => {
+      while (cursor < channels.length) {
+        const index = cursor++;
+        results[index] = await probeChannel(channels[index]);
+      }
+    }
   );
+  await Promise.all(workers);
+  return channels.filter((_, i) => results[i]);
+}
+
+// Prefer the countries this app is built for, then probe the most promising.
+function groupScore(channel: TvChannel): number {
+  const group = channel.group.toLowerCase();
+  if (group.includes('georg')) return 3;
+  if (group.includes('turk')) return 2;
+  return 1;
 }
 
 async function fetchLiveChannels(): Promise<TvChannel[]> {
   const fetched = await fetchM3uChannels();
-  const live = await filterLiveChannels(fetched);
+  const prioritized = [...fetched].sort((a, b) => groupScore(b) - groupScore(a));
+  const candidates = prioritized.slice(0, MAX_ENRICH);
+  const live = await filterLiveChannels(candidates);
   if (live.length === 0) throw new Error('No live channels found right now');
   return live;
 }
@@ -337,7 +380,7 @@ async function fetchLiveChannels(): Promise<TvChannel[]> {
 export function useTvChannels() {
   const [allChannels, setAllChannels] = useState<TvChannel[]>(() => {
     const cached = getFromLocalStorage();
-    return cached ? composeCatalog(cached) : DEFAULT_CHANNELS;
+    return cached ? composeCatalog(cached) : VERIFIED_CHANNELS;
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

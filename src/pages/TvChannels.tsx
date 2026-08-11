@@ -22,6 +22,7 @@ import {
   VolumeX,
   Maximize,
   RefreshCw,
+  BadgeCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -72,6 +73,13 @@ function ChannelCard({
           </div>
         )}
 
+        {channel.verified && (
+          <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-emerald-500/90 backdrop-blur-sm rounded-lg px-1.5 py-0.5">
+            <BadgeCheck className="h-3 w-3 text-white" />
+            <span className="text-[9px] font-bold text-white tracking-wide">Verified</span>
+          </div>
+        )}
+
         <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/60 backdrop-blur-sm rounded-lg px-2 py-1">
           <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
           <span className="text-[10px] font-bold text-white tracking-wide">LIVE</span>
@@ -102,7 +110,9 @@ function ChannelPlayer({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playerError, setPlayerError] = useState<string | null>(null);
-  const [muted, setMuted] = useState(false);
+  // Start muted: autoplay with sound is blocked by browsers once the click
+  // gesture is lost (hls.js loads asynchronously), which leaves the spinner up.
+  const [muted, setMuted] = useState(true);
   const [loadingStream, setLoadingStream] = useState(true);
   const [streamKey, setStreamKey] = useState(0);
   const hlsRef = useRef<any>(null);
@@ -136,7 +146,7 @@ function ChannelPlayer({
           hlsRef.current = null;
         }
       }
-    }, 8000);
+    }, 12000);
 
     const clearLoading = () => {
       if (isCancelled) return;
@@ -179,6 +189,10 @@ function ChannelPlayer({
         });
         hls.on(Hls.Events.ERROR, (_event, data) => {
           if (data.fatal && !isCancelled) {
+            if (data.type === Hls.ErrorTypes.MEDIA_ERROR && hlsRef.current) {
+              hlsRef.current.recoverMediaError();
+              return;
+            }
             clearLoading();
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
               setPlayerError('Network error — stream may be geo-blocked or offline');
@@ -238,6 +252,15 @@ function ChannelPlayer({
               playsInline
               muted={muted}
             />
+            {muted && !loadingStream && !playerError && (
+              <button
+                onClick={() => { setMuted(false); if (videoRef.current) videoRef.current.muted = false; }}
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/60 backdrop-blur-sm border border-white/10 text-white text-sm font-bold hover:bg-black/80 transition-all"
+              >
+                <VolumeX className="h-4 w-4" />
+                Tap to unmute
+              </button>
+            )}
           </div>
 
           {/* Controls */}

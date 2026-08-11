@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -9,7 +8,8 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdminActions } from '@/hooks/useAdminActions';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Archive, Trash2, Clock, Mail, AlertTriangle } from 'lucide-react';
+import { Loader2, Archive, Trash2, Clock, Mail, AlertTriangle, UserX } from 'lucide-react';
+import AdminSection from './AdminSection';
 
 interface Deletion {
   id: string;
@@ -103,30 +103,26 @@ export default function AdminDeletedUsersTab() {
   const expired = (row: Deletion) => !row.purged_at && new Date(row.purge_due_at).getTime() <= Date.now();
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-          <div>
-            <CardTitle>Deleted Accounts</CardTitle>
-            <CardDescription>
-              Accounts deleted by users or staff. Data is retained 7 days so support can export it as a ZIP before permanent purge.
-            </CardDescription>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="lg:ml-auto gap-2"
-            onClick={purgeAllExpired}
-            disabled={purgeAllLoading || loading}
-          >
-            {purgeAllLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
-            Purge expired
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <AdminSection
+      icon={UserX}
+      title="Deleted Accounts"
+      eyebrow="Compliance"
+      description="Accounts deleted by users or staff. Data is retained 7 days so support can export it as a ZIP before permanent purge."
+      actions={
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={purgeAllExpired}
+          disabled={purgeAllLoading || loading}
+        >
+          {purgeAllLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
+          Purge expired
+        </Button>
+      }
+    >
         <div className="overflow-x-auto">
-          <Table>
+          <Table className="admin-table">
             <TableHeader>
               <TableRow>
                 <TableHead>Account</TableHead>
@@ -210,10 +206,9 @@ export default function AdminDeletedUsersTab() {
             </TableBody>
           </Table>
         </div>
-      </CardContent>
 
       <Dialog open={!!purgeTarget} onOpenChange={(open) => !open && setPurgeTarget(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="admin-scope max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Trash2 className="w-5 h-5 text-destructive" />
@@ -233,6 +228,6 @@ export default function AdminDeletedUsersTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </AdminSection>
   );
 }

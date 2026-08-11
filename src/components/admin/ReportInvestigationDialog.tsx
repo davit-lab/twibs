@@ -36,7 +36,7 @@ export default function ReportInvestigationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="admin-scope max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Flag className="h-5 w-5 text-destructive" />

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,6 +46,7 @@ export default function Auth() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { signIn, signUp, user, loading: authLoading } = useAuth();
+  const { isEnabled } = useAppSettings();
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>(searchParams.get('mode') === 'signup' ? 'signup' : 'login');
@@ -116,6 +118,14 @@ export default function Auth() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm(true)) return;
+    if (!isEnabled('allow_registrations')) {
+      toast({
+        variant: 'destructive',
+        title: 'Sign ups are closed',
+        description: 'New account registration is currently disabled. Please try again later.',
+      });
+      return;
+    }
     setLoading(true);
     const { error } = await signUp(email, password, displayName || undefined);
     setLoading(false);
@@ -136,7 +146,7 @@ export default function Auth() {
       toast({ variant: 'destructive', title: 'Sign up failed', description: error.message });
     } else {
       toast({ title: 'Welcome to Twibsers!', description: 'Your account has been created successfully.' });
-      navigate('/onboarding/interests');
+      navigate(isEnabled('signup_onboarding_enabled') ? '/onboarding/interests' : '/');
     }
   };
 
@@ -174,7 +184,7 @@ export default function Auth() {
       const { count } = await supabase.from('user_interests').select('*', { count: 'exact', head: true }).eq('user_id', (await supabase.auth.getUser()).data.user?.id);
       const isNewUser = (count || 0) === 0;
       toast({ title: 'Welcome!', description: 'You have successfully signed in.' });
-      navigate(isNewUser ? '/onboarding/interests' : '/');
+      navigate(isNewUser && isEnabled('signup_onboarding_enabled') ? '/onboarding/interests' : '/');
     }
   };
 
@@ -213,7 +223,7 @@ export default function Auth() {
       const { count } = await supabase.from('user_interests').select('*', { count: 'exact', head: true }).eq('user_id', (await supabase.auth.getUser()).data.user?.id);
       const isNewUser = (count || 0) === 0;
       toast({ title: 'Welcome!', description: 'You have successfully signed in.' });
-      navigate(isNewUser ? '/onboarding/interests' : '/');
+      navigate(isNewUser && isEnabled('signup_onboarding_enabled') ? '/onboarding/interests' : '/');
     }
   };
 

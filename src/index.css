@@ -252,6 +252,129 @@
     @apply flex items-center justify-between py-4 px-4 border-b border-border;
   }
 
+  /* ---------- Admin panel design language ---------- */
+  .admin-eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground;
+  }
+
+  .admin-panel {
+    @apply overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm;
+  }
+
+  .admin-panel-head {
+    @apply flex flex-col gap-3 border-b border-border/70 bg-muted/20 px-5 py-4 sm:flex-row sm:items-center sm:gap-4;
+  }
+
+  .admin-icon-chip {
+    @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-background text-foreground shadow-sm;
+  }
+
+  .admin-stat-tile {
+    @apply rounded-2xl border border-border/70 bg-card px-4 py-4 shadow-sm;
+  }
+
+  .admin-table th {
+    @apply bg-muted/40 text-[11px] font-semibold uppercase tracking-[0.11em] text-muted-foreground/80;
+  }
+
+  .admin-table tr {
+    @apply border-border/60;
+  }
+
+  .admin-table tbody tr {
+    @apply transition-colors hover:bg-muted/35;
+  }
+
+  .admin-empty {
+    @apply flex flex-col items-center justify-center py-14 text-center;
+  }
+
+  .admin-search {
+    @apply w-full border-border/70 bg-background pl-9 shadow-sm sm:w-72;
+  }
+
+  /* Neutralize brand accents inside the admin panel only */
+  .admin-scope {
+    --primary: 240 5.9% 12%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 240 5% 30%;
+    --verified: 240 5.9% 12%;
+  }
+
+  .dark .admin-scope {
+    --primary: 0 0% 95%;
+    --primary-foreground: 240 10% 3.9%;
+    --ring: 0 0% 80%;
+    --verified: 0 0% 90%;
+  }
+
+  /* ---------- Control room design language ---------- */
+  .cr-scope {
+    color-scheme: light;
+  }
+
+  .cr-panel {
+    @apply overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm;
+  }
+
+  .cr-title {
+    @apply text-xl font-bold tracking-tight text-foreground;
+  }
+
+  .cr-heading {
+    @apply text-sm font-semibold text-foreground;
+  }
+
+  .cr-value {
+    @apply font-bold tabular-nums tracking-tight text-foreground;
+    font-size: 1.65rem;
+    line-height: 1.1;
+  }
+
+  .cr-delta {
+    @apply mt-2 text-xs font-medium opacity-90;
+  }
+
+  .cr-mono-dims {
+    @apply text-xs text-muted-foreground;
+  }
+
+  .cr-chip {
+    @apply inline-flex h-8 items-center gap-1.5 rounded-full border border-border/70 bg-background px-3 text-xs font-medium text-foreground shadow-sm;
+  }
+
+  .cr-nav-btn {
+    @apply h-9 rounded-lg border border-border/70 bg-background text-xs font-medium text-foreground shadow-sm;
+  }
+
+  .cr-nav-btn:hover {
+    @apply border-border bg-muted text-foreground;
+  }
+
+  /* Status LEDs */
+  .led {
+    @apply inline-block shrink-0 rounded-full;
+    background: #64748b;
+  }
+
+  .led-sm { @apply h-1.5 w-1.5; }
+  .led-md { @apply h-2 w-2; }
+
+  .led-green { background: #34d399; box-shadow: 0 0 6px rgb(52 211 153 / 0.7); }
+  .led-amber { background: #fbbf24; box-shadow: 0 0 6px rgb(251 191 36 / 0.7); }
+  .led-red { background: #fb7185; box-shadow: 0 0 6px rgb(251 113 133 / 0.8); }
+  .led-cyan { background: #22d3ee; box-shadow: 0 0 6px rgb(34 211 238 / 0.8); }
+  .led-gray { background: #475569; }
+
+  .led-pulse {
+    animation: led-pulse 1.6s ease-in-out infinite;
+  }
+
+  @keyframes led-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
   .typing-bubble {
     @apply flex gap-1 bg-surface-2 px-4 py-2.5 rounded-2xl rounded-bl-md;
   }
@@ -350,6 +473,100 @@
   }
 }
 
+
+/* Glassy segmented control — iOS 27 style */
+.segmented {
+  position: relative;
+  display: inline-flex;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 10px 30px rgba(3,8,20,0.6);
+}
+
+.segmented__tab {
+  position: relative;
+  z-index: 2;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-weight: 600;
+  transition: transform 260ms cubic-bezier(.2,.9,.2,1), color 200ms ease, background 200ms ease, box-shadow 200ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.segmented__tab--idle:hover {
+  color: hsl(var(--foreground));
+  transform: translateY(-2px);
+  background: rgba(255,255,255,0.02);
+  box-shadow: 0 8px 20px rgba(2,6,23,0.25);
+}
+
+.segmented__tab--active {
+  color: hsl(var(--primary-foreground));
+  background: linear-gradient(90deg, hsl(var(--primary) / 1), rgba(255,255,255,0.06));
+  box-shadow: 0 12px 34px rgba(79,70,229,0.18), inset 0 1px 0 rgba(255,255,255,0.14);
+}
+
+.segmented__tab--active::after {
+  /* soft sheen */
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.02));
+  mix-blend-mode: overlay;
+  opacity: 0.95;
+}
+
+.segmented__tab svg { color: inherit; }
+
+/* Sliding active pill */
+.segmented { position: relative; }
+.segmented__slider {
+  position: absolute;
+  left: 0;
+  top: 6px;
+  height: calc(100% - 12px);
+  width: var(--slider-w, 0px);
+  transform: translateX(var(--slider-x, 0px));
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(168,85,247,1), rgba(79,70,229,1));
+  box-shadow: 0 12px 30px rgba(79,70,229,0.12), inset 0 1px 0 rgba(255,255,255,0.12);
+  transition: transform 420ms cubic-bezier(.22,.9,.3,1), width 420ms cubic-bezier(.22,.9,.3,1);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* ensure tabs sit above the slider */
+.segmented__tab { z-index: 2; }
+
+/* Progress ring (character count) */
+.progress-ring { display: inline-block; }
+.progress-ring svg { display: block; }
+.progress-ring__bg { opacity: 0.14; stroke-width: 3; }
+.progress-ring__fg {
+  stroke: currentColor;
+  filter: drop-shadow(0 6px 12px rgba(0,0,0,0.28));
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset 420ms cubic-bezier(.2,.9,.2,1), stroke 280ms ease, filter 300ms ease;
+  will-change: stroke-dashoffset, stroke, filter;
+}
+.progress-ring--gradient { /* fallback color when using gradient stroke */
+  color: hsl(var(--primary));
+}
+.progress-ring__fg.text-amber-500 { color: rgba(250, 204, 21, 1); }
+.progress-ring__fg.text-destructive { color: hsl(var(--destructive)); }
+.progress-ring .tabular-nums { font-variant-numeric: tabular-nums; }
+
+
+
 @layer utilities {
   .bg-surface { background-color: hsl(var(--surface)); }
   .bg-surface-2 { background-color: hsl(var(--surface-2)); }
@@ -399,5 +616,72 @@
   .animate-spin-slow { animation: spin-slow 3s linear infinite; }
   .animate-ping-once { animation: ping-once 0.8s ease-out forwards; }
 
-  .safe-area-inset-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .create-btn {
+    position: relative;
+    overflow: hidden;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #a855f7, #7c3aed 52%, #4f46e5);
+    box-shadow:
+      0 8px 20px rgba(8, 6, 12, 0.6),
+      0 6px 18px rgba(79, 70, 229, 0.12) inset;
+    transition: transform 280ms cubic-bezier(.2, .9, .2, 1), box-shadow 280ms ease;
+    will-change: transform;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* soft halo behind the button to lift it off the surface */
+  .create-btn::before {
+    content: '';
+    position: absolute;
+    inset: -14px;
+    background: radial-gradient(closest-side, rgba(124, 58, 237, 0.18), transparent 40%);
+    filter: blur(18px);
+    opacity: 0.95;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* subtle sheen on the surface to suggest curvature */
+  .create-btn::after {
+    content: '';
+    position: absolute;
+    left: -30%;
+    top: -60%;
+    width: 160%;
+    height: 140%;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04) 36%, transparent 48%);
+    transform: rotate(-18deg) translateX(0%);
+    opacity: 0.9;
+    transition: transform 6s linear;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* very slow drift of sheen for life, but subtle */
+  @keyframes create-sheen-drift {
+    0% { transform: rotate(-18deg) translateX(0%); }
+    50% { transform: rotate(-18deg) translateX(6%); }
+    100% { transform: rotate(-18deg) translateX(0%); }
+  }
+
+  .create-btn:hover::after {
+    animation: create-sheen-drift 6s ease-in-out infinite;
+  }
+
+  .create-btn:hover {
+    transform: translateY(-4px) scale(1.04);
+    box-shadow:
+      0 18px 46px rgba(6, 6, 10, 0.6),
+      0 6px 22px rgba(79, 70, 229, 0.14) inset;
+  }
+
+  .create-btn:active {
+    transform: translateY(0) scale(0.98);
+    box-shadow: 0 6px 18px rgba(6, 6, 10, 0.55);
+  }
+
+  .create-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 6px rgba(124, 58, 237, 0.08), 0 10px 30px rgba(6, 6, 10, 0.55);
+  }
 }

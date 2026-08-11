@@ -57,7 +57,7 @@ export default function PurgeAllUsersDialog({ open, onOpenChange, onDone }: Purg
   return (
     <>
       <Dialog open={open && !stepTwo} onOpenChange={close}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="admin-scope max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <ShieldAlert className="w-5 h-5" />
@@ -94,7 +94,7 @@ export default function PurgeAllUsersDialog({ open, onOpenChange, onDone }: Purg
       </Dialog>
 
       <AlertDialog open={stepTwo} onOpenChange={(o) => { if (!o) { setStepTwo(false); setPhrase(''); } }}>
-        <AlertDialogContent>
+        <AlertDialogContent className="admin-scope">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-destructive">Final confirmation</AlertDialogTitle>
             <AlertDialogDescription>

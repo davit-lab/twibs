@@ -1,11 +1,29 @@
 import { Conversation } from '@/hooks/useConversations';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, Plus, BellOff, MessageSquareText, BadgeCheck, X } from 'lucide-react';
+import { Search, Plus, BellOff, MessageSquareText, BadgeCheck, X, MoreVertical, Trash2 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { isUserOnline } from '@/hooks/usePresence';
+import { toast } from '@/hooks/use-toast';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import AvatarCollage from './AvatarCollage';
 
 interface ConversationListProps {
@@ -14,7 +32,12 @@ interface ConversationListProps {
   selectedId?: string;
   onSelect: (conversationId: string) => void;
   onNewChat: () => void;
+  currentUserId?: string;
+  onRemoveChat: (conversation: Conversation) => Promise<boolean>;
+  onDeleteChat: (conversation: Conversation) => Promise<boolean>;
 }
+
+type PendingAction = { conv: Conversation; action: 'remove' | 'delete' } | null;
 
 const TABS = ['All', 'Unread', 'Groups', 'Communities'] as const;
 
@@ -24,9 +47,14 @@ export default function ConversationList({
   selectedId,
   onSelect,
   onNewChat,
+  currentUserId,
+  onRemoveChat,
+  onDeleteChat,
 }: ConversationListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<typeof TABS[number]>('All');
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [actionBusy, setActionBusy] = useState(false);
 
   const getInitials = (name: string) => {
     return name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
@@ -77,6 +105,28 @@ export default function ConversationList({
     if (tab === 'Groups') return conversations.filter(c => c.type === 'group').length;
     if (tab === 'Communities') return conversations.filter(c => c.type === 'community').length;
     return conversations.length;
+  };
+
+  const canDelete = (conv: Conversation) =>
+    !!currentUserId && conv.type !== 'dm' && conv.owner_id === currentUserId;
+
+  const confirmAction = async () => {
+    if (!pendingAction) return;
+    const { conv, action } = pendingAction;
+    setActionBusy(true);
+    const ok = action === 'remove' ? await onRemoveChat(conv) : await onDeleteChat(conv);
+    setActionBusy(false);
+    setPendingAction(null);
+    if (!ok) {
+      toast({
+        variant: 'destructive',
+        title: action === 'remove' ? 'Could not remove chat' : 'Could not delete chat',
+        description:
+          action === 'remove'
+            ? 'Please try again.'
+            : 'Only the owner can delete a chat. Please try again.',
+      });
+    }
   };
 
   if (loading) {
@@ -220,12 +270,20 @@ export default function ConversationList({
               const unread = conv.unread_count > 0;
 
               return (
-                <button
+                <div
                   key={conv.id}
-                  onClick={() => onSelect(conv.id)}
                   style={{ animationDelay: `${Math.min(index, 12) * 35}ms` }}
+                  className="chat-item-in relative"
+                >
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onSelect(conv.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') onSelect(conv.id);
+                  }}
                   className={cn(
-                    'chat-item-in group relative w-full text-left flex items-center gap-3 rounded-2xl p-3 transition-all duration-200',
+                    'group relative w-full text-left flex items-center gap-3 rounded-2xl p-3 transition-all duration-200 cursor-pointer',
                     selected
                       ? 'bg-primary/[0.07]'
                       : 'hover:bg-surface-2'
@@ -291,12 +349,46 @@ export default function ConversationList({
                           </span>
                         )}
                       </span>
-                      <span className={cn(
-                        'text-[11px] flex-shrink-0 tabular-nums',
-                        unread ? 'text-primary font-semibold' : 'text-muted-foreground'
-                      )}>
-                        {conv.last_message ? formatTimestamp(conv.last_message.created_at) : ''}
-                      </span>
+                      <div className="flex items-center gap-0.5 flex-shrink-0">
+                        <span className={cn(
+                          'text-[11px] tabular-nums',
+                          unread ? 'text-primary font-semibold' : 'text-muted-foreground'
+                        )}>
+                          {conv.last_message ? formatTimestamp(conv.last_message.created_at) : ''}
+                        </span>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              aria-label={`Actions for ${title}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground/70 hover:text-foreground hover:bg-surface-3 transition-colors opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48 rounded-xl">
+                            <DropdownMenuItem
+                              className="cursor-pointer gap-2 text-sm"
+                              onClick={() => setPendingAction({ conv, action: 'remove' })}
+                            >
+                              <X className="h-4 w-4" />
+                              Remove chat
+                            </DropdownMenuItem>
+                            {canDelete(conv) && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="cursor-pointer gap-2 text-sm text-destructive focus:text-destructive"
+                                  onClick={() => setPendingAction({ conv, action: 'delete' })}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Delete chat
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <p className={cn(
@@ -321,12 +413,45 @@ export default function ConversationList({
                       )}
                     </div>
                   </div>
-                </button>
+                  </div>
+                </div>
               );
             })}
           </div>
         )}
       </div>
+
+      <AlertDialog
+        open={!!pendingAction}
+        onOpenChange={(open) => {
+          if (!open && !actionBusy) setPendingAction(null);
+        }}
+      >
+        {pendingAction && (
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {pendingAction.action === 'delete' ? 'Delete chat?' : 'Remove chat?'}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {pendingAction.action === 'delete'
+                  ? `"${getTitle(pendingAction.conv)}" will be permanently deleted for every member. This cannot be undone.`
+                  : `"${getTitle(pendingAction.conv)}" will be removed from your chat list. The conversation stays available to other members.`}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={actionBusy}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmAction}
+                disabled={actionBusy}
+                className={pendingAction.action === 'delete' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : undefined}
+              >
+                {pendingAction.action === 'delete' ? 'Delete' : 'Remove'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        )}
+      </AlertDialog>
     </div>
   );
 }

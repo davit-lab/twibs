@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +10,7 @@ import { toast } from '@/hooks/use-toast';
 import { Search, Loader2, Trash2, Eye, EyeOff, BookOpen } from 'lucide-react';
 import { AdminBook } from './types';
 import PaginationBar from './PaginationBar';
+import AdminSection from './AdminSection';
 
 const PAGE_SIZE = 20;
 
@@ -80,27 +80,25 @@ export default function AdminBooksTab() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <CardTitle>Book Management</CardTitle>
-            <CardDescription>Review, hide and remove published books</CardDescription>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search titles..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-              className="pl-9 w-full sm:w-64"
-            />
-          </div>
+    <AdminSection
+      icon={BookOpen}
+      title="Book Management"
+      eyebrow="Content"
+      description="Review, hide and remove published books"
+      actions={
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search titles..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+            className="admin-search"
+          />
         </div>
-      </CardHeader>
-      <CardContent>
+      }
+    >
         <div className="overflow-x-auto">
-          <Table>
+          <Table className="admin-table">
             <TableHeader>
               <TableRow>
                 <TableHead>Title</TableHead>
@@ -152,10 +150,9 @@ export default function AdminBooksTab() {
           </Table>
         </div>
         <PaginationBar page={page} totalPages={totalPages} total={total} label="books" onPageChange={setPage} />
-      </CardContent>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="admin-scope">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-destructive">Delete this book?</AlertDialogTitle>
             <AlertDialogDescription>This permanently removes the book and its chapters. This cannot be undone.</AlertDialogDescription>
@@ -168,6 +165,6 @@ export default function AdminBooksTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Card>
+    </AdminSection>
   );
 }

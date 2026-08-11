@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
-  BadgeCheck, Music2, Play, Pause, UserPlus, UserCheck, Loader2, Volume2, VolumeX,
+  BadgeCheck, Music2, Play, Pause, UserPlus, UserCheck, Loader2, Volume2, VolumeX, Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Reel } from '@/hooks/useReels';
@@ -68,6 +68,8 @@ export default function ReelCard({
   const [showLikersModal, setShowLikersModal] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+  const [captionExpanded, setCaptionExpanded] = useState(false);
+  const [durationLabel, setDurationLabel] = useState('0:00');
 
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -148,10 +150,18 @@ export default function ReelCard({
     const onTime = () => {
       if (video.duration) {
         setProgress((video.currentTime / video.duration) * 100);
+        setDurationLabel(formatTime(video.currentTime));
       }
     };
     video.addEventListener('timeupdate', onTime);
     return () => video.removeEventListener('timeupdate', onTime);
+  }, []);
+
+  const seekToProgress = useCallback((nextProgress: number) => {
+    const video = videoRef.current;
+    if (!video || !video.duration) return;
+    video.currentTime = (nextProgress / 100) * video.duration;
+    setProgress(nextProgress);
   }, []);
 
   const flashIcon = useCallback((icon: string) => {
@@ -276,7 +286,7 @@ export default function ReelCard({
   }, []);
 
   return (
-    <div className="relative h-full w-full select-none overflow-hidden bg-black">
+    <div className="relative h-full w-full select-none overflow-hidden bg-black sm:rounded-[28px] sm:border sm:border-white/10">
       <video
         ref={videoRef}
         src={reel.video_url}
@@ -296,12 +306,11 @@ export default function ReelCard({
       />
 
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/50 via-black/10 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 h-80 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,rgba(0,0,0,0.2))]" />
+        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/45 via-black/10 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-72 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
       </div>
 
-      <ReelProgressBar progress={progress} />
+      <ReelProgressBar progress={progress} onSeek={seekToProgress} />
 
       <AnimatePresence>
         {isActive && iconFeedback && (
@@ -312,14 +321,13 @@ export default function ReelCard({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
-          >
-            <motion.div
-              initial={{ scale: 0.6 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="relative flex h-16 w-16 items-center justify-center rounded-full bg-black/45 backdrop-blur-lg"
             >
-              <span className="absolute inset-0 rounded-full border-2 border-white/20 animate-ripple-expand" />
+              <motion.div
+                initial={{ scale: 0.6 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+              className="relative flex h-16 w-16 items-center justify-center rounded-full bg-black/55 backdrop-blur-md"
+            >
               {iconFeedback.icon === 'play' && <Play className="ml-1 h-8 w-8 text-white" fill="white" />}
               {iconFeedback.icon === 'pause' && <Pause className="h-8 w-8 text-white" fill="white" />}
               {iconFeedback.icon === 'mute' && <VolumeX className="h-7 w-7 text-white" />}
@@ -335,10 +343,17 @@ export default function ReelCard({
       <button
         onClick={handleMuteToggle}
         aria-label={isMuted ? 'Unmute' : 'Mute'}
-        className="absolute right-3.5 top-16 z-30 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/30 text-white/90 backdrop-blur-lg transition-all hover:bg-black/55 active:scale-90"
+        className="absolute right-3.5 top-16 z-30 flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/35 text-white/90 backdrop-blur-md transition-colors hover:bg-black/55"
       >
         {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
       </button>
+
+      <div className="absolute left-4 top-16 z-30 flex items-center gap-2 rounded-full border border-white/15 bg-black/35 px-3 py-1.5 text-xs font-medium text-white/85 backdrop-blur-md">
+        <Eye className="h-3.5 w-3.5" />
+        {reel.view_count.toLocaleString()} views
+        <span className="text-white/40">·</span>
+        {durationLabel}
+      </div>
 
       <OverlayStickers overlay={reel.overlay} />
 
@@ -382,7 +397,19 @@ export default function ReelCard({
         </div>
 
         {reel.caption && (
-          <p className="mb-2 text-sm leading-relaxed text-white/90 line-clamp-2">{reel.caption}</p>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setCaptionExpanded((value) => !value);
+            }}
+            className="mb-2 block w-full text-left text-sm leading-relaxed text-white/90"
+          >
+            <span className={captionExpanded ? '' : 'line-clamp-2'}>{reel.caption}</span>
+            {reel.caption.length > 90 && (
+              <span className="ml-1 text-white/55">{captionExpanded ? 'less' : 'more'}</span>
+            )}
+          </button>
         )}
 
         {reel.audio_name && (
@@ -421,7 +448,7 @@ export default function ReelCard({
             onPointerUp={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2 rounded-full border border-white/15 bg-black/70 px-4 py-3 shadow-2xl shadow-black/60 backdrop-blur-xl">
+            <div className="flex items-center gap-2 rounded-full border border-white/15 bg-black/75 px-4 py-3 backdrop-blur-md">
               {REACTION_EMOJIS.map((emoji) => (
                 <motion.button
                   key={emoji}
@@ -441,4 +468,12 @@ export default function ReelCard({
       <ReelLikersModal reelId={reel.id} open={showLikersModal} onOpenChange={setShowLikersModal} />
     </div>
   );
+}
+
+function formatTime(seconds: number) {
+  if (!Number.isFinite(seconds)) return '0:00';
+  const total = Math.max(0, Math.floor(seconds));
+  const mins = Math.floor(total / 60);
+  const secs = String(total % 60).padStart(2, '0');
+  return `${mins}:${secs}`;
 }

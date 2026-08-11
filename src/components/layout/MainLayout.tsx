@@ -14,7 +14,9 @@ import BrandLogo from '@/components/brand/BrandLogo';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -64,7 +66,7 @@ const mobileNavItems = [
   { icon: Compass, label: 'Explore', href: '/explore', id: 'explore' },
   { icon: null, label: 'Create', href: '#create', id: 'create' },
   { icon: Clapperboard, label: 'Reels', href: '/reels', id: 'reels' },
-  { icon: Menu, label: 'More', href: '#more', id: 'more' },
+  { icon: MessageCircle, label: 'Messages', href: '/messages', id: 'messages' },
 ];
 
 export default function MainLayout({ children, immersive = false }: MainLayoutProps) {
@@ -124,9 +126,9 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
                     <button
                       onClick={() => setCreateDialogOpen(true)}
                       aria-label="Create"
-                      className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-accent text-white shadow-lg shadow-primary/30 flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+                      className="create-btn flex h-12 w-12 items-center justify-center"
                     >
-                      <Plus className="h-6 w-6" strokeWidth={2.5} />
+                      <Plus className="relative z-10 h-6 w-6 text-white drop-shadow" strokeWidth={2.5} />
                     </button>
                     <span className="rail-tip">Create</span>
                   </div>
@@ -214,7 +216,7 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
         </aside>
       )}
 
-      {/* Mobile Floating Nav - Notifications & Chats */}
+      {/* Mobile Floating Nav - Notifications & More */}
       {user && !immersive && location.pathname !== '/messages' && (
         <div
           className={cn(
@@ -225,11 +227,114 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
           )}
         >
           <NotificationDropdown className="text-muted-foreground hover:text-foreground hover:bg-primary/10" />
-          <Link to="/messages">
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-primary/10">
-              <MessageCircle className="h-5 w-5" strokeWidth={1.5} />
-            </Button>
-          </Link>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                aria-label="More"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground hover:bg-primary/10"
+              >
+                <Menu className="h-5 w-5" strokeWidth={1.5} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              side="bottom"
+              sideOffset={10}
+              className="w-64 rounded-2xl border-border/70 bg-background/95 p-1.5 shadow-xl shadow-black/20 backdrop-blur-xl"
+            >
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Navigation
+                </DropdownMenuLabel>
+                <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
+                  <Link to={`/profile/${profile?.username}`}>
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
+                      <User className="h-4 w-4" />
+                    </span>
+                    Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
+                  <Link to="/library">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
+                      <BookOpen className="h-4 w-4" />
+                    </span>
+                    Library
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
+                  <Link to="/tv">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
+                      <Radio className="h-4 w-4" />
+                    </span>
+                    Live TV
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
+                  <Link to="/groups">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
+                      <Users className="h-4 w-4" />
+                    </span>
+                    Groups
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
+                  <Link to="/interests">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
+                      <Sparkles className="h-4 w-4" />
+                    </span>
+                    Interests
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+
+              <DropdownMenuSeparator className="my-1.5" />
+
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Account
+                </DropdownMenuLabel>
+                <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
+                  <Link to="/settings">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
+                      <Settings className="h-4 w-4" />
+                    </span>
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
+                  <Link to="/pricing">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
+                      <Crown className="h-4 w-4" />
+                    </span>
+                    Premium
+                  </Link>
+                </DropdownMenuItem>
+                {(isAdmin || isModerator) && (
+                  <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
+                    <Link to="/admin">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
+                        <Shield className="h-4 w-4" />
+                      </span>
+                      Admin
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuGroup>
+
+              <DropdownMenuSeparator className="my-1.5" />
+
+              <DropdownMenuItem
+                onClick={signOut}
+                className="cursor-pointer gap-2.5 rounded-xl py-2 text-destructive"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-destructive/10">
+                  <LogOut className="h-4 w-4" />
+                </span>
+                Log out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
 
@@ -295,7 +400,6 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
           <div className="pointer-events-auto mx-auto max-w-[430px] rounded-full bg-background/75 backdrop-blur-xl border border-border/60 shadow-lg shadow-black/10 flex items-center justify-around h-16 px-2 relative">
             {mobileNavItems.map((item) => {
               const active = isActive(item.href);
-              const isMore = item.href === '#more';
               const isCreate = item.href === '#create';
 
               if (isCreate) {
@@ -304,95 +408,13 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
                     key={item.id}
                     onClick={() => setCreateDialogOpen(true)}
                     aria-label="Create post"
-                    className="relative -mt-6"
+                    className="relative -mt-7 group"
                   >
-                    <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/40 ring-4 ring-background/40 transition-transform active:scale-95 hover:scale-105">
-                      <Plus className="h-6 w-6" strokeWidth={2.5} />
-                    </div>
+                    <span className="absolute -inset-1.5 rounded-full bg-violet-500/40 blur-lg opacity-50 group-hover:opacity-90 group-active:opacity-70 transition-opacity" />
+                    <span className="create-btn relative flex h-14 w-14 items-center justify-center">
+                      <Plus className="relative z-10 h-6 w-6 text-white drop-shadow" strokeWidth={2.5} />
+                    </span>
                   </button>
-                );
-              }
-
-              if (isMore) {
-                return (
-                  <DropdownMenu key={item.id}>
-                    <DropdownMenuTrigger asChild>
-                      <button className="flex flex-col items-center justify-center gap-1 rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-colors">
-                        <Menu className="h-5 w-5" strokeWidth={1.5} />
-                        <span className="text-[10px] font-medium">{item.label}</span>
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[200px]" align="end" side="top" sideOffset={14}>
-                      <DropdownMenuItem asChild>
-                        <Link to={`/profile/${profile?.username}`} className="cursor-pointer">
-                          <User className="mr-3 h-4 w-4" />
-                          Profile
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/library" className="cursor-pointer">
-                          <BookOpen className="mr-3 h-4 w-4" />
-                          Library
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/tv" className="cursor-pointer">
-                          <Radio className="mr-3 h-4 w-4" />
-                          Live TV
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/groups" className="cursor-pointer">
-                          <Users className="mr-3 h-4 w-4" />
-                          Groups
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/interests" className="cursor-pointer">
-                          <Sparkles className="mr-3 h-4 w-4" />
-                          Interests
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/notifications" className="cursor-pointer">
-                          <Heart className="mr-3 h-4 w-4" />
-                          Notifications
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/messages" className="cursor-pointer">
-                          <MessageCircle className="mr-3 h-4 w-4" />
-                          Messages
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link to="/settings" className="cursor-pointer">
-                          <Settings className="mr-3 h-4 w-4" />
-                          Settings
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/pricing" className="cursor-pointer">
-                          <Crown className="mr-3 h-4 w-4" />
-                          Premium
-                        </Link>
-                      </DropdownMenuItem>
-                      {(isAdmin || isModerator) && (
-                        <DropdownMenuItem asChild>
-                          <Link to="/admin" className="cursor-pointer">
-                            <Shield className="mr-3 h-4 w-4" />
-                            Admin
-                          </Link>
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={signOut} className="cursor-pointer text-destructive">
-                        <LogOut className="mr-3 h-4 w-4" />
-                        Log out
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                 );
               }
 

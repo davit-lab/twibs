@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import PostCard from './PostCard';
@@ -91,6 +91,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
   const [feedType, setFeedType] = useState<FeedType>('all');
   
   const PAGE_SIZE = 10;
+  const segmentedRef = useRef<HTMLDivElement | null>(null);
   const showFeedTabs = !userId && user;
 
   const attachStars = useCallback(async (posts: Post[]): Promise<Post[]> => {
@@ -265,6 +266,30 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
     fetchPosts();
   }, [userId, refreshTrigger, feedType]);
 
+  // Smooth slide for segmented control: position the slider under active tab
+  useLayoutEffect(() => {
+    const container = segmentedRef.current;
+    if (!container) return;
+
+    const update = () => {
+      const active = container.querySelector('.segmented__tab--active') as HTMLElement | null;
+      if (!active) return;
+      const cRect = container.getBoundingClientRect();
+      const aRect = active.getBoundingClientRect();
+      const left = aRect.left - cRect.left;
+      const width = aRect.width;
+      container.style.setProperty('--slider-x', `${left}px`);
+      container.style.setProperty('--slider-w', `${width}px`);
+    };
+
+    // run once and on next frame for smoothness
+    requestAnimationFrame(update);
+
+    const onResize = () => requestAnimationFrame(update);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [feedType]);
+
   useEffect(() => {
     const channel = supabase
       .channel('posts-realtime')
@@ -355,14 +380,15 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
     <div className="p-4 space-y-4">
       {/* Feed Type Tabs */}
       {showFeedTabs && (
-        <div className="flex gap-1 p-1 bg-muted border border-border/60 rounded-full w-fit">
+        <div ref={segmentedRef} className="segmented inline-flex gap-1 p-1 rounded-full w-fit" style={{'--slider-x': '0px' } as any}>
+          <div className="segmented__slider" aria-hidden />
           <button
             onClick={() => setFeedType('all')}
             className={cn(
-              "px-5 py-2 rounded-full text-sm font-semibold transition-all duration-200",
+              "segmented__tab px-5 py-2 rounded-full text-sm font-semibold transition-all duration-200",
               feedType === 'all'
-                ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                : "text-muted-foreground hover:text-foreground hover:bg-surface-3"
+                ? "segmented__tab--active"
+                : "segmented__tab--idle"
             )}
           >
             For You
@@ -370,10 +396,10 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
           <button
             onClick={() => setFeedType('following')}
             className={cn(
-              "px-5 py-2 rounded-full text-sm font-semibold transition-all duration-200",
+              "segmented__tab px-5 py-2 rounded-full text-sm font-semibold transition-all duration-200",
               feedType === 'following'
-                ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                : "text-muted-foreground hover:text-foreground hover:bg-surface-3"
+                ? "segmented__tab--active"
+                : "segmented__tab--idle"
             )}
           >
             Following

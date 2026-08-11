@@ -29,6 +29,16 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { 
   Send, 
   Loader2, 
@@ -116,7 +126,7 @@ export default function MessageThread({
   const { toggleReaction, getReactionsForMessage } = useMessageReactions(conversationId);
   const liveLocation = useLiveLocation(conversationId);
   const { blockUser, unblockUser, isUserBlocked } = useCallBlocks();
-  const { toggleMute, leaveConversation } = useConversations();
+  const { toggleMute, leaveConversation, deleteConversation } = useConversations();
   const { callState, startCall, answerCall, endCall, toggleAudio, toggleVideo, toggleScreenShare, retryCall } = useWebRTC(conversationId, otherUserId);
 
   const wallpaper = conversation?.chat_wallpaper || null;
@@ -158,6 +168,7 @@ export default function MessageThread({
   const [isSavingEditMessage, setIsSavingEditMessage] = useState(false);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
   const [mapDialogOpen, setMapDialogOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -284,6 +295,22 @@ export default function MessageThread({
     onBack?.();
   };
 
+  const isConversationOwner = !!user && isGroup && conversation?.owner_id === user.id;
+
+  const handleDeleteConversation = async () => {
+    setConfirmDeleteOpen(false);
+    const ok = await deleteConversation(conversationId);
+    if (!ok) {
+      toast({
+        variant: 'destructive',
+        title: 'Could not delete chat',
+        description: 'Only the owner can delete this conversation. Please try again.',
+      });
+      return;
+    }
+    onBack?.();
+  };
+
   const activeCallType = callState.session?.call_type || null;
   const isInCall = callState.session && callState.session.status !== 'ended' && callState.session.status !== 'declined';
 
@@ -306,6 +333,13 @@ export default function MessageThread({
     setSending(true);
     try {
       await sendMessage(gifUrl);
+    } catch (error) {
+      console.error('Failed to send GIF:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Failed to send',
+        description: error instanceof Error ? error.message : 'Something went wrong.',
+      });
     } finally {
       setSending(false);
     }
@@ -493,6 +527,11 @@ export default function MessageThread({
       inputRef.current?.focus();
     } catch (error) {
       console.error('Failed to send message:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Failed to send',
+        description: error instanceof Error ? error.message : 'Something went wrong.',
+      });
     } finally {
       setSending(false);
     }
@@ -872,6 +911,18 @@ export default function MessageThread({
                       {muted ? 'Unmute notifications' : 'Mute notifications'}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
+                    {isConversationOwner && (
+                      <>
+                        <DropdownMenuItem
+                          onClick={() => setConfirmDeleteOpen(true)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete {isCommunity ? 'community' : 'group'}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
                     <DropdownMenuItem onClick={handleLeave} className="text-destructive focus:text-destructive">
                       <LogOut className="h-4 w-4 mr-2" />
                       Leave {isCommunity ? 'community' : 'group'}
@@ -1416,6 +1467,27 @@ export default function MessageThread({
           )}
         </div>
       </div>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {isCommunity ? 'community' : 'group'}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{conversation?.name || 'This chat'}" will be permanently deleted for every member.
+              This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConversation}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

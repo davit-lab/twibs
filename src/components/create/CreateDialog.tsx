@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { useStories } from '@/hooks/useStories';
+import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import { useToast } from '@/hooks/use-toast';
 import CameraModal from '@/components/media/CameraModal';
 import type { MediaEditorResult } from '@/components/media/FilterEditor';
-import { Loader2, Camera, ImageIcon, Plus, Clapperboard, Sparkles } from 'lucide-react';
+import { Loader2, Camera, ImageIcon, Plus, Clapperboard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReelCreator from './ReelCreator';
 
@@ -40,11 +41,18 @@ const createOptions = [
 
 export default function CreateDialog({ open, onOpenChange }: CreateDialogProps) {
   const { uploadStory } = useStories();
+  const { isEnabled } = useAppSettings();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [uploading, setUploading] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [reelCreatorOpen, setReelCreatorOpen] = useState(false);
+
+  const visibleOptions = createOptions.filter(option => {
+    if (option.type === 'story') return isEnabled('story_posting_enabled');
+    if (option.type === 'reel') return isEnabled('reels_upload_enabled');
+    return true;
+  });
 
   const handleCameraDone = async (file: File, result: MediaEditorResult) => {
     setCameraOpen(false);
@@ -86,15 +94,17 @@ export default function CreateDialog({ open, onOpenChange }: CreateDialogProps) 
             <div className="absolute -top-10 -right-8 w-40 h-40 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
             <div className="absolute -bottom-14 -left-10 w-44 h-44 rounded-full bg-accent/10 blur-3xl pointer-events-none" />
             <div className="relative flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/25">
-                <Plus className="h-6 w-6 text-white" />
+              <div className="relative rounded-2xl p-[2px] bg-gradient-to-br from-primary/80 via-purple-500 to-accent/90">
+                <div className="w-12 h-12 rounded-2xl bg-card/90 flex items-center justify-center shadow-2xl shadow-primary/20 transition-transform duration-300 transform">
+                  <div className="absolute inset-0 rounded-2xl pointer-events-none overflow-hidden">
+                    <div className="absolute -top-1 left-0 w-full h-6 rounded-t-2xl bg-white/6 blur-sm" />
+                  </div>
+                  <Plus className="h-6 w-6 text-white" />
+                </div>
               </div>
               <div>
                 <h2 className="text-xl font-bold tracking-tight">Create</h2>
-                <p className="text-sm text-muted-foreground flex items-center gap-1">
-                  <Sparkles className="h-3.5 w-3.5 text-primary" />
-                  Choose what you'd like to share
-                </p>
+                <p className="text-sm text-muted-foreground">Choose what you'd like to share</p>
               </div>
             </div>
           </div>
@@ -102,23 +112,27 @@ export default function CreateDialog({ open, onOpenChange }: CreateDialogProps) 
           {/* Options */}
           <div className="relative px-4 pb-5">
             <div className="grid grid-cols-3 gap-3">
-              {createOptions.map((option) => (
+              {visibleOptions.map((option) => (
                 <button
                   key={option.type}
                   onClick={() => handleCreateTypeSelect(option.type)}
                   className={cn(
-                    'group flex flex-col items-center gap-3 px-2 py-6 rounded-3xl border border-border/60 bg-card text-center',
-                    'transition-all duration-200 hover:border-border hover:bg-muted/40',
-                    'hover:shadow-lg hover:shadow-black/5 active:scale-[0.96]'
+                    'group relative flex flex-col items-center gap-3 px-2 py-6 rounded-3xl border border-border/60 bg-card/90 text-center',
+                    'transition-all duration-250 hover:border-border hover:bg-muted/40',
+                    'hover:shadow-2xl hover:shadow-black/20 active:scale-[0.97]'
                   )}
                 >
                   <div className={cn(
-                    'w-14 h-14 rounded-2xl bg-gradient-to-br text-white flex items-center justify-center',
-                    'shadow-md transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6',
+                    'relative w-14 h-14 rounded-2xl text-white flex items-center justify-center overflow-hidden',
+                    'shadow-md transition-transform duration-300 group-hover:scale-105 group-hover:-rotate-4',
                     option.gradient,
                     option.glow
                   )}>
-                    <option.icon className="h-6 w-6" strokeWidth={2} />
+                    <div className="absolute inset-0 rounded-2xl bg-black/5" />
+                    <div className="absolute -top-1 left-0 w-full h-6 rounded-t-2xl bg-white/6 blur-sm pointer-events-none" />
+                    <option.icon className="h-6 w-6 relative" strokeWidth={2} />
+
+                    {/* badge removed for Story option per design request */}
                   </div>
                   <span className="font-semibold text-sm leading-tight">{option.label}</span>
                   <span className="text-[10px] text-muted-foreground leading-tight">

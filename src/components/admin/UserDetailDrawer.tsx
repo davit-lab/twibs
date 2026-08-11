@@ -112,7 +112,7 @@ export default function UserDetailDrawer({
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+        <SheetContent className="admin-scope w-full sm:max-w-md overflow-y-auto">
           <SheetHeader className="pb-4">
             <div className="flex items-start gap-3">
               <Avatar className="h-14 w-14">
@@ -137,7 +137,7 @@ export default function UserDetailDrawer({
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   <Badge variant="outline">{getRoleLabel(user.role)}</Badge>
                   {isBanned && <Badge variant="destructive">Suspended</Badge>}
-                  {isShadowBanned && <Badge variant="secondary" className="bg-purple-500/15 text-purple-500">Shadow banned</Badge>}
+                  {isShadowBanned && <Badge variant="secondary" className="bg-muted text-muted-foreground">Shadow banned</Badge>}
                   <Badge variant={user.privacy === 'public' ? 'outline' : 'secondary'}>{user.privacy}</Badge>
                 </div>
               </div>
@@ -181,7 +181,7 @@ export default function UserDetailDrawer({
                 title={canManageRoles ? undefined : 'Requires Super Admin'}
                 onClick={() => setShadowDialogOpen(true)}
               >
-                {isShadowBanned ? <Ghost className="h-4 w-4 text-purple-500" /> : <Ghost className="h-4 w-4" />}
+                <Ghost className="h-4 w-4" />
                 {isShadowBanned ? 'Lift shadow ban' : 'Shadow ban'}
               </Button>
               {isBanned ? (
@@ -303,7 +303,7 @@ export default function UserDetailDrawer({
       </Sheet>
 
       <Dialog open={shadowDialogOpen} onOpenChange={setShadowDialogOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="admin-scope max-w-sm">
           <DialogHeader>
             <DialogTitle>{isShadowBanned ? 'Lift shadow ban' : 'Shadow ban user'}</DialogTitle>
             <DialogDescription>
@@ -339,7 +339,7 @@ export default function UserDetailDrawer({
       </Dialog>
 
       <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="admin-scope">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-destructive">Delete {user.display_name}?</AlertDialogTitle>
             <AlertDialogDescription>

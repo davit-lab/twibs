@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import { useToast } from '@/hooks/use-toast';
 
 export interface Story {
@@ -41,6 +42,7 @@ interface UseStoriesOptions {
 
 export function useStories(options: UseStoriesOptions = {}) {
   const { user } = useAuth();
+  const { isEnabled } = useAppSettings();
   const { toast } = useToast();
   const [stories, setStories] = useState<Story[]>([]);
   const [groupedStories, setGroupedStories] = useState<GroupedStories[]>([]);
@@ -242,6 +244,7 @@ export function useStories(options: UseStoriesOptions = {}) {
 
   const uploadStory = async (file: File, caption?: string, music?: { name: string; url: string | null }, duration?: number) => {
     if (!user) throw new Error('Not authenticated');
+    if (!isEnabled('story_posting_enabled')) throw new Error('Story posting is currently disabled by the admin.');
 
     const fileExt = file.name.split('.').pop();
     const fileName = `${user.id}/${Date.now()}.${fileExt}`;

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import { useToast } from '@/hooks/use-toast';
 
 export interface Group {
@@ -404,6 +405,7 @@ export function useGroupPostComments(postId: string) {
 
 export function useGroupActions() {
   const { user } = useAuth();
+  const { isEnabled } = useAppSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -800,6 +802,7 @@ export function useGroupActions() {
       parentId?: string;
     }): Promise<GroupPostComment> => {
       if (!user) throw new Error('Not authenticated');
+      if (!isEnabled('comments_enabled')) throw new Error('Comments are currently disabled by the admin.');
 
       const { data, error } = await (supabase as any)
         .from('group_post_comments')

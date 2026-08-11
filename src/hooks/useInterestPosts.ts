@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import { useToast } from '@/hooks/use-toast';
 
 export interface InterestPost {
@@ -147,6 +148,7 @@ export function useInterestPosts(options: UseInterestPostsOptions = {}) {
 
 export function useInterestPostActions() {
   const { user } = useAuth();
+  const { isEnabled } = useAppSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -163,6 +165,7 @@ export function useInterestPostActions() {
       mediaType?: string;
     }) => {
       if (!user) throw new Error('Not authenticated');
+      if (!isEnabled('interest_posting_enabled')) throw new Error('Interest posting is currently disabled by the admin.');
 
       const { data, error } = await (supabase as any)
         .from('interest_posts')

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import { useToast } from '@/hooks/use-toast';
 
 export interface CommentProfile {
@@ -28,6 +29,7 @@ export interface Comment {
 
 export function useComments(postId: string) {
   const { user } = useAuth();
+  const { isEnabled } = useAppSettings();
   const { toast } = useToast();
   const [comments, setComments] = useState<Comment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -138,6 +140,15 @@ export function useComments(postId: string) {
       toast({
         title: 'Sign in required',
         description: 'Please sign in to comment.',
+      });
+      return null;
+    }
+
+    if (!isEnabled('comments_enabled')) {
+      toast({
+        variant: 'destructive',
+        title: 'Comments are disabled',
+        description: 'Commenting is currently disabled by the admin.',
       });
       return null;
     }

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -8,6 +7,7 @@ import { useAdminActions } from '@/hooks/useAdminActions';
 import { toast } from '@/hooks/use-toast';
 import { Loader2, BadgeCheck, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
 import { VerificationRequestData } from './types';
+import AdminSection from './AdminSection';
 
 export default function AdminVerificationTab() {
   const { writeAudit } = useAdminActions();
@@ -64,19 +64,17 @@ export default function AdminVerificationTab() {
   const initials = (name: string) => name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <CardTitle>Verification Requests</CardTitle>
-            <CardDescription>Approve or reject profile verification requests</CardDescription>
-          </div>
-          <Button variant="outline" size="sm" onClick={load}>
-            <RefreshCw className="w-4 h-4 mr-2" /> Refresh
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <AdminSection
+      icon={BadgeCheck}
+      title="Verification Requests"
+      eyebrow="Trust"
+      description="Approve or reject profile verification requests"
+      actions={
+        <Button variant="outline" size="sm" onClick={load}>
+          <RefreshCw className="w-4 h-4 mr-2" /> Refresh
+        </Button>
+      }
+    >
         {loading ? (
           <div className="py-14 text-center"><Loader2 className="h-7 w-7 animate-spin mx-auto text-primary" /></div>
         ) : requests.length === 0 ? (
@@ -127,7 +125,6 @@ export default function AdminVerificationTab() {
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+    </AdminSection>
   );
 }

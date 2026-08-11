@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -61,6 +62,7 @@ export type ReelsFeedType = 'foryou' | 'following';
 
 export function useReels(feedType: ReelsFeedType = 'foryou') {
   const { user } = useAuth();
+  const { isEnabled } = useAppSettings();
   const { toast } = useToast();
   const [currentIndex, setCurrentIndex] = useState(0);
   const queryClient = useQueryClient();
@@ -177,6 +179,7 @@ export function useReels(feedType: ReelsFeedType = 'foryou') {
     maybeProgress?: (progress: number) => void
   ) => {
     if (!user) throw new Error('Not authenticated');
+    if (!isEnabled('reels_upload_enabled')) throw new Error('Reel uploads are currently disabled by the admin.');
 
     const options = typeof optionsOrProgress === 'function' ? {} : (optionsOrProgress ?? {});
     const onProgress = typeof optionsOrProgress === 'function' ? optionsOrProgress : maybeProgress;
@@ -250,6 +253,7 @@ export function useReels(feedType: ReelsFeedType = 'foryou') {
 
 export function useReelComments(reelId: string) {
   const { user } = useAuth();
+  const { isEnabled } = useAppSettings();
   const [comments, setComments] = useState<ReelComment[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -312,6 +316,7 @@ export function useReelComments(reelId: string) {
 
   const addComment = async (content: string, parentId?: string) => {
     if (!user) return;
+    if (!isEnabled('comments_enabled')) throw new Error('Comments are currently disabled by the admin.');
     const { data, error } = await supabase
       .from('reel_comments')
       .insert({ reel_id: reelId, user_id: user.id, content, parent_id: parentId || null })

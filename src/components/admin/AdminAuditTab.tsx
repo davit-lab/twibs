@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -8,18 +7,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, Search, Lock, RefreshCw } from 'lucide-react';
 import { useAdminAudit, getActionLabel } from '@/hooks/useAdminAudit';
 import PaginationBar from './PaginationBar';
+import AdminSection from './AdminSection';
 
 const ACTION_COLORS: Record<string, string> = {
-  set_user_role: 'bg-amber-500/15 text-amber-500',
   delete_user: 'bg-destructive/15 text-destructive',
   purge_all_users: 'bg-destructive/15 text-destructive',
   delete_content: 'bg-destructive/15 text-destructive',
-  hide_content: 'bg-orange-500/15 text-orange-500',
-  unhide_content: 'bg-green-500/15 text-green-500',
-  shadow_ban_user: 'bg-purple-500/15 text-purple-500',
-  unshadow_ban_user: 'bg-purple-500/15 text-purple-500',
-  logout_all_sessions: 'bg-blue-500/15 text-blue-500',
-  set_system_setting: 'bg-primary/15 text-primary',
+  hide_content: 'bg-warning/15 text-warning',
 };
 
 function initials(name: string) {
@@ -31,37 +25,30 @@ export default function AdminAuditTab() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Lock className="w-5 h-5 text-primary" />
-              Admin Audit Log
-            </CardTitle>
-            <CardDescription>
-              Immutable record of every administrative action. Entries can never be edited or deleted.
-            </CardDescription>
+    <AdminSection
+      icon={Lock}
+      title="Admin Audit Log"
+      eyebrow="Security"
+      description="Immutable record of every administrative action. Entries can never be edited or deleted."
+      actions={
+        <div className="flex gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search action, actor, target..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+              className="admin-search"
+            />
           </div>
-          <div className="flex gap-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search action, actor, target..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-                className="pl-9 w-full sm:w-64"
-              />
-            </div>
-            <Button variant="outline" size="icon" onClick={refetch} title="Refresh">
-              <RefreshCw className="w-4 h-4" />
-            </Button>
-          </div>
+          <Button variant="outline" size="icon" onClick={refetch} title="Refresh">
+            <RefreshCw className="w-4 h-4" />
+          </Button>
         </div>
-      </CardHeader>
-      <CardContent>
+      }
+    >
         <ScrollArea className="max-h-[60vh]">
-          <Table>
+          <Table className="admin-table">
             <TableHeader>
               <TableRow>
                 <TableHead>When</TableHead>
@@ -120,7 +107,6 @@ export default function AdminAuditTab() {
           </Table>
         </ScrollArea>
         <PaginationBar page={page} totalPages={totalPages} total={total} label="entries" onPageChange={setPage} />
-      </CardContent>
-    </Card>
+    </AdminSection>
   );
 }

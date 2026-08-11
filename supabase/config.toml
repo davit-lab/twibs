@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.get-pdf-access]
 verify_jwt = false
+
+[functions.admin-face-verify]
+verify_jwt = false

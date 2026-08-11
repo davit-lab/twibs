@@ -384,6 +384,22 @@ export function useConversations() {
     }
   };
 
+  const deleteConversation = async (conversationId: string): Promise<boolean> => {
+    if (!user) return false;
+
+    try {
+      const { error } = await supabase.rpc('delete_conversation', { conv_id: conversationId });
+
+      if (error) throw error;
+
+      setConversations(prev => prev.filter(c => c.id !== conversationId));
+      return true;
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      return false;
+    }
+  };
+
   return {
     conversations,
     loading,
@@ -395,5 +411,6 @@ export function useConversations() {
     toggleMute,
     addMembers,
     leaveConversation,
+    deleteConversation,
   };
 }

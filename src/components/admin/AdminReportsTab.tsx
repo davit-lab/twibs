@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -15,6 +14,7 @@ import {
 } from 'lucide-react';
 import { AdminReport } from './types';
 import ReportInvestigationDialog, { ReportAction } from './ReportInvestigationDialog';
+import AdminSection from './AdminSection';
 
 const HIDEABLE_TYPES = ['post', 'reel', 'book'];
 const DELETEABLE_TYPES = ['post', 'reel', 'book', 'comment', 'interest_post'];
@@ -222,20 +222,18 @@ export default function AdminReportsTab() {
   const selectedCount = selected.size;
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <CardTitle>Content Reports</CardTitle>
-            <CardDescription>Investigate reports and take bulk moderation action</CardDescription>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => { setSelected(new Set()); load(); }}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <AdminSection
+      icon={Flag}
+      title="Content Reports"
+      eyebrow="Moderation"
+      description="Investigate reports and take bulk moderation action"
+      actions={
+        <Button variant="outline" size="sm" onClick={() => { setSelected(new Set()); load(); }}>
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Refresh
+        </Button>
+      }
+    >
         {loading ? (
           <div className="py-14 text-center"><Loader2 className="h-7 w-7 animate-spin mx-auto text-primary" /></div>
         ) : reports.length === 0 ? (
@@ -349,7 +347,6 @@ export default function AdminReportsTab() {
             </div>
           </>
         )}
-      </CardContent>
 
       <ReportInvestigationDialog
         report={investigating}
@@ -358,6 +355,6 @@ export default function AdminReportsTab() {
         processing={busyReportId !== null}
         onAction={handleAction}
       />
-    </Card>
+    </AdminSection>
   );
 }

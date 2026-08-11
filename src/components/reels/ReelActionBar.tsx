@@ -20,7 +20,7 @@ function ActionButton({ icon: Icon, label, active, activeClass, count, onClick, 
         onClick={onClick}
         aria-label={label}
         className={cn(
-          'flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-black/30 backdrop-blur-xl transition-colors hover:bg-black/50 shadow-md shadow-black/20',
+          'flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-black/35 backdrop-blur-md transition-colors hover:bg-black/55',
         )}
       >
         <Icon className={cn('h-[22px] w-[22px]', active && activeClass, !active && 'text-white')} />
@@ -95,7 +95,7 @@ export default function ReelActionBar({
         icon={isSaved ? BookmarkCheck : Bookmark}
         label="Save"
         active={isSaved}
-        activeClass="text-primary fill-primary"
+        activeClass="text-white fill-white"
         onClick={onSave}
       />
     </div>

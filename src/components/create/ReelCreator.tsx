@@ -817,11 +817,24 @@ export default function ReelCreator({ open, onOpenChange }: ReelCreatorProps) {
                 {uploadMode === 'upload' && (
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full max-w-sm aspect-[9/16] rounded-2xl border-2 border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center gap-4 transition-colors"
+                    className="w-full max-w-sm aspect-[9/16] rounded-2xl border-2 border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center gap-4 transition-colors relative"
                   >
-                    <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Upload className="w-8 h-8 text-primary" />
+                    <div className="relative">
+                        <div className="relative rounded-full p-[3px] bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 shadow-lg">
+                          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center shadow-xl transition-transform duration-300 group-hover:scale-105">
+                            <div className="absolute inset-0 rounded-full pointer-events-none">
+                              <div className="absolute -top-1 left-0 w-full h-6 rounded-t-full bg-white/6 blur-sm" />
+                            </div>
+                            <Upload className="w-8 h-8 text-primary" />
+                          </div>
+                        </div>
+
+                        {/* small plus overlay (handcrafted offset + soft glow) */}
+                        <div className="absolute -right-1 -bottom-1 w-6 h-6 rounded-full bg-primary flex items-center justify-center border-[1.5px] border-card text-white text-xs shadow-[0_6px_18px_rgba(137,78,239,0.18)] transform rotate-4">
+                          <Plus className="w-3 h-3" />
+                        </div>
                     </div>
+
                     <div className="text-center">
                       <p className="font-medium">Upload Video</p>
                       <p className="text-sm text-muted-foreground">MP4, MOV, WebM • Max 100MB</p>

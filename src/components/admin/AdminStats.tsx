@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { Users, FileText, BookOpen, Clapperboard, BadgeCheck, Ban, Loader2 } from 'lucide-react';
 
@@ -28,41 +27,35 @@ export default function AdminStats() {
   }, []);
 
   const cards = stats ? [
-    { label: 'Total Users', value: stats.users, icon: Users, bg: 'bg-primary/10', color: 'text-primary' },
-    { label: 'Total Posts', value: stats.posts, icon: FileText, bg: 'bg-accent/10', color: 'text-accent' },
-    { label: 'Published Books', value: stats.books, icon: BookOpen, bg: 'bg-star/10', color: 'text-star' },
-    { label: 'Reels', value: stats.reels, icon: Clapperboard, bg: 'bg-pink-500/10', color: 'text-pink-500' },
-    { label: 'Verified', value: stats.verified, icon: BadgeCheck, bg: 'bg-verified/10', color: 'text-primary' },
-    { label: 'Suspended', value: stats.banned, icon: Ban, bg: 'bg-destructive/10', color: 'text-destructive' },
+    { label: 'Total Users', value: stats.users, icon: Users },
+    { label: 'Total Posts', value: stats.posts, icon: FileText },
+    { label: 'Published Books', value: stats.books, icon: BookOpen },
+    { label: 'Reels', value: stats.reels, icon: Clapperboard },
+    { label: 'Verified', value: stats.verified, icon: BadgeCheck },
+    { label: 'Suspended', value: stats.banned, icon: Ban },
   ] : null;
 
-  if (!cards) {
-    return (
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Card key={i}><CardContent className="pt-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></CardContent></Card>
-        ))}
-      </div>
-    );
-  }
-
   return (
-    <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
-      {cards.map((c) => (
-        <Card key={c.label}>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className={`w-10 h-10 rounded-lg ${c.bg} flex items-center justify-center`}>
-                <c.icon className={`w-5 h-5 ${c.color}`} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{c.value.toLocaleString()}</p>
-                <p className="text-sm text-muted-foreground">{c.label}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
+      {cards ? cards.map((c) => (
+        <div key={c.label} className="admin-stat-tile">
+          <div className="w-9 h-9 rounded-xl bg-muted text-muted-foreground flex items-center justify-center">
+            <c.icon className="w-[18px] h-[18px]" />
+          </div>
+          <p className="mt-3 text-2xl font-bold tabular-nums tracking-tight">
+            {c.value.toLocaleString()}
+          </p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground mt-0.5">
+            {c.label}
+          </p>
+        </div>
+      )) : (
+        Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="admin-stat-tile h-[104px] flex items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ))
+      )}
     </div>
   );
 }

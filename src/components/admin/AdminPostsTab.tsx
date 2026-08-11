@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -8,9 +7,10 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { supabase } from '@/integrations/supabase/client';
 import { useAdminActions } from '@/hooks/useAdminActions';
 import { toast } from '@/hooks/use-toast';
-import { Search, Loader2, Trash2, Eye, EyeOff, Star, MessageSquare } from 'lucide-react';
+import { Search, Loader2, Trash2, Eye, EyeOff, Star, MessageSquare, FileText } from 'lucide-react';
 import { AdminPost } from './types';
 import PaginationBar from './PaginationBar';
+import AdminSection from './AdminSection';
 
 const PAGE_SIZE = 20;
 
@@ -80,27 +80,25 @@ export default function AdminPostsTab() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <CardTitle>Post Management</CardTitle>
-            <CardDescription>Review, hide and remove posts from the platform</CardDescription>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search post content..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-              className="pl-9 w-full sm:w-64"
-            />
-          </div>
+    <AdminSection
+      icon={FileText}
+      title="Post Management"
+      eyebrow="Content"
+      description="Review, hide and remove posts from the platform"
+      actions={
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search post content..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+            className="admin-search"
+          />
         </div>
-      </CardHeader>
-      <CardContent>
+      }
+    >
         <div className="overflow-x-auto">
-          <Table>
+          <Table className="admin-table">
             <TableHeader>
               <TableRow>
                 <TableHead>Author</TableHead>
@@ -156,10 +154,9 @@ export default function AdminPostsTab() {
           </Table>
         </div>
         <PaginationBar page={page} totalPages={totalPages} total={total} label="posts" onPageChange={setPage} />
-      </CardContent>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="admin-scope">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-destructive">Delete this post?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -174,6 +171,6 @@ export default function AdminPostsTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Card>
+    </AdminSection>
   );
 }

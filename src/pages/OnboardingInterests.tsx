@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import { useInterestCategories, useInterestActions, useHasCompletedOnboarding } from '@/hooks/useInterests';
 import InterestCard from '@/components/onboarding/InterestCard';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,7 @@ const MIN_INTERESTS = 3;
 export default function OnboardingInterests() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
+  const { isEnabled } = useAppSettings();
   const { data: categories, isLoading: categoriesLoading } = useInterestCategories();
   const { data: hasCompleted, isLoading: checkingOnboarding } = useHasCompletedOnboarding();
   const { saveInterests } = useInterestActions();
@@ -24,6 +26,13 @@ export default function OnboardingInterests() {
       navigate('/auth');
     }
   }, [user, authLoading, navigate]);
+
+  // Redirect if onboarding flow is disabled by the admin
+  useEffect(() => {
+    if (!authLoading && user && !isEnabled('signup_onboarding_enabled')) {
+      navigate('/');
+    }
+  }, [isEnabled, user, authLoading, navigate]);
 
   // Redirect if already completed onboarding
   useEffect(() => {

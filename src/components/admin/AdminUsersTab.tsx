@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,11 +19,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAdminActions } from '@/hooks/useAdminActions';
 import { toast } from '@/hooks/use-toast';
 import {
-  Search, Loader2, MoreHorizontal, BadgeCheck, UserX, UserCheck, Gift, Crown,
+  Users, Search, Loader2, MoreHorizontal, BadgeCheck, UserX, UserCheck, Gift, Crown,
   Ban, ShieldOff, Trash2, Eye, KeyRound, LogOut, Ghost, Hammer,
 } from 'lucide-react';
 import { AdminUser, UserBan, ROLE_OPTIONS, ROLE_HIERARCHY, getRoleLabel } from './types';
 import UserDetailDrawer from './UserDetailDrawer';
+import AdminSection from './AdminSection';
 
 interface SubscriptionPlan { id: string; name: string; tier: string; }
 
@@ -269,38 +269,36 @@ export default function AdminUsersTab() {
   const openDrawer = (u: AdminUser) => setDrawerUser(u);
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-          <div>
-            <CardTitle>User Management</CardTitle>
-            <CardDescription>Search, filter and manage accounts with granular role controls</CardDescription>
+    <AdminSection
+      icon={Users}
+      title="User Management"
+      eyebrow="Accounts"
+      description="Search, filter and manage accounts with granular role controls"
+      actions={
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search name or @username..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+              className="admin-search"
+            />
           </div>
-          <div className="flex flex-col sm:flex-row gap-2 lg:ml-auto">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search name or @username..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-                className="pl-9 w-full sm:w-56"
-              />
-            </div>
-            <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v); setPage(0); }}>
-              <SelectTrigger className="w-full sm:w-40">
-                <SelectValue placeholder="All roles" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All roles</SelectItem>
-                {ROLE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+          <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v); setPage(0); }}>
+            <SelectTrigger className="w-full sm:w-40 bg-surface border-border/70">
+              <SelectValue placeholder="All roles" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All roles</SelectItem>
+              {ROLE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
-      </CardHeader>
-      <CardContent>
+      }
+    >
         <div className="overflow-x-auto">
-          <Table>
+          <Table className="admin-table">
             <TableHeader>
               <TableRow>
                 <TableHead>User</TableHead>
@@ -340,7 +338,7 @@ export default function AdminUsersTab() {
                           {user.role === 'super_admin' && <Crown className="w-3.5 h-3.5 text-amber-500" />}
                           {user.is_verified && <BadgeCheck className="w-3.5 h-3.5 text-primary" />}
                           {isBanned(user.user_id) && <Ban className="w-3.5 h-3.5 text-destructive" />}
-                          {isShadowed(user.user_id) && <Ghost className="w-3.5 h-3.5 text-purple-500" />}
+                          {isShadowed(user.user_id) && <Ghost className="w-3.5 h-3.5 text-muted-foreground" />}
                         </p>
                         <p className="text-sm text-muted-foreground">@{user.username}</p>
                       </div>
@@ -381,7 +379,7 @@ export default function AdminUsersTab() {
                         <Badge variant="outline">{user.privacy}</Badge>
                       )}
                       {isShadowed(user.user_id) && (
-                        <Badge variant="secondary" className="bg-purple-500/15 text-purple-500">
+                        <Badge variant="secondary" className="bg-muted text-muted-foreground">
                           <Ghost className="w-3 h-3 mr-1" />
                           Shadow
                         </Badge>
@@ -513,11 +511,10 @@ export default function AdminUsersTab() {
             </PaginationContent>
           </Pagination>
         </div>
-      </CardContent>
 
       {/* Ban dialog */}
       <Dialog open={!!banUser} onOpenChange={(open) => { if (!open) { setBanUser(null); setBanReason(''); setBanDuration('7d'); } }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="admin-scope max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Ban className="w-5 h-5 text-destructive" />
@@ -567,7 +564,7 @@ export default function AdminUsersTab() {
 
       {/* Gift dialog */}
       <Dialog open={!!giftingUser} onOpenChange={(open) => !open && setGiftingUser(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="admin-scope max-w-sm">
           <DialogHeader>
             <DialogTitle>Gift Subscription</DialogTitle>
             <DialogDescription>
@@ -605,6 +602,6 @@ export default function AdminUsersTab() {
         onRequestBan={() => { if (drawerUser) { setBanUser(drawerUser); setDrawerUser(null); } }}
         onRequestUnban={() => { if (drawerUser) { const u = drawerUser; setDrawerUser(null); unban(u); } }}
       />
-    </Card>
+    </AdminSection>
   );
 }
