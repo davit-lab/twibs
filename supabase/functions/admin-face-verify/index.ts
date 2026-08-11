@@ -623,7 +623,7 @@ serve(async (req) => {
     if (req.method !== "POST") return fail("method_not_allowed", "POST only", 405);
 
     const body = (await req.json()) as Json;
-    const action = path || String(body.action ?? "");
+    const action = String(body.action ?? (path === "admin-face-verify" ? "" : path));
 
     switch (action) {
       case "start":
