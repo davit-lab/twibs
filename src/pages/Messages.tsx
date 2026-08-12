@@ -187,12 +187,12 @@ export default function Messages() {
   return (
     <MainLayout immersive={isChatOpen}>
       <div className={cn(
-        'flex relative',
+        'flex relative overflow-hidden',
         isChatOpen ? 'h-[100dvh]' : 'h-[calc(100vh-48px)] lg:h-screen'
       )}>
         {/* Conversation List Panel */}
         <div className={cn(
-          'w-full md:w-80 lg:w-96 flex flex-col',
+          'w-full md:w-72 lg:w-80 flex flex-col',
           selectedConvId ? 'hidden md:flex' : 'flex'
         )}>
           {/* Tab switcher */}

@@ -929,6 +929,32 @@ export type Database = {
         }
         Relationships: []
       }
+      message_reads: {
+        Row: {
+          message_id: string
+          read_at: string
+          user_id: string
+        }
+        Insert: {
+          message_id: string
+          read_at?: string
+          user_id: string
+        }
+        Update: {
+          message_id?: string
+          read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_reads_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       message_reactions: {
         Row: {
           created_at: string
@@ -961,36 +987,123 @@ export type Database = {
           },
         ]
       }
-      messages: {
+      scheduled_messages: {
         Row: {
-          content: string
+          attachments: {
+          type: string
+          url: string
+          name: string | null
+          size: number | null
+          mime_type: string | null
+          duration: number | null
+        }[] | null
+          content: string | null
           conversation_id: string
           created_at: string
           id: string
+          reply_to_message_id: string | null
+          send_at: string
+          sender_id: string
+          status: string
+        }
+        Insert: {
+          attachments?: {
+          type?: string
+          url?: string
+          name?: string | null
+          size?: number | null
+          mime_type?: string | null
+          duration?: number | null
+        }[] | null
+          content?: string | null
+          conversation_id: string
+          created_at?: string
+          id?: string
+          reply_to_message_id?: string | null
+          send_at: string
+          sender_id: string
+          status?: string
+        }
+        Update: {
+          attachments?: {
+          type?: string
+          url?: string
+          name?: string | null
+          size?: number | null
+          mime_type?: string | null
+          duration?: number | null
+        }[] | null
+          content?: string | null
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          reply_to_message_id?: string | null
+          send_at?: string
+          sender_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_messages_reply_to_message_id_fkey"
+            columns: ["reply_to_message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          client_id: string | null
+          content: string
+          conversation_id: string
+          created_at: string
+          effect: string | null
+          forwarded_from_message_id: string | null
+          id: string
           is_edited: boolean | null
+          is_pinned: boolean
           location_session_id: string | null
+          pinned_at: string | null
           reply_to_message_id: string | null
           sender_id: string
           updated_at: string
         }
         Insert: {
+          client_id?: string | null
           content: string
           conversation_id: string
           created_at?: string
+          effect?: string | null
+          forwarded_from_message_id?: string | null
           id?: string
           is_edited?: boolean | null
+          is_pinned?: boolean
           location_session_id?: string | null
+          pinned_at?: string | null
           reply_to_message_id?: string | null
           sender_id: string
           updated_at?: string
         }
         Update: {
+          client_id?: string | null
           content?: string
           conversation_id?: string
           created_at?: string
+          effect?: string | null
+          forwarded_from_message_id?: string | null
           id?: string
           is_edited?: boolean | null
+          is_pinned?: boolean
           location_session_id?: string | null
+          pinned_at?: string | null
           reply_to_message_id?: string | null
           sender_id?: string
           updated_at?: string
@@ -2068,12 +2181,28 @@ export type Database = {
         Args: { conv_id: string }
         Returns: undefined
       }
-      delete_conversation: {
-        Args: { conv_id: string }
+      mark_message_reads_up_to: {
+        Args: { conv_id: string; read_until: string }
         Returns: undefined
+      }
+      pin_message: {
+        Args: { message_id: string }
+        Returns: undefined
+      }
+      search_conversation_messages: {
+        Args: { conv_id: string; query: string; max_results?: number }
+        Returns: Database["public"]["Tables"]["messages"]["Row"][]
       }
       set_conversation_wallpaper: {
         Args: { conv_id: string; wallpaper?: string | null }
+        Returns: undefined
+      }
+      unpin_message: {
+        Args: { message_id: string }
+        Returns: undefined
+      }
+      delete_conversation: {
+        Args: { conv_id: string }
         Returns: undefined
       }
       user_owns_book: {

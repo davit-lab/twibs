@@ -202,6 +202,61 @@ export function useConversations() {
     fetchConversations();
   }, [fetchConversations]);
 
+  // Targeted refresh of a single conversation (last message + unread count)
+  const refreshConversation = useCallback(async (convId: string) => {
+    if (!user) return;
+
+    try {
+      const [{ data: lastMessages }, myParticipant] = await Promise.all([
+        supabase
+          .from('messages')
+          .select('id, content, sender_id, created_at, conversation_id')
+          .eq('conversation_id', convId)
+          .order('created_at', { ascending: false })
+          .limit(1),
+        supabase
+          .from('conversation_participants')
+          .select('last_read_at')
+          .eq('conversation_id', convId)
+          .eq('user_id', user.id)
+          .single(),
+      ]);
+
+      let unread = 0;
+      if (myParticipant.data?.last_read_at) {
+        const { count } = await supabase
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('conversation_id', convId)
+          .neq('sender_id', user.id)
+          .gt('created_at', myParticipant.data.last_read_at);
+        unread = count || 0;
+      }
+
+      const firstMessage = (lastMessages || [])[0];
+      const lastMessage: LastMessage | null = firstMessage
+        ? {
+            id: firstMessage.id,
+            content: firstMessage.content,
+            sender_id: firstMessage.sender_id,
+            created_at: firstMessage.created_at,
+          }
+        : null;
+
+      setConversations(prev => {
+        const next = prev.map(c =>
+          c.id === convId
+            ? { ...c, last_message: lastMessage, unread_count: unread, updated_at: lastMessage?.created_at || c.updated_at }
+            : c
+        );
+        return next.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+      });
+    } catch (error) {
+      console.error('Error refreshing conversation:', error);
+      fetchConversations();
+    }
+  }, [user, fetchConversations]);
+
   // Subscribe to conversation updates
   useEffect(() => {
     if (!user) return;
@@ -211,12 +266,29 @@ export function useConversations() {
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'messages',
         },
-        () => {
-          fetchConversations();
+        (payload) => {
+          const msg = payload.new as { conversation_id: string };
+          if (msg.conversation_id) {
+            refreshConversation(msg.conversation_id);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'messages',
+        },
+        (payload) => {
+          const old = payload.old as { conversation_id?: string };
+          if (old.conversation_id) {
+            refreshConversation(old.conversation_id);
+          }
         }
       )
       .on(
@@ -247,7 +319,7 @@ export function useConversations() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, fetchConversations]);
+  }, [user, fetchConversations, refreshConversation]);
 
   const startConversation = async (otherUserId: string): Promise<string | null> => {
     if (!user) return null;

@@ -1,4 +1,4 @@
-import { Reply, Pencil, Trash2 } from 'lucide-react';
+import { Reply, Pencil, Trash2, Pin, PinOff, Forward } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MessageReactionPickerProps {
@@ -8,6 +8,9 @@ interface MessageReactionPickerProps {
   onReply?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onPin?: () => void;
+  pinned?: boolean;
+  onForward?: () => void;
 }
 
 const QUICK_REACTIONS = ['❤️', '😂', '😮', '😢', '😡', '👍'];
@@ -19,6 +22,9 @@ export default function MessageReactionPicker({
   onReply,
   onEdit,
   onDelete,
+  onPin,
+  pinned,
+  onForward,
 }: MessageReactionPickerProps) {
   return (
     <>
@@ -71,6 +77,40 @@ export default function MessageReactionPicker({
           >
             <Reply className="h-4 w-4" />
             Reply
+          </button>
+        )}
+        {onPin && (
+          <button
+            onClick={() => {
+              onPin();
+              onClose();
+            }}
+            className={cn(
+              "h-10 px-3 flex items-center gap-1.5 rounded-full text-xs font-medium",
+              "text-muted-foreground hover:bg-muted hover:text-foreground transition-all",
+              "active:scale-95"
+            )}
+            title={pinned ? 'Unpin' : 'Pin'}
+          >
+            {pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+            {pinned ? 'Unpin' : 'Pin'}
+          </button>
+        )}
+        {onForward && (
+          <button
+            onClick={() => {
+              onForward();
+              onClose();
+            }}
+            className={cn(
+              "h-10 px-3 flex items-center gap-1.5 rounded-full text-xs font-medium",
+              "text-muted-foreground hover:bg-muted hover:text-foreground transition-all",
+              "active:scale-95"
+            )}
+            title="Forward"
+          >
+            <Forward className="h-4 w-4" />
+            Forward
           </button>
         )}
         {(onEdit || onDelete) && (

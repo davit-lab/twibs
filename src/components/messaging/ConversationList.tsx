@@ -166,7 +166,7 @@ export default function ConversationList({
         <div className="absolute -top-12 left-1/2 -translate-x-1/2 h-24 w-48 rounded-full bg-primary/10 blur-2xl pointer-events-none" />
         <div className="relative flex items-center justify-between mb-4">
           <div className="flex items-baseline gap-2">
-            <h1 className="text-[22px] font-extrabold tracking-tight leading-none bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text">Chats</h1>
+            <h1 className="text-[20px] font-extrabold tracking-tight leading-none bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text">Chats</h1>
             {conversations.length > 0 && (
               <span className="text-xs font-semibold text-muted-foreground tabular-nums">
                 {conversations.length}
@@ -176,9 +176,9 @@ export default function ConversationList({
           <button
             onClick={onNewChat}
             aria-label="New chat"
-            className="relative h-10 w-10 rounded-full bg-gradient-to-br from-primary to-[hsl(285_80%_58%)] text-primary-foreground flex items-center justify-center transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-primary/30 active:scale-95 shadow-md shadow-primary/25"
+            className="relative h-8 w-8 rounded-full bg-gradient-to-br from-violet-500 via-purple-500 to-fuchsia-500 text-white flex items-center justify-center transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-purple-500/30 active:scale-95 shadow-md shadow-purple-500/25"
           >
-            <Plus className="h-5 w-5" strokeWidth={2.5} />
+            <Plus className="h-4 w-4" strokeWidth={2.5} />
           </button>
         </div>
 

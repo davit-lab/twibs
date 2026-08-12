@@ -108,7 +108,7 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className={cn('bg-background', immersive ? 'h-[100dvh] overflow-hidden' : 'min-h-screen')}>
       {/* Desktop Compact Icon Rail */}
       {user && !immersive && (
         <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-[80px] z-40 flex-col items-center border-r border-border bg-background py-5 px-2">
@@ -358,7 +358,10 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
       )}
 
       {/* Main Content */}
-      <main className={cn('min-h-screen', user && !immersive && 'lg:ml-[80px]')}>
+      <main className={cn(
+        immersive ? 'h-full overflow-hidden' : 'min-h-screen',
+        user && !immersive && 'lg:ml-[80px]'
+      )}>
         {isBanned && banInfo ? (
           <div className="max-w-md mx-auto py-20 px-4">
             <Card>

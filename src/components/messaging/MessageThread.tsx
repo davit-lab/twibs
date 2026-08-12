@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMessages, Message } from '@/hooks/useMessages';
+import { useMessageReads } from '@/hooks/useMessageReads';
 import { useMessageReactions } from '@/hooks/useMessageReactions';
 import { useCallBlocks } from '@/hooks/useCallBlocks';
 import { useAuth } from '@/contexts/AuthContext';
@@ -44,7 +45,6 @@ import {
   Loader2, 
   ArrowLeft, 
   Check, 
-  CheckCheck, 
   Maximize2, 
   Minimize2,
   Phone,
@@ -72,6 +72,13 @@ import {
   Pencil,
   Trash2,
   MapPin,
+  Search,
+  Pin,
+  PinOff,
+  Forward,
+  CalendarClock,
+  ArrowDown,
+  Clock3,
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -80,6 +87,12 @@ import EmojiPicker from './EmojiPicker';
 import GifPicker from './GifPicker';
 import MessageReactionPicker from './MessageReactionPicker';
 import MessageReactions from './MessageReactions';
+import MessageEffects from './MessageEffects';
+import MessageReadReceipts from './MessageReadReceipts';
+import MessageSearchPanel from './MessageSearchPanel';
+import ForwardMessageDialog from './ForwardMessageDialog';
+import ScheduleMessageDialog from './ScheduleMessageDialog';
+import ScheduledMessagesDialog from './ScheduledMessagesDialog';
 
 interface MessageThreadProps {
   conversationId: string;
@@ -122,7 +135,8 @@ export default function MessageThread({
   draftNonce,
 }: MessageThreadProps) {
   const { user } = useAuth();
-  const { messages, loading, typingUsers, sendMessage, handleTyping, markAsRead, editMessage, deleteMessage } = useMessages(conversationId);
+  const { messages, loading, loadingMore, hasMore, loadOlder, typingUsers, sendMessage, handleTyping, markAsRead, editMessage, deleteMessage, togglePin, searchMessages } = useMessages(conversationId);
+  const { readsByMessage, fetchReadsForMessage } = useMessageReads(conversationId);
   const { toggleReaction, getReactionsForMessage } = useMessageReactions(conversationId);
   const liveLocation = useLiveLocation(conversationId);
   const { blockUser, unblockUser, isUserBlocked } = useCallBlocks();
@@ -169,8 +183,15 @@ export default function MessageThread({
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
   const [mapDialogOpen, setMapDialogOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [forwardTarget, setForwardTarget] = useState<Message | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduledListOpen, setScheduledListOpen] = useState(false);
+  const [isNearBottom, setIsNearBottom] = useState(true);
+  const [newMessagesSinceScroll, setNewMessagesSinceScroll] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const longPressTriggeredRef = useRef(false);
@@ -205,6 +226,10 @@ export default function MessageThread({
     setAttachments([]);
     setNewMessage('');
     setEditingMessageId(null);
+    setSearchOpen(false);
+    setForwardTarget(null);
+    setNewMessagesSinceScroll(false);
+    setIsNearBottom(true);
   }, [conversationId]);
 
   useEffect(() => {
@@ -488,8 +513,33 @@ export default function MessageThread({
   };
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, typingUsers]);
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      const threshold = 150;
+      setIsNearBottom(el.scrollHeight - el.scrollTop - el.clientHeight < threshold);
+    };
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const lastMessage = messages[messages.length - 1];
+    const isOwn = lastMessage.sender_id === user?.id;
+    if (isNearBottom || isOwn || lastMessage.optimistic) {
+      messagesEndRef.current?.scrollIntoView({ behavior: isOwn ? 'auto' : 'smooth' });
+      setNewMessagesSinceScroll(false);
+    } else if (lastMessage.sender_id !== user?.id) {
+      setNewMessagesSinceScroll(true);
+    }
+  }, [messages, isNearBottom, user?.id]);
+
+  useEffect(() => {
+    if (typingUsers.length > 0 && isNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [typingUsers, isNearBottom]);
 
   useEffect(() => {
     markAsRead();
@@ -694,6 +744,57 @@ export default function MessageThread({
     return m.content || '';
   };
 
+  const pinnedMessages = messages
+    .filter(m => m.is_pinned)
+    .sort((a, b) => new Date(b.pinned_at || b.created_at).getTime() - new Date(a.pinned_at || a.created_at).getTime());
+  const latestPinned = pinnedMessages[0] || null;
+
+  const scrollToMessage = (id: string) => {
+    document.getElementById(`msg-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  const handleSearchSelect = (message: Message) => {
+    setSearchOpen(false);
+    setTimeout(() => scrollToMessage(message.id), 120);
+  };
+
+  const handleForward = async (conversation: Conversation, message: Message): Promise<boolean> => {
+    try {
+      await sendMessage(
+        message.content,
+        (message.attachments || []).map(a => ({
+          type: a.type,
+          url: a.url,
+          name: a.name,
+          size: a.size,
+          mime_type: a.mime_type,
+          duration: a.duration,
+        })),
+        null,
+        { forwardedFromMessageId: message.id }
+      );
+      return true;
+    } catch (error) {
+      console.error('Error forwarding message:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Forward failed',
+        description: error instanceof Error ? error.message : 'Could not forward this message.',
+      });
+      return false;
+    }
+  };
+
+  const openScheduleDialog = () => {
+    setScheduleOpen(true);
+  };
+
+  const handleScheduled = () => {
+    setNewMessage('');
+    setAttachments([]);
+    setReplyToMessage(null);
+  };
+
   return (
     <>
       {isInCall && activeCallType && (
@@ -715,6 +816,29 @@ export default function MessageThread({
         value={wallpaper}
         onSelect={handleWallpaperSelect}
         note="This wallpaper is shared with everyone in this chat — any member can change it."
+      />
+
+      <ForwardMessageDialog
+        open={!!forwardTarget}
+        onOpenChange={(o) => { if (!o) setForwardTarget(null); }}
+        message={forwardTarget}
+        onForward={handleForward}
+      />
+
+      <ScheduleMessageDialog
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        conversationId={conversationId}
+        initialContent={newMessage}
+        replyToMessageId={replyToMessage?.id ?? null}
+        attachments={attachments.map(({ id, ...att }) => att)}
+        onScheduled={handleScheduled}
+      />
+
+      <ScheduledMessagesDialog
+        open={scheduledListOpen}
+        onOpenChange={setScheduledListOpen}
+        conversationId={conversationId}
       />
 
       <LocationShareDialog
@@ -830,6 +954,13 @@ export default function MessageThread({
 
           <div className="flex items-center gap-1">
             <button
+              className={cn('icon-btn', searchOpen && 'text-primary')}
+              onClick={() => setSearchOpen(!searchOpen)}
+              title="Search in chat"
+            >
+              <Search className="h-4 w-4" />
+            </button>
+            <button
               className={cn('icon-btn', wallpaper && 'text-primary')}
               onClick={() => setWallpaperOpen(true)}
               title="Chat wallpaper"
@@ -905,6 +1036,10 @@ export default function MessageThread({
                       {isExtended ? <Minimize2 className="h-4 w-4 mr-2" /> : <Maximize2 className="h-4 w-4 mr-2" />}
                       {isExtended ? 'Exit Fullscreen' : 'Fullscreen'}
                     </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setScheduledListOpen(true)}>
+                      <Clock3 className="h-4 w-4 mr-2" />
+                      Scheduled messages
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleToggleMute}>
                       {muted ? <BellOff className="h-4 w-4 mr-2" /> : <Bell className="h-4 w-4 mr-2" />}
@@ -938,6 +1073,10 @@ export default function MessageThread({
                       {isExtended ? <Minimize2 className="h-4 w-4 mr-2" /> : <Maximize2 className="h-4 w-4 mr-2" />}
                       {isExtended ? 'Exit Fullscreen' : 'Fullscreen'}
                     </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setScheduledListOpen(true)}>
+                      <Clock3 className="h-4 w-4 mr-2" />
+                      Scheduled messages
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleToggleBlock} className={isBlocked ? "text-success" : "text-destructive"}>
                       {isBlocked ? (
@@ -960,7 +1099,47 @@ export default function MessageThread({
         </div>
 
         {/* Messages area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-1 scrollbar-thin relative">
+        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-6 space-y-1 scrollbar-thin relative">
+          <MessageSearchPanel
+            open={searchOpen}
+            onClose={() => setSearchOpen(false)}
+            onSearch={searchMessages}
+            onSelect={handleSearchSelect}
+          />
+
+          {hasMore && (
+            <div className="flex justify-center my-4">
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full text-xs gap-1.5"
+                onClick={loadOlder}
+                disabled={loadingMore}
+              >
+                {loadingMore ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowDown className="h-3.5 w-3.5 rotate-180" />}
+                {loadingMore ? 'Loading…' : 'Load earlier messages'}
+              </Button>
+            </div>
+          )}
+
+          {latestPinned && (
+            <div className="sticky top-0 z-20 flex items-center gap-2 rounded-xl border border-primary/30 bg-card/95 backdrop-blur px-3 py-2 mb-3 shadow">
+              <Pin className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">Pinned message</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {replyContentPreview(latestPinned)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => scrollToMessage(latestPinned.id)}
+                className="text-[11px] font-semibold text-primary hover:underline flex-shrink-0"
+              >
+                Jump
+              </button>
+            </div>
+          )}
           {messageGroups.map((group) => (
             <div key={group.date}>
               {/* Date divider */}
@@ -1010,6 +1189,9 @@ export default function MessageThread({
                             onReply={() => handleReply(message)}
                             onEdit={isOwn ? () => startEditingMessage(message) : undefined}
                             onDelete={isOwn ? () => handleDeleteMessage(message) : undefined}
+                            onPin={() => togglePin(message.id, message.is_pinned)}
+                            pinned={message.is_pinned}
+                            onForward={() => setForwardTarget(message)}
                           />
                         )}
 
@@ -1033,6 +1215,25 @@ export default function MessageThread({
                             title="React"
                           >
                             <SmilePlus className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => togglePin(message.id, message.is_pinned)}
+                            className={cn(
+                              'icon-btn h-8 w-8 rounded-full bg-background/90 backdrop-blur border border-border/50 shadow',
+                              message.is_pinned && 'text-primary'
+                            )}
+                            title={message.is_pinned ? 'Unpin' : 'Pin'}
+                          >
+                            {message.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setForwardTarget(message)}
+                            className="icon-btn h-8 w-8 rounded-full bg-background/90 backdrop-blur border border-border/50 shadow"
+                            title="Forward"
+                          >
+                            <Forward className="h-3.5 w-3.5" />
                           </button>
                           {isOwn && (
                             <DropdownMenu>
@@ -1165,6 +1366,22 @@ export default function MessageThread({
                             </div>
                           ) : (
                             <>
+                              {message.forwarded_message && (
+                                <div className="mb-1">
+                                  <p className={cn('text-[11px] font-semibold uppercase tracking-wide flex items-center gap-1', isOwn ? 'text-white/80' : 'text-primary/90')}>
+                                    <Forward className="h-3 w-3" />
+                                    Forwarded from {replyAuthorName(message.forwarded_message)}
+                                  </p>
+                                  {message.forwarded_message.content && !isGifUrl(message.forwarded_message.content) && (
+                                    <p className={cn('text-xs truncate mt-0.5 max-w-[220px]', isOwn ? 'text-white/70' : 'text-muted-foreground')}>
+                                      {message.forwarded_message.content}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                              {message.effect && (
+                                <MessageEffects effect={message.effect} />
+                              )}
                               {isLocationMessage ? (
                                 <LocationPreview
                                   session={locationSession}
@@ -1201,11 +1418,14 @@ export default function MessageThread({
                               {formatMessageTime(message.created_at)}
                             </span>
                             {isOwn && (
-                              isMessageRead(message) ? (
-                                <CheckCheck className="h-3 w-3 text-white/70" />
-                              ) : (
-                                <Check className="h-3 w-3 text-white/70" />
-                              )
+                              <MessageReadReceipts
+                                messageId={message.id}
+                                isOwn={isOwn}
+                                isRead={isMessageRead(message)}
+                                readers={readsByMessage[message.id]?.filter(r => r.user_id !== user?.id) || []}
+                                totalOthers={Math.max(1, conversation?.participants?.length || 1)}
+                                onFetch={fetchReadsForMessage}
+                              />
                             )}
                           </div>
                         </div>
@@ -1268,6 +1488,22 @@ export default function MessageThread({
                   {liveLocation.activeSessions.length === 1 ? 'is' : 'are'} sharing live location
                 </span>
                 <span className="text-[11px] font-semibold text-primary flex-shrink-0">View</span>
+              </button>
+            </div>
+          )}
+
+          {newMessagesSinceScroll && (
+            <div className="sticky bottom-2 z-10 flex items-center justify-center">
+              <button
+                type="button"
+                onClick={() => {
+                  messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                  setNewMessagesSinceScroll(false);
+                }}
+                className="flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground shadow-lg px-3.5 py-1.5 text-xs font-semibold"
+              >
+                <ArrowDown className="h-3.5 w-3.5" />
+                New messages
               </button>
             </div>
           )}
@@ -1410,6 +1646,10 @@ export default function MessageThread({
                 <DropdownMenuItem onClick={() => { setLocationDialogOpen(true); setShowEmojiPicker(false); }}>
                   <MapPin className="h-4 w-4 mr-2" />
                   Live location
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setShowEmojiPicker(false); setShowGifPicker(false); openScheduleDialog(); }}>
+                  <CalendarClock className="h-4 w-4 mr-2" />
+                  Schedule message
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
