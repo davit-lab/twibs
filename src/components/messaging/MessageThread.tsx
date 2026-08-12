@@ -1197,7 +1197,7 @@ export default function MessageThread({
 
                         {/* Hover actions */}
                         <div className={cn(
-                          'absolute top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100',
+                          'hidden sm:flex absolute top-1/2 -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100',
                           isOwn ? 'left-0 -translate-x-full pr-1' : 'right-0 translate-x-full pl-1'
                         )}>
                           <button

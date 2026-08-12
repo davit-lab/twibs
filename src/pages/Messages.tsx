@@ -243,7 +243,7 @@ export default function Messages() {
 
         {/* Message Thread Panel */}
         <div className={cn(
-          'flex-1 flex flex-col',
+          'flex-1 flex flex-col min-w-0',
           !selectedConvId ? 'hidden md:flex' : 'flex'
         )}>
           {selectedConvId ? (
