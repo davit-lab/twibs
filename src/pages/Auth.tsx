@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/components/ui/input-otp';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Loader2, Mail, KeyRound, ArrowLeft, Phone, Eye, EyeOff, Check, X, Users, Smartphone
+  Loader2, Mail, KeyRound, ArrowLeft, Phone, Eye, EyeOff, Check, X, Users, Smartphone, Camera, User
 } from 'lucide-react';
 import { validateEmail } from '@/lib/emailValidation';
 import { isValidPhoneNumber } from 'libphonenumber-js';
@@ -53,14 +53,17 @@ export default function Auth() {
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string; displayName?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string; displayName?: string; avatar?: string }>({});
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [touchedFields, setTouchedFields] = useState<{ email?: boolean; password?: boolean; displayName?: boolean }>({});
   const nameInputRef = useRef<HTMLInputElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [otpCode, setOtpCode] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [selectedCountry, setSelectedCountry] = useState<Country>(countries.find(c => c.code === 'US')!);
@@ -91,8 +94,28 @@ export default function Auth() {
     if (isSignUp && displayName && displayName.length < 2) {
       newErrors.displayName = 'Display name must be at least 2 characters';
     }
+    if (isSignUp && !avatarFile) {
+      newErrors.avatar = 'A profile photo is required';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setErrors((p) => ({ ...p, avatar: 'Please select an image file' }));
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setErrors((p) => ({ ...p, avatar: 'Image must be 5MB or smaller' }));
+      return;
+    }
+    setErrors((p) => ({ ...p, avatar: undefined }));
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+    if (avatarInputRef.current) avatarInputRef.current.value = '';
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -127,9 +150,9 @@ export default function Auth() {
       return;
     }
     setLoading(true);
-    const { error } = await signUp(email, password, displayName || undefined);
-    setLoading(false);
+    const { error, user } = await signUp(email, password, displayName || undefined);
     if (error) {
+      setLoading(false);
       if (error.message.includes('already registered')) {
         toast({
           variant: 'destructive',
@@ -144,10 +167,38 @@ export default function Auth() {
         return;
       }
       toast({ variant: 'destructive', title: 'Sign up failed', description: error.message });
-    } else {
-      toast({ title: 'Welcome to Twibsers!', description: 'Your account has been created successfully.' });
-      navigate(isEnabled('signup_onboarding_enabled') ? '/onboarding/interests' : '/');
+      return;
     }
+
+    let avatarUploaded = true;
+    if (user && avatarFile) {
+      try {
+        const fileExt = avatarFile.name.split('.').pop() || 'jpg';
+        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, avatarFile, { upsert: true });
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ avatar_url: urlData.publicUrl })
+          .eq('user_id', user.id);
+        if (profileError) throw profileError;
+      } catch (err) {
+        avatarUploaded = false;
+        const message = err instanceof Error ? err.message : 'Failed to upload photo.';
+        toast({
+          variant: 'destructive',
+          title: 'Photo upload failed',
+          description: `Your account was created, but we could not upload your photo. ${message} You can add one later in Settings.`,
+        });
+      }
+    }
+
+    setLoading(false);
+    if (avatarUploaded) {
+      toast({ title: 'Welcome to Twibsers!', description: 'Your account has been created successfully.' });
+    }
+    navigate(isEnabled('signup_onboarding_enabled') ? '/onboarding/interests' : '/');
   };
 
   const handleOtpRequest = async (e: React.FormEvent) => {
@@ -451,6 +502,51 @@ export default function Auth() {
         </form>
       ) : (
         <form onSubmit={handleSignUp} className="space-y-4">
+          <div className="flex flex-col items-center gap-2">
+            <Label className="text-sm font-medium self-start">Profile photo <span className="text-destructive">*</span></Label>
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={loading}
+              className="relative group"
+              title="Choose a profile photo"
+            >
+              <div className={cn(
+                'h-24 w-24 rounded-full overflow-hidden border-2 border-dashed transition-colors flex items-center justify-center',
+                errors.avatar ? 'border-destructive' : avatarPreview ? 'border-primary' : 'border-border group-hover:border-primary/50 bg-surface'
+              )}>
+                {avatarPreview ? (
+                  <img src={avatarPreview} alt="Profile preview" className="h-full w-full object-cover" />
+                ) : (
+                  <User className="h-8 w-8 text-muted-foreground" />
+                )}
+              </div>
+              <div className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full bg-primary text-white flex items-center justify-center shadow-md">
+                <Camera className="h-4 w-4" />
+              </div>
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarSelect}
+              disabled={loading}
+            />
+            <p className="text-xs text-muted-foreground">
+              {avatarPreview ? (
+                <button type="button" onClick={() => { setAvatarFile(null); setAvatarPreview(null); }} className="text-xs text-muted-foreground underline hover:text-foreground transition-colors">
+                  Remove photo
+                </button>
+              ) : (
+                'Your photo is required to join'
+              )}
+            </p>
+            {errors.avatar && (
+              <p className="text-xs text-destructive flex items-center gap-1"><X className="h-3 w-3" /> {errors.avatar}</p>
+            )}
+          </div>
+
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">Display name <span className="text-muted-foreground font-normal">(optional)</span></Label>
             <div className="relative">
