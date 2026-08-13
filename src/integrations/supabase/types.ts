@@ -2032,6 +2032,7 @@ export type Database = {
           id: string
           language: string | null
           login_alerts: boolean | null
+          message_bubble_color: string | null
           reduced_motion: boolean | null
           screen_reader_optimized: boolean | null
           show_sensitive_content: boolean | null
@@ -2052,6 +2053,7 @@ export type Database = {
           id?: string
           language?: string | null
           login_alerts?: boolean | null
+          message_bubble_color?: string | null
           reduced_motion?: boolean | null
           screen_reader_optimized?: boolean | null
           show_sensitive_content?: boolean | null
@@ -2072,6 +2074,7 @@ export type Database = {
           id?: string
           language?: string | null
           login_alerts?: boolean | null
+          message_bubble_color?: string | null
           reduced_motion?: boolean | null
           screen_reader_optimized?: boolean | null
           show_sensitive_content?: boolean | null

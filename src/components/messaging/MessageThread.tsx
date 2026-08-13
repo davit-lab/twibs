@@ -755,7 +755,12 @@ export default function MessageThread({
 
   const handleSearchSelect = (message: Message) => {
     setSearchOpen(false);
-    setTimeout(() => scrollToMessage(message.id), 120);
+    setTimeout(() => {
+      scrollToMessage(message.id);
+      const el = document.getElementById(`msg-${message.id}`);
+      el?.classList.add('search-flash');
+      setTimeout(() => el?.classList.remove('search-flash'), 1700);
+    }, 120);
   };
 
   const handleForward = async (conversation: Conversation, message: Message): Promise<boolean> => {
@@ -1287,7 +1292,7 @@ export default function MessageThread({
                               : isGifUrl(message.content) || (!message.content && message.attachments?.length)
                                 ? 'p-1'
                                 : 'px-4 py-2.5',
-                            !isLocationMessage && (isOwn ? 'message-own shadow-md shadow-primary/25' : 'message-other'),
+                            !isLocationMessage && (isOwn ? 'message-own' : 'message-other'),
                             selectedMessageId === message.id && 'ring-2 ring-primary/50'
                           )}
                           onMouseDown={() => handleLongPressStart(message.id, isOwn)}

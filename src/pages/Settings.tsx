@@ -54,6 +54,17 @@ const COLOR_ACCENTS = [
   { value: 'red', color: 'hsl(0 75% 55%)', label: 'Red' },
 ];
 
+const BUBBLE_COLORS = [
+  { value: 'purple', color: 'hsl(262 83% 62%)', label: 'Purple' },
+  { value: 'blue', color: 'hsl(220 70% 60%)', label: 'Blue' },
+  { value: 'green', color: 'hsl(160 70% 45%)', label: 'Green' },
+  { value: 'teal', color: 'hsl(185 75% 45%)', label: 'Teal' },
+  { value: 'orange', color: 'hsl(30 90% 55%)', label: 'Orange' },
+  { value: 'pink', color: 'hsl(330 80% 60%)', label: 'Pink' },
+  { value: 'red', color: 'hsl(0 75% 55%)', label: 'Red' },
+  { value: 'indigo', color: 'hsl(245 60% 62%)', label: 'Indigo' },
+];
+
 type SettingsSection =
   | 'account'
   | 'interests'
@@ -1166,6 +1177,48 @@ function AppearanceSection({ preferences, updatePreferences }: any) {
               {preferences?.color_accent === value && <Check className="h-5 w-5 text-white" />}
             </button>
           ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Chat Colors" description="Pick the color of the messages you send">
+        <div className="space-y-4">
+          <div className="p-4 rounded-xl bg-muted/40 flex flex-col gap-2">
+            <div className="flex justify-start">
+              <div className="max-w-[75%] px-3.5 py-2 rounded-2xl rounded-bl-md bg-surface-3 text-foreground text-sm">
+                Hey, did you see the new update?
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <div
+                className="max-w-[75%] px-3.5 py-2 rounded-2xl rounded-br-md text-white text-sm"
+                style={{
+                  backgroundColor:
+                    BUBBLE_COLORS.find(c => c.value === (preferences?.message_bubble_color || 'purple'))?.color,
+                }}
+              >
+                Yes, I love the new chat colors!
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 sm:gap-3">
+            {BUBBLE_COLORS.map(({ value, color, label }) => (
+              <button
+                key={value}
+                onClick={() => updatePreferences({ message_bubble_color: value })}
+                className={cn(
+                  "relative aspect-square rounded-xl transition-all flex items-center justify-center",
+                  preferences?.message_bubble_color === value
+                    ? "ring-2 ring-offset-2 ring-offset-background scale-110"
+                    : "hover:scale-105"
+                )}
+                style={{ backgroundColor: color, '--tw-ring-color': color } as React.CSSProperties}
+                title={label}
+              >
+                {preferences?.message_bubble_color === value && <Check className="h-4 w-4 text-white" />}
+              </button>
+            ))}
+          </div>
         </div>
       </SectionCard>
     </div>

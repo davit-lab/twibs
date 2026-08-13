@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { SystemSettingsProvider, useAppSettings } from '@/contexts/SystemSettingsContext';
 import GlobalCallProvider from '@/components/calling/GlobalCallProvider';
+import PreferencesBootstrap from '@/components/PreferencesBootstrap';
 import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -154,6 +155,7 @@ const App = () => (
           <AuthProvider>
             <SystemSettingsProvider>
               <GlobalCallProvider />
+              <PreferencesBootstrap />
               <Suspense fallback={<PageLoader />}>
                 <MaintenanceGate>
                   <Routes>

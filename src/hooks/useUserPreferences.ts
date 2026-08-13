@@ -17,6 +17,7 @@ export interface UserPreferences {
   font_size: string;
   display_density: string;
   color_accent: string;
+  message_bubble_color: string;
   autoplay_videos: boolean;
   content_filter: string;
   language: string;
@@ -34,6 +35,7 @@ const defaultPreferences: Omit<UserPreferences, 'user_id'> = {
   font_size: 'medium',
   display_density: 'comfortable',
   color_accent: 'purple',
+  message_bubble_color: 'purple',
   autoplay_videos: true,
   content_filter: 'standard',
   language: 'en',
@@ -77,6 +79,8 @@ export function useUserPreferences() {
         applyFontSize(data.font_size);
         // Apply accent color
         applyAccentColor(data.color_accent);
+        // Apply chat bubble color
+        applyBubbleColor(data.message_bubble_color);
         // Apply accessibility settings
         applyAccessibilitySettings(data);
       } else {
@@ -98,6 +102,8 @@ export function useUserPreferences() {
 
         if (createError) throw createError;
         setPreferences(created as UserPreferences);
+        // Apply default bubble color
+        applyBubbleColor(created?.message_bubble_color || defaultPreferences.message_bubble_color);
       }
     } catch (error) {
       console.error('Error fetching preferences:', error);
@@ -142,6 +148,23 @@ export function useUserPreferences() {
     root.style.setProperty('--ring', colors.primary);
   };
 
+  const applyBubbleColor = (color: string) => {
+    const root = document.documentElement;
+    const bubbleColors: Record<string, { color: string; glow: string }> = {
+      purple: { color: '262 83% 62%', glow: '262 100% 68%' },
+      blue: { color: '220 70% 60%', glow: '220 100% 68%' },
+      green: { color: '160 70% 45%', glow: '160 100% 55%' },
+      teal: { color: '185 75% 45%', glow: '185 100% 55%' },
+      orange: { color: '30 90% 55%', glow: '30 100% 65%' },
+      pink: { color: '330 80% 60%', glow: '330 100% 68%' },
+      red: { color: '0 75% 55%', glow: '0 100% 65%' },
+      indigo: { color: '245 60% 62%', glow: '245 100% 70%' },
+    };
+    const colors = bubbleColors[color] || bubbleColors.purple;
+    root.style.setProperty('--bubble-own', colors.color);
+    root.style.setProperty('--bubble-own-glow', colors.glow);
+  };
+
   const applyAccessibilitySettings = (prefs: Partial<UserPreferences>) => {
     const root = document.documentElement;
     
@@ -172,6 +195,9 @@ export function useUserPreferences() {
     }
     if (updates.color_accent) {
       applyAccentColor(updates.color_accent);
+    }
+    if (updates.message_bubble_color) {
+      applyBubbleColor(updates.message_bubble_color);
     }
     if (updates.reduced_motion !== undefined || updates.high_contrast !== undefined) {
       applyAccessibilitySettings({ ...preferences, ...updates });

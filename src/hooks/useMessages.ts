@@ -679,7 +679,7 @@ export function useMessages(conversationId: string | null) {
     }
   };
 
-  const searchMessages = async (query: string, limit = 30): Promise<Message[]> => {
+  const searchMessages = useCallback(async (query: string, limit = 30): Promise<Message[]> => {
     if (!conversationId || !user || !query.trim()) return [];
 
     try {
@@ -691,25 +691,22 @@ export function useMessages(conversationId: string | null) {
 
       if (error) throw error;
 
-      const rows = (data || []) as Message[];
+      const rows = (data ?? []) as Message[];
       const messageIds = rows.map(m => m.id);
-      let attachments: MessageAttachment[] = [];
-      if (messageIds.length > 0) {
-        const { data: attData } = await supabase
-          .from('message_attachments')
-          .select('*')
-          .in('message_id', messageIds);
-        attachments = (attData || []) as MessageAttachment[];
-      }
-
       const senderIds = [...new Set(rows.map(m => m.sender_id))];
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('user_id, username, display_name, avatar_url')
-        .in('user_id', senderIds);
 
+      const [attData, profileData] = await Promise.all([
+        messageIds.length > 0
+          ? supabase.from('message_attachments').select('*').in('message_id', messageIds)
+          : Promise.resolve({ data: [], error: null }),
+        senderIds.length > 0
+          ? supabase.from('profiles').select('user_id, username, display_name, avatar_url').in('user_id', senderIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      const attachments = (attData.data ?? []) as MessageAttachment[];
       const profileMap = new Map(
-        (profiles || []).map(p => [p.user_id, { username: p.username, display_name: p.display_name, avatar_url: p.avatar_url }] as const)
+        (profileData.data ?? []).map(p => [p.user_id, { username: p.username, display_name: p.display_name, avatar_url: p.avatar_url }] as const)
       );
 
       return rows.map(m => ({
@@ -722,7 +719,7 @@ export function useMessages(conversationId: string | null) {
       console.error('Error searching messages:', error);
       return [];
     }
-  };
+  }, [conversationId, user]);
 
   return {
     messages,
