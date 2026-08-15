@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layout/MainLayout';
 import Feed from '@/components/feed/Feed';
+import RepostsFeed from '@/components/feed/RepostsFeed';
 import InterestsFeed from '@/components/feed/InterestsFeed';
 import FollowButton from '@/components/social/FollowButton';
 import FollowersFollowingModal from '@/components/social/FollowersFollowingModal';
@@ -15,10 +16,10 @@ import { useMutualConnections } from '@/hooks/useMutualConnections';
 import { usePremiumStatus } from '@/hooks/usePremiumStatus';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import StoryViewer from '@/components/stories/StoryViewer';
 import {
   BadgeCheck,
   MapPin,
@@ -29,13 +30,6 @@ import {
   Hammer,
   ArrowLeft,
   Loader2,
-  X,
-  Pause,
-  Play,
-  Volume2,
-  VolumeX,
-  Trash2,
-  Music,
   Camera,
   Share2,
   MoreHorizontal,
@@ -45,11 +39,12 @@ import {
   UserCheck,
   Crown,
   ImagePlus,
-  Eye,
+  Megaphone,
+  Repeat,
 } from 'lucide-react';
 import LibraryModal from '@/components/library/LibraryModal';
 import CoverUploadDialog from '@/components/profile/CoverUploadDialog';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 interface ProfileData {
@@ -113,18 +108,13 @@ export default function Profile() {
   // Story states
   const [uploading, setUploading] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const [muted, setMuted] = useState(false);
-  const [musicMuted, setMusicMuted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const storyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isOwnProfile = currentUserProfile?.username === username;
   const { stats, loading: statsLoading } = useFollowStats(profileData?.user_id);
   const { mutuals, count: mutualCount, loading: mutualsLoading } = useMutualConnections(profileData?.user_id);
   const { data: isPremium } = usePremiumStatus(profileData?.user_id);
-  const { groupedStories, viewStory, uploadStory, deleteStory } = useStories({
+  const { groupedStories, viewStory, uploadStory, deleteStory, fetchStoryViewers } = useStories({
     profileUserId: profileData?.user_id,
     enabled: !!profileData,
   });
@@ -137,7 +127,6 @@ export default function Profile() {
 
   const hasStories = groupedStories.length > 0 && groupedStories[0]?.stories.length > 0;
   const currentGroup = groupedStories[0];
-  const currentStory = currentGroup?.stories[currentStoryIndex];
   const hasUnviewed = currentGroup?.has_unviewed;
 
   useEffect(() => {
@@ -191,8 +180,6 @@ export default function Profile() {
   const viewedUserId = profileData?.user_id;
   useEffect(() => {
     setViewerOpen(false);
-    setCurrentStoryIndex(0);
-    setPaused(false);
   }, [viewedUserId]);
 
   const handleFollowChange = () => {
@@ -229,64 +216,10 @@ export default function Profile() {
     }
   };
 
-  const clearStoryTimer = useCallback(() => {
-    if (storyTimerRef.current) {
-      clearTimeout(storyTimerRef.current);
-      storyTimerRef.current = null;
-    }
-  }, []);
-
-  const nextStory = useCallback(() => {
-    clearStoryTimer();
-    if (!currentGroup) return;
-    if (currentStoryIndex < currentGroup.stories.length - 1) {
-      const newIndex = currentStoryIndex + 1;
-      setCurrentStoryIndex(newIndex);
-      const story = currentGroup.stories[newIndex];
-      if (story && !story.is_viewed) viewStory(story.id);
-    } else {
-      setViewerOpen(false);
-    }
-  }, [currentGroup, currentStoryIndex, clearStoryTimer, viewStory]);
-
-  const prevStory = useCallback(() => {
-    clearStoryTimer();
-    if (currentStoryIndex > 0) {
-      setCurrentStoryIndex(prev => prev - 1);
-    }
-  }, [currentStoryIndex, clearStoryTimer]);
-
   const openViewer = () => {
     if (!hasStories) return;
-    clearStoryTimer();
-    setCurrentStoryIndex(0);
     setViewerOpen(true);
-    setPaused(false);
-    setMusicMuted(false);
-    const story = currentGroup?.stories[0];
-    if (story && !story.is_viewed) viewStory(story.id);
   };
-
-  // Auto-advance timer for images when not paused
-  useEffect(() => {
-    clearStoryTimer();
-    if (!viewerOpen || !currentStory || !currentGroup) return;
-    if (paused) return;
-    if (currentStory.media_type === 'video') return;
-
-    const duration = (currentStory.duration || 5) * 1000;
-    storyTimerRef.current = setTimeout(nextStory, duration);
-
-    return clearStoryTimer;
-  }, [viewerOpen, currentStory, currentStoryIndex, paused, nextStory, clearStoryTimer, currentGroup]);
-
-  // Close story viewer cleanup
-  useEffect(() => {
-    if (!viewerOpen) {
-      clearStoryTimer();
-      setPaused(false);
-    }
-  }, [viewerOpen, clearStoryTimer]);
 
   if (loading) {
     return (
@@ -468,6 +401,12 @@ export default function Profile() {
                   <Button variant="outline" asChild className="rounded-xl font-semibold h-9">
                     <Link to="/settings">Edit Profile</Link>
                   </Button>
+                  <Button variant="outline" asChild className="rounded-xl font-semibold h-9">
+                    <Link to="/ads">
+                      <Megaphone className="h-4 w-4 mr-2" />
+                      Advertise
+                    </Link>
+                  </Button>
                   <Button variant="ghost" size="icon" className="rounded-xl h-9 w-9" onClick={handleShareProfile}>
                     <Share2 className="h-4 w-4" />
                   </Button>
@@ -646,10 +585,14 @@ export default function Profile() {
             <div className="bg-card border border-border rounded-2xl">
               <Tabs defaultValue="activity" className="w-full">
                 <div className="border-b border-border px-4">
-                  <TabsList className="grid w-full grid-cols-2 max-w-[200px] bg-muted/50 p-0.5 rounded-lg h-9">
+                  <TabsList className="grid w-full grid-cols-3 max-w-[300px] bg-muted/50 p-0.5 rounded-lg h-9">
                     <TabsTrigger value="activity" className="flex items-center gap-1.5 rounded-md text-xs font-semibold">
                       <FileText className="h-3.5 w-3.5" />
                       Activity
+                    </TabsTrigger>
+                    <TabsTrigger value="reposts" className="flex items-center gap-1.5 rounded-md text-xs font-semibold">
+                      <Repeat className="h-3.5 w-3.5" />
+                      Reposts
                     </TabsTrigger>
                     <TabsTrigger value="interests" className="flex items-center gap-1.5 rounded-md text-xs font-semibold">
                       <BadgeCheck className="h-3.5 w-3.5" />
@@ -660,6 +603,10 @@ export default function Profile() {
 
                 <TabsContent value="activity" className="p-4 mt-0">
                   <Feed userId={profileData.user_id} refreshTrigger={refreshKey} />
+                </TabsContent>
+
+                <TabsContent value="reposts" className="p-4 mt-0">
+                  <RepostsFeed userId={profileData.user_id} refreshTrigger={refreshKey} />
                 </TabsContent>
 
                 <TabsContent value="interests" className="p-4 mt-0">
@@ -681,165 +628,16 @@ export default function Profile() {
       />
 
       {/* Story Viewer */}
-      <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
-        <DialogContent className="max-w-lg p-0 bg-black border-none overflow-hidden h-[90vh] max-h-[800px]">
-          {currentStory && currentGroup && (
-            <div className="relative h-full w-full flex flex-col">
-              {/* Progress bars */}
-              <div className="absolute top-2 left-2 right-2 z-20 flex gap-1">
-                {currentGroup.stories.map((story, i) => (
-                  <div key={story.id} className="flex-1 h-0.5 bg-white/30 rounded-full overflow-hidden">
-                    <div
-                      className={cn(
-                        "h-full bg-white rounded-full transition-none",
-                        i < currentStoryIndex && "w-full",
-                        i === currentStoryIndex && "animate-story-progress",
-                        i > currentStoryIndex && "w-0"
-                      )}
-                      style={i === currentStoryIndex && paused ? { animationPlayState: 'paused' } : undefined}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {/* Header */}
-              <div className="absolute top-5 left-0 right-0 z-20 flex items-center justify-between px-4">
-                <div className="flex items-center gap-3">
-                  <Avatar className="w-9 h-9 ring-2 ring-white/30">
-                    <AvatarImage src={currentGroup.avatar_url || undefined} />
-                    <AvatarFallback className="bg-muted text-foreground text-xs">
-                      {getInitials(currentGroup.display_name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="text-white font-semibold text-sm">{currentGroup.display_name}</p>
-                    <p className="text-white/60 text-xs">
-                      {formatDistanceToNow(new Date(currentStory.created_at), { addSuffix: true })}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setPaused(!paused)}
-                    className="rounded-full text-white hover:bg-white/20 h-9 w-9"
-                  >
-                    {paused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-                  </Button>
-                  {currentStory.media_type === 'video' && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setMuted(!muted)}
-                      className="rounded-full text-white hover:bg-white/20 h-9 w-9"
-                    >
-                      {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                    </Button>
-                  )}
-                  {isOwnProfile && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        deleteStory(currentStory.id);
-                        nextStory();
-                      }}
-                      className="rounded-full text-white hover:bg-red-500/80 h-9 w-9"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setViewerOpen(false)}
-                    className="rounded-full text-white hover:bg-white/20 h-9 w-9"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Media */}
-              <div className="flex-1 flex items-center justify-center bg-black">
-                {currentStory.media_type === 'video' ? (
-                  <video
-                    key={currentStory.id}
-                    src={currentStory.media_url}
-                    className="max-h-full max-w-full object-contain"
-                    autoPlay
-                    loop={false}
-                    muted={muted || !!currentStory.music_url}
-                    playsInline
-                    onEnded={nextStory}
-                  />
-                ) : (
-                  <img
-                    key={currentStory.id}
-                    src={currentStory.media_url}
-                    alt=""
-                    className="max-h-full max-w-full object-contain"
-                  />
-                )}
-              </div>
-
-              {/* Story music */}
-              {currentStory.music_url && (
-                <>
-                  <audio
-                    key={currentStory.id}
-                    src={currentStory.music_url}
-                    autoPlay
-                    loop
-                    muted={musicMuted}
-                    className="hidden"
-                  />
-                  <div className="absolute bottom-16 left-0 right-0 z-20 flex justify-center">
-                    <div className="flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-full pl-3 pr-1.5 py-1.5">
-                      <Music className="h-4 w-4 text-white flex-shrink-0" />
-                      <span className="text-white text-xs font-medium max-w-[160px] truncate">
-                        {currentStory.music_name || 'Audio'}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setMusicMuted(!musicMuted)}
-                        className="h-7 w-7 rounded-full text-white hover:bg-white/20"
-                      >
-                        {musicMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Caption */}
-              {currentStory.caption && (
-                <div className="absolute bottom-16 left-4 right-4 z-20">
-                  <p className="text-white text-center text-sm bg-black/50 rounded-lg px-4 py-2 backdrop-blur-sm">
-                    {currentStory.caption}
-                  </p>
-                </div>
-              )}
-
-              {/* Navigation */}
-              <button onClick={prevStory} className="absolute left-0 top-16 bottom-0 w-1/3 z-10" />
-              <button onClick={nextStory} className="absolute right-0 top-16 bottom-0 w-1/3 z-10" />
-
-              {/* View count */}
-              {isOwnProfile && (
-                <div className="absolute bottom-4 left-0 right-0 z-20 text-center">
-                  <span className="text-white/60 text-xs inline-flex items-center gap-1">
-                    <Eye className="h-3 w-3" />
-                    {currentStory.view_count} views
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <StoryViewer
+        open={viewerOpen}
+        onOpenChange={setViewerOpen}
+        groups={groupedStories}
+        currentUserId={user?.id ?? null}
+        initialGroupIndex={0}
+        onView={viewStory}
+        onDelete={deleteStory}
+        onFetchViewers={fetchStoryViewers}
+      />
 
       <FollowersFollowingModal
         open={followModalOpen}
@@ -866,16 +664,6 @@ export default function Profile() {
           avatarUrl={profileData.avatar_url}
         />
       )}
-
-      <style>{`
-        @keyframes story-progress {
-          from { width: 0%; }
-          to { width: 100%; }
-        }
-        .animate-story-progress {
-          animation: story-progress 5s linear forwards;
-        }
-      `}</style>
     </MainLayout>
   );
 }

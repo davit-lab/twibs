@@ -33,6 +33,12 @@ const GroupDetail = lazy(() => import('./pages/GroupDetail'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const PostShare = lazy(() => import('./pages/PostShare'));
 const Interests = lazy(() => import('./pages/Interests'));
+const AdsCampaigns = lazy(() => import('./pages/AdsCampaigns'));
+const AdsNewCampaign = lazy(() => import('./pages/AdsNewCampaign'));
+const AdsBoostPost = lazy(() =>
+  import('./pages/AdsNewCampaign').then((m) => ({ default: m.AdsBoostPost }))
+);
+const CampaignDetail = lazy(() => import('./pages/CampaignDetail'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -221,6 +227,38 @@ const App = () => (
                       element={
                         <ProtectedRoute>
                           <OnboardingInterests />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/ads"
+                      element={
+                        <ProtectedRoute>
+                          <AdsCampaigns />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/ads/new"
+                      element={
+                        <ProtectedRoute>
+                          <AdsNewCampaign />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/ads/campaigns/:campaignId"
+                      element={
+                        <ProtectedRoute>
+                          <CampaignDetail />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/ads/boost/:postId"
+                      element={
+                        <ProtectedRoute>
+                          <AdsBoostPost />
                         </ProtectedRoute>
                       }
                     />

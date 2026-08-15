@@ -57,8 +57,7 @@ serve(async (req) => {
         const session = event.data.object as Stripe.Checkout.Session;
         const metadata = session.metadata || {};
 
-        if (metadata.type === "book_purchase") {
-          const bookId = metadata.book_id;
+        if (metadata.type === "book_purchase") {          const bookId = metadata.book_id;
           const buyerId = metadata.buyer_id;
           const authorId = metadata.author_id;
 
@@ -113,6 +112,24 @@ serve(async (req) => {
                   total_author_earnings: purchase.author_earnings,
                 });
             }
+          }
+          break;
+        }
+
+        if (metadata.campaign_id) {
+          const { error: confirmError } = await supabaseAdmin.rpc(
+            "confirm_campaign_payment",
+            {
+              p_campaign_id: metadata.campaign_id,
+              p_provider: "stripe",
+              p_provider_payment_id: session.payment_intent as string,
+            }
+          );
+
+          if (confirmError) {
+            console.error("Error confirming campaign payment:", confirmError);
+          } else {
+            console.log("Campaign payment confirmed:", metadata.campaign_id);
           }
           break;
         }

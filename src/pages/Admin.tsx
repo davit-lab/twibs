@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import {
   Users, FileText, Clapperboard, BookOpen, Flag, BadgeCheck,
-  Settings, ScrollText, Loader2, Trash, ShieldAlert, ScanFace,
+  Settings, ScrollText, Loader2, Trash, ShieldAlert, ScanFace, Megaphone,
 } from 'lucide-react';
 import AdminControlCenter from '@/components/admin/AdminControlCenter';
 import AdminUsersTab from '@/components/admin/AdminUsersTab';
@@ -20,6 +20,7 @@ import AdminSettingsTab from '@/components/admin/AdminSettingsTab';
 import AdminAuditTab from '@/components/admin/AdminAuditTab';
 import AdminDeletedUsersTab from '@/components/admin/AdminDeletedUsersTab';
 import AdminFaceAuthTab from '@/components/admin/AdminFaceAuthTab';
+import AdminAdsTab from '@/components/admin/AdminAdsTab';
 import RedButtonControl from '@/components/admin/security/RedButtonControl';
 import PurgeAllUsersDialog from '@/components/admin/PurgeAllUsersDialog';
 import { cn } from '@/lib/utils';
@@ -31,6 +32,7 @@ const TABS: { value: string; icon: React.ElementType; label: string; staffOnly?:
   { value: 'reels', icon: Clapperboard, label: 'Reels' },
   { value: 'books', icon: BookOpen, label: 'Books' },
   { value: 'reports', icon: Flag, label: 'Reports' },
+  { value: 'ads', icon: Megaphone, label: 'Ads' },
   { value: 'verification', icon: BadgeCheck, label: 'Verify' },
   { value: 'settings', icon: Settings, label: 'Settings', staffOnly: true },
   { value: 'biometric', icon: ScanFace, label: 'Biometric', staffOnly: true },
@@ -45,6 +47,7 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState<string>((location.state as { openTab?: string } | null)?.openTab ?? 'users');
   const [openReportCount, setOpenReportCount] = useState(0);
   const [pendingVerifyCount, setPendingVerifyCount] = useState(0);
+  const [pendingAdsCount, setPendingAdsCount] = useState(0);
   const [purgeOpen, setPurgeOpen] = useState(false);
   const [tabsReady, setTabsReady] = useState(false);
 
@@ -63,13 +66,15 @@ export default function Admin() {
     if (!isStaff) return;
     let mounted = true;
     (async () => {
-      const [{ count: reports }, { count: verif }] = await Promise.all([
+      const [{ count: reports }, { count: verif }, { count: ads }] = await Promise.all([
         supabase.from('reports').select('*', { count: 'exact', head: true }).in('status', ['open', 'reviewing']),
         supabase.from('verification_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('campaigns').select('*', { count: 'exact', head: true }).in('status', ['pending_review', 'pending_payment']),
       ]);
       if (mounted) {
         setOpenReportCount(reports ?? 0);
         setPendingVerifyCount(verif ?? 0);
+        setPendingAdsCount(ads ?? 0);
         setTabsReady(true);
       }
     })();
@@ -105,7 +110,7 @@ export default function Admin() {
           <TabsList className="sticky top-16 z-20 flex h-auto w-full flex-wrap justify-start gap-1 rounded-2xl border border-border/70 bg-background/90 p-1.5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/75">
             {TABS.filter((t) => !((t.staffOnly && !isAdmin) || (t.superOnly && !isSuperAdmin))).map((t) => {
               const Icon = t.icon;
-              const count = t.value === 'reports' ? openReportCount : t.value === 'verification' ? pendingVerifyCount : 0;
+              const count = t.value === 'reports' ? openReportCount : t.value === 'verification' ? pendingVerifyCount : t.value === 'ads' ? pendingAdsCount : 0;
               return (
                 <TabsTrigger
                   key={t.value}
@@ -150,6 +155,10 @@ export default function Admin() {
 
           <TabsContent value="reports">
             <AdminReportsTab />
+          </TabsContent>
+
+          <TabsContent value="ads">
+            <AdminAdsTab />
           </TabsContent>
 
           <TabsContent value="verification">

@@ -5,9 +5,9 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Check, Loader2, Plus, Search, Users, Hash, KeyRound, Sparkles, X, PartyPopper, ArrowRight } from 'lucide-react';
+import { Check, Loader2, Plus, Search, Users, Hash, KeyRound, X, PartyPopper, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import AvatarCollage from './AvatarCollage';
+// AvatarCollage preview removed
 
 interface Friend {
   user_id: string;
@@ -218,7 +218,7 @@ export default function NewChatDialog({
       ? 'Create Community'
       : 'Join by Code';
 
-  const CreateIcon = tab === 'group' ? Users : tab === 'community' ? Sparkles : KeyRound;
+  const CreateIcon = tab === 'group' ? Users : tab === 'join' ? KeyRound : undefined;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -336,46 +336,6 @@ export default function NewChatDialog({
             <div className="flex-1 overflow-y-auto p-5">
               {tab === 'group' ? (
                 <div className="space-y-4">
-                  {/* Live preview */}
-                  <div className="relative rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/[0.09] to-primary/[0.02] p-4 overflow-hidden">
-                    <div className="absolute -top-8 -right-8 h-24 w-24 rounded-full bg-primary/10 blur-2xl pointer-events-none" />
-                    <div className="relative flex items-center gap-4">
-                      <AvatarCollage
-                        items={selectedFriends.slice(0, 3).map(f => ({ url: f.avatar_url, name: f.display_name }))}
-                        size={56}
-                        count={selectedIds.size}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-[15px] truncate">
-                          {groupName.trim() || 'New Group'}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {selectedIds.size === 0
-                            ? 'Pick friends to build the group'
-                            : `${selectedIds.size} member${selectedIds.size === 1 ? '' : 's'} selected`}
-                        </p>
-                      </div>
-                      <div className="flex -space-x-2 flex-shrink-0">
-                        {selectedFriends.slice(0, 3).map(f => (
-                          <div key={f.user_id} className="h-7 w-7 rounded-full ring-2 ring-background overflow-hidden bg-surface-3 flex-shrink-0">
-                            {f.avatar_url ? (
-                              <img src={f.avatar_url} alt="" className="h-full w-full object-cover" />
-                            ) : (
-                              <span className="h-full w-full flex items-center justify-center text-[9px] font-bold text-muted-foreground">
-                                {getInitials(f.display_name)}
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                        {selectedIds.size > 3 && (
-                          <div className="h-7 w-7 rounded-full ring-2 ring-background bg-primary text-primary-foreground flex items-center justify-center text-[10px] font-bold">
-                            +{selectedIds.size - 3}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
                   <div>
                     <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Group name</label>
                     <Input
@@ -483,25 +443,7 @@ export default function NewChatDialog({
               ) : tab === 'community' ? (
                 <div className="space-y-4">
                   {/* Live preview */}
-                  <div className="relative rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/[0.09] to-primary/[0.02] p-4 overflow-hidden">
-                    <div className="absolute -top-8 -right-8 h-24 w-24 rounded-full bg-primary/10 blur-2xl pointer-events-none" />
-                    <div className="relative flex items-center gap-4">
-                      <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-primary to-[hsl(285_80%_58%)] flex items-center justify-center ring-2 ring-background shadow-md shadow-primary/25 flex-shrink-0">
-                        <Hash className="h-6 w-6 text-white" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-[15px] truncate">
-                          {communityName.trim() || 'New Community'}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                          {communityDescription.trim() || 'A space for people to share and connect'}
-                        </p>
-                      </div>
-                      <span className="text-[10px] font-bold text-primary bg-primary/10 rounded-full px-2 py-1 flex-shrink-0">
-                        Community
-                      </span>
-                    </div>
-                  </div>
+                  
 
                   <div>
                     <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Community name</label>
@@ -524,15 +466,7 @@ export default function NewChatDialog({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-primary/[0.07] ring-1 ring-primary/15">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <KeyRound className="h-5 w-5 text-primary" />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Enter the <span className="font-bold text-foreground">8-character code</span> to join a group or
-                      community. Ask the owner for their code.
-                    </p>
-                  </div>
+                  
                   <Input
                     value={joinCode}
                     onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
@@ -578,7 +512,7 @@ export default function NewChatDialog({
                 {submitting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <CreateIcon className="h-4 w-4" />
+                  CreateIcon ? <CreateIcon className="h-4 w-4" /> : null
                 )}
                 {createLabel}
               </Button>

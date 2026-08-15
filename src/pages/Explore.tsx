@@ -6,17 +6,20 @@ import FollowRequests from '@/components/social/FollowRequests';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BadgeCheck, Search, Users, Sparkles, X, Crown, Star, Eye, Play, FileText, ArrowRight, Clapperboard, Heart, MessageCircle, MapPin, Navigation } from 'lucide-react';
+import { BadgeCheck, Search, Users, X, Crown, Star, Eye, Play, FileText, ArrowRight, Clapperboard, Heart, MessageCircle, MapPin, Navigation } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePremiumStatus } from '@/hooks/usePremiumStatus';
 import { useExplore, ExploreTab, ExploreUser, ExplorePost, ExploreReel } from '@/hooks/useExplore';
 import { useMutedUsers } from '@/hooks/useSafety';
 import TrendingList from '@/components/social/TrendingList';
+import SponsoredPost from '@/components/ads/SponsoredPost';
+import { fetchFeedAds } from '@/hooks/useAds';
 import { formatDistanceKm } from '@/lib/geolocation';
 import { formatDistanceToNow } from 'date-fns';
+import type { FeedAd } from '@/lib/ads';
 
 const TABS: { value: ExploreTab; label: string; icon: React.ElementType }[] = [
-  { value: 'all', label: 'All', icon: Sparkles },
+  { value: 'all', label: 'All', icon: BadgeCheck },
   { value: 'reels', label: 'Reels', icon: Clapperboard },
   { value: 'posts', label: 'Posts', icon: FileText },
   { value: 'people', label: 'People', icon: Users },
@@ -276,12 +279,48 @@ function ReelCard({ reel, grid }: { reel: ExploreReel; grid?: boolean }) {
 }
 
 export default function Explore() {
-  const { profile: currentUserProfile } = useAuth();
+  const { profile: currentUserProfile, user } = useAuth();
   const { users, posts, reels, loading, searchQuery, setSearchQuery, activeTab, setActiveTab, handleFollowChange, hasAny, viewerLocationKnown, distancesReady, distancesLoading } = useExplore();
   const { data: mutedIds = [] } = useMutedUsers();
+  const [ads, setAds] = useState<FeedAd[]>([]);
   const visiblePosts = posts.filter(p => !mutedIds.includes(p.user_id));
   const trimmedQuery = searchQuery.trim();
   const counts = { people: users.length, posts: visiblePosts.length, reels: reels.length };
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) return;
+    fetchFeedAds(user.id, 2)
+      .then((data) => { if (!cancelled) setAds((data as FeedAd[]) || []); })
+      .catch((e) => console.error('Explore ads fetch error:', e));
+    return () => { cancelled = true; };
+  }, [user]);
+
+  const withAds = (postCards: React.ReactNode[]) => {
+    if (ads.length === 0) return postCards;
+    const out: React.ReactNode[] = [];
+    const pool = [...ads];
+    postCards.forEach((card, i) => {
+      out.push(card);
+      if ((i + 1) % 4 === 0 && pool.length > 0) {
+        const ad = pool.shift() as FeedAd;
+        out.push(
+          <div key={`ad-${ad.advertisement_id}`} className="md:col-span-2">
+            <SponsoredPost ad={ad} />
+          </div>
+        );
+      }
+    });
+    if (pool.length > 0) {
+      const ad = pool.shift() as FeedAd;
+      out.push(
+        <div key={`ad-${ad.advertisement_id}`} className="md:col-span-2">
+          <SponsoredPost ad={ad} />
+        </div>
+      );
+    }
+    return out;
+  };
 
   const searchPlaceholder = {
     all: 'Search people, posts, reels...',
@@ -365,7 +404,7 @@ export default function Explore() {
             <section>
               <SectionHeader title="Popular Posts" seeAll={() => setActiveTab('posts')} />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {visiblePosts.slice(0, 6).map(p => <PostCard key={p.id} post={p} />)}
+                {withAds(visiblePosts.slice(0, 6).map(p => <PostCard key={p.id} post={p} />))}
               </div>
             </section>
           )}
@@ -400,7 +439,7 @@ export default function Explore() {
         );
     }
 
-    if (activeTab === 'posts') return visiblePosts.length === 0 ? empty('posts') : <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{visiblePosts.map(p => <PostCard key={p.id} post={p} />)}</div>;
+    if (activeTab === 'posts') return visiblePosts.length === 0 ? empty('posts') : <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{withAds(visiblePosts.map(p => <PostCard key={p.id} post={p} />))}</div>;
     return users.length === 0
       ? empty('people')
       : (
@@ -418,7 +457,7 @@ export default function Explore() {
         {/* Editorial Hero */}
         <div className="border-b border-border">
           <div className="max-w-3xl mx-auto px-4 py-10 md:py-12">
-            <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-primary mb-4">Discover</p>
+            
             <div className="flex items-end justify-between gap-6">
               <h1 className="text-5xl md:text-6xl font-black tracking-tight leading-none">Explore</h1>
               <p className="text-muted-foreground text-sm font-medium pb-1 hidden sm:block text-right leading-relaxed">

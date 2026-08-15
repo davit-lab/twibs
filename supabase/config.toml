@@ -6,6 +6,14 @@ project_id = "wqprwaiogxykqdpjabbn"
 # `supabase link` + `supabase config push`) to take effect on the live
 # database.
 
+# NOTE: Email confirmation is DISABLED for this test project so signups do
+# not depend on the hosted email provider (whose send-rate limits can block
+# signup entirely with "email rate limit exceeded"). New accounts are created
+# and signed in immediately; no confirmation email is sent.
+
+[auth.email]
+enable_confirmations = false
+
 [functions.create-checkout]
 verify_jwt = false
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserAvatar } from '@/components/ui/user-avatar';
@@ -42,6 +42,7 @@ import {
   UserX,
   VolumeX,
   Volume2,
+  Megaphone,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -100,6 +101,7 @@ const visibilityIcons = {
 export default function PostCard({ post, onPostDeleted, onStarChange, reposter }: PostCardProps) {
   const { user, profile: currentUserProfile } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   
   const [isStarred, setIsStarred] = useState(post.user_has_starred || false);
   const [starCount, setStarCount] = useState(post.star_count);
@@ -413,6 +415,14 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter }
                 >
                   <Copy className="h-4 w-4" />
                   Copy link
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-border/30" />
+                <DropdownMenuItem
+                  className="gap-2 text-sm rounded-lg"
+                  onClick={() => navigate(`/ads/boost/${post.id}`)}
+                >
+                  <Megaphone className="h-4 w-4" />
+                  Boost post
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-border/30" />
                 <DropdownMenuItem

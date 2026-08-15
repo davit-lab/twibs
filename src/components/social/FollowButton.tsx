@@ -14,6 +14,7 @@ interface FollowButtonProps {
   isPrivateAccount?: boolean;
   className?: string;
   onFollowChange?: () => void;
+  onFollowCreated?: () => void;
   size?: 'default' | 'sm' | 'lg' | 'icon';
 }
 
@@ -23,6 +24,7 @@ export default function FollowButton({
   isPrivateAccount = false,
   className,
   onFollowChange,
+  onFollowCreated,
   size = 'default',
 }: FollowButtonProps) {
   const { user } = useAuth();
@@ -102,6 +104,7 @@ export default function FollowButton({
             : `You are now following @${targetUsername}`,
         });
         onFollowChange?.();
+        onFollowCreated?.();
       }
     } catch (error: unknown) {
       console.error('Follow error:', error);

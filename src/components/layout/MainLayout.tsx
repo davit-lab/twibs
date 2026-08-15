@@ -40,6 +40,7 @@ import {
   Radio,
   Users,
   Sparkles,
+  Megaphone,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -59,6 +60,7 @@ const navItems = [
   { icon: BookOpen, label: 'Library', href: '/library', id: 'library' },
   { icon: Radio, label: 'Live TV', href: '/tv', id: 'tv' },
   { icon: Users, label: 'Groups', href: '/groups', id: 'groups' },
+  { icon: Megaphone, label: 'Advertise', href: '/ads', id: 'ads' },
 ];
 
 const mobileNavItems = [

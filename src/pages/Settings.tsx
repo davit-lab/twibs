@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useLoginSessions } from '@/hooks/useLoginSessions';
@@ -30,12 +30,13 @@ import {
   LogOut, Trash2, Key, AlertTriangle, Check, Mail, Upload,
   PhoneOff, UserX, ChevronRight, ChevronLeft, Settings2,
   MessageSquare, Heart, Bookmark, Search, Accessibility, BadgeCheck,
-  Sparkles, ShieldCheck, KeyRound
+  Sparkles, ShieldCheck, KeyRound, Megaphone
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { getAllLanguages } from '@/lib/languageDetection';
 import { validateEmail } from '@/lib/emailValidation';
+import ProfessionalAccountsSection from '@/components/ads/ProfessionalAccountsSection';
 
 const LANGUAGES = getAllLanguages();
 
@@ -75,7 +76,8 @@ type SettingsSection =
   | 'accessibility'
   | 'security'
   | 'sessions'
-  | 'blocked';
+  | 'blocked'
+  | 'professional';
 
 const NAV_ITEMS: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
   { id: 'account', label: 'Account', icon: User },
@@ -86,11 +88,13 @@ const NAV_ITEMS: { id: SettingsSection; label: string; icon: React.ElementType }
   { id: 'privacy', label: 'Privacy', icon: Lock },
   { id: 'accessibility', label: 'Accessibility', icon: Accessibility },
   { id: 'security', label: 'Security', icon: Shield },
+  { id: 'professional', label: 'Professional', icon: Megaphone },
 ];
 
 export default function Settings() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, profile, loading: authLoading, updateProfile, signOut } = useAuth();
   const { deleteOwnAccount } = useAdminActions();
   const { preferences, loading: prefsLoading, saving: prefsSaving, updatePreferences } = useUserPreferences();
@@ -142,6 +146,12 @@ export default function Settings() {
     email_notifications: true,
     push_notifications: true,
   });
+
+  useEffect(() => {
+    const section = searchParams.get('section');
+    const valid = NAV_ITEMS.some((item) => item.id === section);
+    if (valid) setActiveSection(section as SettingsSection);
+  }, [searchParams]);
 
   useEffect(() => {
     if (!authLoading && !user) navigate('/auth');
@@ -422,7 +432,7 @@ export default function Settings() {
               {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
-                  onClick={() => setActiveSection(id)}
+                  onClick={() => setSearchParams({ section: id })}
                   className={cn(
                     "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors",
                     activeSection === id
@@ -521,6 +531,8 @@ export default function Settings() {
                 getDeviceIcon={getDeviceIcon}
               />
             )}
+
+            {activeSection === 'professional' && <ProfessionalAccountsSection />}
           </div>
         </div>
       </div>

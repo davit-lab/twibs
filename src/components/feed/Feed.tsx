@@ -2,11 +2,14 @@ import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import PostCard from './PostCard';
+import SponsoredPost from '@/components/ads/SponsoredPost';
+import { fetchFeedAds } from '@/hooks/useAds';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Loader2, Sparkles } from 'lucide-react';
 import { useMutedUsers } from '@/hooks/useSafety';
 import { cn } from '@/lib/utils';
+import type { FeedAd } from '@/lib/ads';
 
 interface PostProfile {
   username: string;
@@ -43,6 +46,12 @@ interface FeedItem {
   type: 'post' | 'repost';
   post: Post;
   reposter?: PostProfile | null;
+  date: string;
+}
+
+interface FeedAdItem {
+  type: 'ad';
+  ad: FeedAd;
   date: string;
 }
 
@@ -83,7 +92,7 @@ const POST_SELECT = `
 export default function Feed({ userId, refreshTrigger, onRefreshComplete }: FeedProps) {
   const { user } = useAuth();
   const { data: mutedIds = [] } = useMutedUsers();
-  const [items, setItems] = useState<FeedItem[]>([]);
+  const [items, setItems] = useState<(FeedItem | FeedAdItem)[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -245,6 +254,29 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
         post: annotatedMap.get(item.post.id) || item.post,
       }));
 
+      // Pull sponsored posts into the home feeds ("For You" + "Following"), interleaved between posts.
+      if (!loadMore && !userId && user && (feedType === 'all' || feedType === 'following')) {
+        try {
+          const ads = await fetchFeedAds(user.id, 2);
+          const adItems: FeedAdItem[] = (ads || []).map((ad) => ({
+            type: 'ad',
+            ad,
+            date: ad.post_created_at || new Date().toISOString(),
+          }));
+          const merged: (FeedItem | FeedAdItem)[] = [];
+          nextItems.forEach((item, i) => {
+            merged.push(item);
+            if ((i + 1) % 4 === 0 && adItems.length > 0) {
+              merged.push(adItems.shift() as FeedAdItem);
+            }
+          });
+          if (adItems.length > 0) merged.push(...adItems);
+          nextItems = merged;
+        } catch (e) {
+          console.error('Feed ads fetch error:', e);
+        }
+      }
+
       if (loadMore) {
         setItems(prev => [...prev, ...nextItems]);
       } else {
@@ -304,7 +336,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
         (payload) => {
           const updated = payload.new as Post;
           setItems(prev => prev.map(item =>
-            item.post.id === updated.id
+            item.type !== 'ad' && item.post.id === updated.id
               ? { ...item, post: { ...item.post, ...updated } }
               : item
           ));
@@ -313,7 +345,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
       .on(
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'posts' },
-        (payload) => setItems(prev => prev.filter(item => item.post.id !== payload.old.id))
+        (payload) => setItems(prev => prev.filter(item => item.type === 'ad' || item.post.id !== payload.old.id))
       )
       .subscribe();
 
@@ -427,13 +459,17 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
       ) : (
         <div className="space-y-4">
           {items.map((item, index) => (
-            <div key={`${item.type}-${item.post.id}-${index}`} className="animate-fade-in" style={{ animationDelay: `${Math.min(index * 40, 240)}ms` }}>
-              <PostCard
-                post={item.post}
-                reposter={item.reposter}
-                onPostDeleted={handlePostDeleted}
-                onStarChange={handleStarChange}
-              />
+            <div key={`${item.type}-${item.type === 'ad' ? item.ad.advertisement_id : item.post.id}-${index}`} className="animate-fade-in" style={{ animationDelay: `${Math.min(index * 40, 240)}ms` }}>
+              {item.type === 'ad' ? (
+                <SponsoredPost ad={item.ad} />
+              ) : (
+                <PostCard
+                  post={item.post}
+                  reposter={item.reposter}
+                  onPostDeleted={handlePostDeleted}
+                  onStarChange={handleStarChange}
+                />
+              )}
             </div>
           ))}
         </div>

@@ -10,9 +10,10 @@ import defaultAvatar from '@/assets/default-avatar.png';
 
 interface CommentSectionProps {
   postId: string;
+  onCommented?: () => void;
 }
 
-export default function CommentSection({ postId }: CommentSectionProps) {
+export default function CommentSection({ postId, onCommented }: CommentSectionProps) {
   const { user, profile } = useAuth();
   const { comments, isLoading, addComment, deleteComment, editComment, vote } = useComments(postId);
   const [newComment, setNewComment] = useState('');
@@ -25,6 +26,7 @@ export default function CommentSection({ postId }: CommentSectionProps) {
     const result = await addComment(newComment.trim());
     if (result) {
       setNewComment('');
+      onCommented?.();
     }
     setIsSubmitting(false);
   };

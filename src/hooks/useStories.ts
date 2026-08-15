@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import { useToast } from '@/hooks/use-toast';
+import type { FeedAd } from '@/lib/ads';
 
 export interface Story {
   id: string;
@@ -24,6 +25,14 @@ export interface Story {
   is_viewed?: boolean;
 }
 
+export interface StoryViewerProfile {
+  viewer_id: string;
+  viewed_at: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+}
+
 export interface GroupedStories {
   user_id: string;
   username: string;
@@ -31,6 +40,7 @@ export interface GroupedStories {
   avatar_url: string | null;
   stories: Story[];
   has_unviewed: boolean;
+  ad?: FeedAd;
 }
 
 interface UseStoriesOptions {
@@ -309,6 +319,32 @@ export function useStories(options: UseStoriesOptions = {}) {
     }
   };
 
+  const fetchStoryViewers = useCallback(async (storyId: string): Promise<StoryViewerProfile[]> => {
+    const { data: views, error } = await supabase
+      .from('story_views')
+      .select('viewer_id, viewed_at')
+      .eq('story_id', storyId)
+      .order('viewed_at', { ascending: false });
+
+    if (error) throw error;
+    if (!views || views.length === 0) return [];
+
+    const viewerIds = views.map(v => v.viewer_id);
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('user_id, username, display_name, avatar_url')
+      .in('user_id', viewerIds);
+
+    const profileMap = new Map((profiles || []).map(p => [p.user_id, p]));
+    return views.map(v => ({
+      viewer_id: v.viewer_id,
+      viewed_at: v.viewed_at,
+      username: profileMap.get(v.viewer_id)?.username || 'unknown',
+      display_name: profileMap.get(v.viewer_id)?.display_name || 'Unknown',
+      avatar_url: profileMap.get(v.viewer_id)?.avatar_url || null,
+    }));
+  }, []);
+
   return {
     stories,
     groupedStories,
@@ -316,6 +352,7 @@ export function useStories(options: UseStoriesOptions = {}) {
     viewStory,
     uploadStory,
     deleteStory,
+    fetchStoryViewers,
     refetch: fetchStories,
   };
 }

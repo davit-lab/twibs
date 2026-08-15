@@ -6,7 +6,10 @@ import { useReels, ReelsFeedType } from '@/hooks/useReels';
 import { useReelsNavigation } from '@/hooks/useReelsNavigation';
 import { useStories } from '@/hooks/useStories';
 import { useToast } from '@/hooks/use-toast';
+import { useFeedAds } from '@/hooks/useFeedAds';
+import type { FeedAd } from '@/lib/ads';
 import ReelCard from '@/components/reels/ReelCard';
+import SponsoredReel from '@/components/reels/SponsoredReel';
 import ReelCommentsSheet from '@/components/reels/ReelComments';
 import ReelShareSheet from '@/components/reels/ReelShareSheet';
 import ReelEmptyState from '@/components/reels/ReelEmptyState';
@@ -26,8 +29,19 @@ export default function Reels() {
 
   const { reels, loading, refreshing, error, refetch, currentIndex, setCurrentIndex, likeReel, incrementView } = useReels(feedType);
 
+  const { ads } = useFeedAds(2);
+
+  type FeedItem = { type: 'reel'; reel: typeof reels[0] } | { type: 'ad'; ad: FeedAd };
+  const feedItems: FeedItem[] = [];
+  let adIdx = 0;
+  reels.forEach((reel, i) => {
+    feedItems.push({ type: 'reel', reel });
+    if ((i + 1) % 4 === 0 && adIdx < ads.length) feedItems.push({ type: 'ad', ad: ads[adIdx++] });
+  });
+  while (adIdx < ads.length) feedItems.push({ type: 'ad', ad: ads[adIdx++] });
+
   const { containerRef, goToReel } = useReelsNavigation({
-    totalReels: reels.length,
+    totalReels: feedItems.length,
     currentIndex,
     setCurrentIndex,
   });
@@ -124,7 +138,9 @@ export default function Reels() {
   }
 
   const shareReel = showShareFor ? reels.find(r => r.id === showShareFor) : undefined;
-  const currentReel = reels[currentIndex];
+  const currentItem = feedItems[currentIndex];
+  const currentReel = currentItem?.type === 'reel' ? currentItem.reel : undefined;
+  const currentAd = currentItem?.type === 'ad' ? currentItem.ad : undefined;
   const similarAudioReels = audioReel?.audio_name
     ? reels.filter(r => r.audio_name === audioReel.audio_name && r.id !== audioReel.id)
     : [];
@@ -137,7 +153,7 @@ export default function Reels() {
         <div className="relative h-full w-full sm:max-w-[430px]">
           <motion.div
             drag="y"
-            dragConstraints={{ top: -(reels.length - 1) * viewportHeight, bottom: 0 }}
+            dragConstraints={{ top: -(feedItems.length - 1) * viewportHeight, bottom: 0 }}
             dragElastic={0.1}
             onDragEnd={(_, info) => {
               const { offset, velocity } = info;
@@ -149,23 +165,28 @@ export default function Reels() {
             transition={{ type: 'spring', stiffness: 320, damping: 36, mass: 0.85 }}
             className="relative w-full"
           >
-            {reels.map((reel, index) => (
-              <div key={reel.id} className="relative flex w-full items-center justify-center" style={{ height: viewportHeight }}>
+            {feedItems.map((item, index) =>
+              item.type === 'ad' ? (
+                <div key={item.ad.advertisement_id} className="relative flex w-full items-center justify-center" style={{ height: viewportHeight }}>
+                  <SponsoredReel ad={item.ad} isActive={index === currentIndex} />
+                </div>
+              ) : (
+              <div key={item.reel.id} className="relative flex w-full items-center justify-center" style={{ height: viewportHeight }}>
                 <ReelCard
-                  reel={reel}
+                  reel={item.reel}
                   isActive={index === currentIndex}
                   isMuted={muted}
                   isPaused={paused}
-                  isSaved={savedReels.has(reel.id)}
+                  isSaved={savedReels.has(item.reel.id)}
                   preload={Math.abs(index - currentIndex) <= 2 ? 'auto' : 'none'}
                   onTogglePause={() => setPaused(p => !p)}
                   onToggleMute={() => setMuted(m => !m)}
-                  onLike={() => likeReel(reel.id)}
-                  onComment={() => { setSelectedReelId(reel.id); setShowComments(true); }}
-                  onSave={() => handleSaveReel(reel.id)}
-                  onShare={() => setShowShareFor(reel.id)}
-                  onOpenAudio={() => setAudioReel(reel)}
-                  onViewIncrement={() => incrementView(reel.id)}
+                  onLike={() => likeReel(item.reel.id)}
+                  onComment={() => { setSelectedReelId(item.reel.id); setShowComments(true); }}
+                  onSave={() => handleSaveReel(item.reel.id)}
+                  onShare={() => setShowShareFor(item.reel.id)}
+                  onOpenAudio={() => setAudioReel(item.reel)}
+                  onViewIncrement={() => incrementView(item.reel.id)}
                 />
               </div>
             ))}
@@ -173,6 +194,38 @@ export default function Reels() {
         </div>
 
         <div className="hidden w-80 shrink-0 space-y-4 lg:block">
+          {currentAd && (
+            <aside className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-11 w-11">
+                  <AvatarImage src={currentAd.advertiser_avatar_url || undefined} />
+                  <AvatarFallback>
+                    {(currentAd.advertiser_name || '?').slice(0, 1).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate text-sm font-semibold">{currentAd.advertiser_name}</p>
+                    {currentAd.advertiser_is_verified && <BadgeCheck className="h-4 w-4 text-white/80" />}
+                  </div>
+                  <p className="truncate text-xs text-white/50">@{currentAd.advertiser_username}</p>
+                </div>
+              </div>
+
+              {currentAd.headline && (
+                <p className="mt-4 text-sm font-semibold leading-relaxed text-white">{currentAd.headline}</p>
+              )}
+              {currentAd.description && (
+                <p className="mt-1 text-sm leading-relaxed text-white/70">{currentAd.description}</p>
+              )}
+
+              <div className="mt-4 rounded-xl bg-white/[0.06] px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Sponsored</p>
+                <p className="mt-0.5 text-sm font-medium text-white">{currentAd.cta || 'Learn More'}</p>
+              </div>
+            </aside>
+          )}
+
           {currentReel && (
             <aside className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
               <div className="flex items-center gap-3">
@@ -245,7 +298,7 @@ export default function Reels() {
         <button
           className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/35 text-white/85 backdrop-blur-md transition-colors hover:bg-black/55 disabled:cursor-not-allowed disabled:opacity-35"
           onClick={() => goToReel(currentIndex + 1)}
-          disabled={currentIndex >= reels.length - 1}
+          disabled={currentIndex >= feedItems.length - 1}
           aria-label="Next reel"
         >
           <ChevronDown className="h-5 w-5" />
@@ -253,7 +306,7 @@ export default function Reels() {
       </div>
 
       <div className="absolute bottom-4 left-1/2 z-50 hidden -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-black/35 px-3 py-1.5 text-xs text-white/60 backdrop-blur-md sm:flex">
-        <span>{currentIndex + 1} / {reels.length}</span>
+        <span>{currentIndex + 1} / {feedItems.length}</span>
         {refreshing && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
       </div>
 
