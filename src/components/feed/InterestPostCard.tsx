@@ -7,6 +7,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import InterestPostComments from './InterestPostComments';
 import LikesDialog from '@/components/social/LikesDialog';
+import MediaLightbox from '@/components/MediaLightbox';
+import RichText from '@/components/rich/RichText';
 import {
   Heart,
   MessageCircle,
@@ -20,6 +22,7 @@ import {
   Facebook,
   MessageSquare,
   Link as LinkIcon,
+  Bookmark,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -32,6 +35,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+  Collapsible,
+  CollapsibleContent,
+} from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 
 function formatCount(n: number) {
@@ -42,9 +49,10 @@ function formatCount(n: number) {
 
 export default function InterestPostCard({ post }: { post: InterestPost }) {
   const { user } = useAuth();
-  const { deletePost, likePost, unlikePost } = useInterestPostActions();
+  const { deletePost, likePost, unlikePost, savePost, unsavePost } = useInterestPostActions();
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const category = post.interest_categories;
   const username = post.profiles?.username || '';
@@ -87,6 +95,15 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
     }
   };
 
+  const handleSaveToggle = () => {
+    if (!user) return;
+    if (post.user_has_saved) {
+      unsavePost.mutate(post.id);
+    } else {
+      savePost.mutate(post.id);
+    }
+  };
+
   return (
     <div className="p-4 sm:p-5 rounded-2xl border border-border/70 bg-card transition-colors hover:border-border">
       {/* Header */}
@@ -118,10 +135,13 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
         <div className="flex items-center gap-2 flex-shrink-0">
           {category && (
             <span
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap"
-              style={{ backgroundColor: `${category.color}18`, color: category.color }}
+              className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap border"
+              style={{
+                backgroundColor: 'hsl(var(--primary) / 0.08)',
+                color: 'hsl(var(--primary))',
+                borderColor: 'hsl(var(--primary) / 0.15)',
+              }}
             >
-              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: category.color }} />
               {category.name}
             </span>
           )}
@@ -148,7 +168,9 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
       </div>
 
       {/* Content */}
-      <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">{post.content}</p>
+      <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+        <RichText text={post.content} />
+      </p>
 
       {/* Media */}
       {post.media_url && (
@@ -156,7 +178,18 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
           {post.media_type?.startsWith('video') ? (
             <video src={post.media_url} controls className="w-full max-h-[440px] object-cover" />
           ) : (
-            <img src={post.media_url} alt="" className="w-full max-h-[440px] object-cover" loading="lazy" />
+            <button
+              onClick={() => setLightboxOpen(true)}
+              className="block w-full cursor-zoom-in"
+              aria-label="Open image"
+            >
+              <img
+                src={post.media_url}
+                alt=""
+                className="w-full max-h-[440px] object-cover"
+                loading="lazy"
+              />
+            </button>
           )}
         </div>
       )}
@@ -191,14 +224,35 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
         )}
 
         <button
-          onClick={() => setCommentsOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+          onClick={() => setCommentsOpen((prev) => !prev)}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
+            commentsOpen
+              ? 'text-primary bg-primary/10'
+              : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
+          )}
+          aria-label={commentsOpen ? 'Close comments' : 'Open comments'}
         >
-          <MessageCircle className="h-[18px] w-[18px]" />
-          {post.comment_count > 0 && formatCount(post.comment_count)}
+          <MessageCircle className={cn('h-[18px] w-[18px]', commentsOpen && 'fill-current')} />
+          <span>{post.comment_count > 0 ? formatCount(post.comment_count) : 'Comment'}</span>
         </button>
 
         <div className="flex-1" />
+
+        <button
+          onClick={handleSaveToggle}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-bold transition-colors',
+            post.user_has_saved
+              ? 'text-primary'
+              : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
+          )}
+          aria-label={post.user_has_saved ? 'Remove from saved' : 'Save post'}
+          title={post.user_has_saved ? 'Remove from saved' : 'Save post'}
+        >
+          <Bookmark className={cn('h-[18px] w-[18px]', post.user_has_saved && 'fill-current')} />
+          <span className="hidden sm:inline">{post.user_has_saved ? 'Saved' : 'Save'}</span>
+        </button>
 
         <Popover>
           <PopoverTrigger asChild>
@@ -246,13 +300,22 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
         </Popover>
       </div>
 
-      <InterestPostComments
-        postId={post.id}
-        postAuthorName={post.profiles?.display_name || ''}
-        commentCount={post.comment_count}
-        open={commentsOpen}
-        onOpenChange={(open) => !open && setCommentsOpen(false)}
-      />
+      {/* Comments Section */}
+      <Collapsible open={commentsOpen} onOpenChange={setCommentsOpen}>
+        <CollapsibleContent>
+          <div className="mt-3">
+            <InterestPostComments postId={post.id} />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {lightboxOpen && (
+        <MediaLightbox
+          src={post.media_url!}
+          alt={post.content.slice(0, 80)}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
     </div>
   );
 }

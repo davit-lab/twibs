@@ -52,13 +52,11 @@ interface MainLayoutProps {
 const navItems = [
   { icon: Home, label: 'Home', href: '/', id: 'home' },
   { icon: Compass, label: 'Explore', href: '/explore', id: 'explore' },
-  { icon: Sparkles, label: 'Interests', href: '/interests', id: 'interests' },
   { icon: Clapperboard, label: 'Reels', href: '/reels', id: 'reels' },
   { icon: MessageCircle, label: 'Messages', href: '/messages', id: 'messages' },
   { icon: Heart, label: 'Notifications', href: '/notifications', id: 'notifications' },
   { icon: PlusSquare, label: 'Create', href: '#create', id: 'create' },
   { icon: BookOpen, label: 'Library', href: '/library', id: 'library' },
-  { icon: Radio, label: 'Live TV', href: '/tv', id: 'tv' },
   { icon: Users, label: 'Groups', href: '/groups', id: 'groups' },
   { icon: Megaphone, label: 'Advertise', href: '/ads', id: 'ads' },
 ];
@@ -194,12 +192,7 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
                   Settings
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/pricing" className="cursor-pointer">
-                  <Crown className="mr-3 h-4 w-4" />
-                  Premium
-                </Link>
-              </DropdownMenuItem>
+              {/* Premium removed */}
               {(isAdmin || isModerator) && (
                 <DropdownMenuItem asChild>
                   <Link to="/admin" className="cursor-pointer">
@@ -264,14 +257,7 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
                     Library
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
-                  <Link to="/tv">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
-                      <Radio className="h-4 w-4" />
-                    </span>
-                    Live TV
-                  </Link>
-                </DropdownMenuItem>
+                {/* Live TV removed */}
                 <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
                   <Link to="/groups">
                     <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
@@ -280,14 +266,7 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
                     Groups
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
-                  <Link to="/interests">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
-                      <Sparkles className="h-4 w-4" />
-                    </span>
-                    Interests
-                  </Link>
-                </DropdownMenuItem>
+                {/* Interests removed */}
               </DropdownMenuGroup>
 
               <DropdownMenuSeparator className="my-1.5" />
@@ -304,14 +283,7 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
                     Settings
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
-                  <Link to="/pricing">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
-                      <Crown className="h-4 w-4" />
-                    </span>
-                    Premium
-                  </Link>
-                </DropdownMenuItem>
+                {/* Premium removed */}
                 {(isAdmin || isModerator) && (
                   <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
                     <Link to="/admin">
@@ -398,6 +370,22 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
           children
         )}
       </main>
+
+      {/* Legal footer */}
+      {!immersive && !isBanned && (
+        <footer className={cn(
+          'px-4 py-6 text-center text-xs text-muted-foreground/70',
+          user && 'lg:ml-[80px]'
+        )}>
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1">
+            <Link to="/terms" className="hover:text-foreground transition-colors">Terms</Link>
+            <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
+            <Link to="/community-guidelines" className="hover:text-foreground transition-colors">Guidelines</Link>
+            <a href="mailto:support@twibsers.com" className="hover:text-foreground transition-colors">Contact support</a>
+          </div>
+          <p className="mt-1.5">© {new Date().getFullYear()} Twibsers. All rights reserved.</p>
+        </footer>
+      )}
 
       {/* Mobile Bottom Navigation - Floating Glass Pill */}
       {user && !immersive && (

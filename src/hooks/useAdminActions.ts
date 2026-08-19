@@ -125,7 +125,7 @@ export function useAdminActions() {
     const guard = requireStaff();
     if (guard) return { error: guard };
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/reset-password`,
+      redirectTo: `${window.location.origin}/auth`,
     });
     return { error: error?.message ?? null };
   }, [requireStaff]);

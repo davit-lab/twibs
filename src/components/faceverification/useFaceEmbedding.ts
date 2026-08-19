@@ -3,7 +3,7 @@
 // uploaded (once, in memory) for the server to compare against the stored
 // administrator template. Templates are never kept on the client.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 const MODEL_URL = '/models';
 
@@ -11,9 +11,11 @@ export function useFaceEmbedding() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const loadedRef = useRef(false);
+  const loadingRef = useRef(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(() => {
+    if (loadedRef.current || loadingRef.current) return;
+    loadingRef.current = true;
     (async () => {
       try {
         const faceapi = await import('@vladmandic/face-api');
@@ -22,17 +24,12 @@ export function useFaceEmbedding() {
           faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
           faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
         ]);
-        if (!cancelled) {
-          loadedRef.current = true;
-          setReady(true);
-        }
+        loadedRef.current = true;
+        setReady(true);
       } catch {
-        if (!cancelled) setError('Face recognition model failed to load.');
+        setError('Face recognition model failed to load.');
       }
     })();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const extractEmbedding = useCallback(
@@ -56,5 +53,5 @@ export function useFaceEmbedding() {
     [],
   );
 
-  return { ready, error, extractEmbedding };
+  return { ready, error, load, extractEmbedding };
 }

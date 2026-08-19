@@ -27,7 +27,6 @@ const Admin = lazy(() => import('./pages/Admin'));
 const AdminGate = lazy(() => import('./components/admin/AdminGate'));
 const Reels = lazy(() => import('./pages/Reels'));
 const OnboardingInterests = lazy(() => import('./pages/OnboardingInterests'));
-const TvChannels = lazy(() => import('./pages/TvChannels'));
 const Groups = lazy(() => import('./pages/Groups'));
 const GroupDetail = lazy(() => import('./pages/GroupDetail'));
 const NotFound = lazy(() => import('./pages/NotFound'));
@@ -39,6 +38,9 @@ const AdsBoostPost = lazy(() =>
   import('./pages/AdsNewCampaign').then((m) => ({ default: m.AdsBoostPost }))
 );
 const CampaignDetail = lazy(() => import('./pages/CampaignDetail'));
+const Terms = lazy(() => import('./pages/Terms'));
+const Privacy = lazy(() => import('./pages/Privacy'));
+const CommunityGuidelines = lazy(() => import('./pages/CommunityGuidelines'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -217,7 +219,7 @@ const App = () => (
                         </AdminRoute>
                       }
                     />
-                    <Route path="/tv" element={<TvChannels />} />
+                    {/* Live TV route removed */}
                     <Route path="/groups" element={<Groups />} />
                     <Route path="/groups/:slug" element={<GroupDetail />} />
                     <Route path="/reels" element={<Reels />} />
@@ -262,10 +264,12 @@ const App = () => (
                         </ProtectedRoute>
                       }
                     />
+                    <Route path="/terms" element={<Terms />} />
+                    <Route path="/privacy" element={<Privacy />} />
+                    <Route path="/community-guidelines" element={<CommunityGuidelines />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
-                </MaintenanceGate>
-              </Suspense>
+                </MaintenanceGate>              </Suspense>
             </SystemSettingsProvider>
           </AuthProvider>
         </BrowserRouter>

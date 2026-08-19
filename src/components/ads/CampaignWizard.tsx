@@ -104,6 +104,7 @@ export default function CampaignWizard({ postId }: { postId?: string }) {
             post_media (id, url, type, alt_text)
           `)
           .eq('id', postId)
+          .eq('hidden', false)
           .single();
         if (error || !data) {
           toast({ variant: 'destructive', title: 'Post not found' });

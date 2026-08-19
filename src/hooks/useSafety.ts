@@ -3,7 +3,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
-export type ReportTargetType = 'post' | 'profile' | 'group' | 'reel' | 'interest_post' | 'comment';
+export type ReportTargetType =
+  | 'post'
+  | 'profile'
+  | 'group'
+  | 'reel'
+  | 'interest_post'
+  | 'comment'
+  | 'group_post'
+  | 'interest_post_comment'
+  | 'group_post_comment';
 
 function useIdList(key: string, table: string, column: string, ownerColumn = 'user_id') {
   const { user } = useAuth();

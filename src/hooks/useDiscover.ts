@@ -102,6 +102,7 @@ export function useTrendingPosts(limit = 5) {
           )
         `)
         .eq('visibility', 'public')
+        .eq('hidden', false)
         .gte('created_at', since)
         .order('created_at', { ascending: false })
         .limit(200);

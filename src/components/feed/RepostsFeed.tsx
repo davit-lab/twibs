@@ -149,7 +149,7 @@ export default function RepostsFeed({ userId, refreshTrigger, onRefreshComplete 
       const reposterIds = [...new Set(reposts.map(r => r.user_id))];
 
       const [{ data: repostedPosts }, { data: reposterProfiles }] = await Promise.all([
-        supabase.from('posts').select(POST_SELECT).in('id', repostIds),
+        supabase.from('posts').select(POST_SELECT).in('id', repostIds).eq('hidden', false),
         supabase
           .from('profiles')
           .select('user_id, username, display_name, avatar_url, is_verified')

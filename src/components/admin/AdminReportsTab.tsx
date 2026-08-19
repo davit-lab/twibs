@@ -16,8 +16,8 @@ import { AdminReport } from './types';
 import ReportInvestigationDialog, { ReportAction } from './ReportInvestigationDialog';
 import AdminSection from './AdminSection';
 
-const HIDEABLE_TYPES = ['post', 'reel', 'book'];
-const DELETEABLE_TYPES = ['post', 'reel', 'book', 'comment', 'interest_post'];
+const HIDEABLE_TYPES = ['post', 'reel', 'book', 'comment', 'interest_post', 'group_post', 'interest_post_comment', 'group_post_comment'];
+const DELETEABLE_TYPES = ['post', 'reel', 'book', 'comment', 'interest_post', 'group_post', 'interest_post_comment', 'group_post_comment', 'group'];
 
 export default function AdminReportsTab() {
   const { user: currentUser } = useAuth();
@@ -73,6 +73,24 @@ export default function AdminReportsTab() {
             .from('comments').select('content, user_id').eq('id', targetId).maybeSingle();
           if (!comment) return null;
           return { type: 'comment', preview: comment.content?.slice(0, 400), userId: comment.user_id };
+        }
+        case 'group_post': {
+          const { data: post } = await (supabase as any)
+            .from('group_posts').select('content, user_id').eq('id', targetId).maybeSingle();
+          if (!post) return null;
+          return { type: 'group_post', preview: post.content?.slice(0, 400), userId: post.user_id };
+        }
+        case 'interest_post_comment': {
+          const { data: comment } = await (supabase as any)
+            .from('interest_post_comments').select('content, user_id').eq('id', targetId).maybeSingle();
+          if (!comment) return null;
+          return { type: 'interest_post_comment', preview: comment.content?.slice(0, 400), userId: comment.user_id };
+        }
+        case 'group_post_comment': {
+          const { data: comment } = await (supabase as any)
+            .from('group_post_comments').select('content, user_id').eq('id', targetId).maybeSingle();
+          if (!comment) return null;
+          return { type: 'group_post_comment', preview: comment.content?.slice(0, 400), userId: comment.user_id };
         }
         default:
           return null;

@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Book, BookOpen, Play, BadgeCheck, CheckCircle2, Clock, Trash2, X } from 'lucide-react';
+import { Book, BookOpen, Play, BadgeCheck, CheckCircle2, Clock, Trash2, X, Heart } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useRef, useState } from 'react';
 import type { LibraryBookWithProgress } from '@/hooks/useBooks';
@@ -9,9 +9,10 @@ import type { LibraryBookWithProgress } from '@/hooks/useBooks';
 interface LibraryBookCardProps {
   book: LibraryBookWithProgress;
   onRemove?: () => void;
+  onToggleLike?: (bookId: string, isCurrentlyLiked: boolean) => void;
 }
 
-export default function LibraryBookCard({ book, onRemove }: LibraryBookCardProps) {
+export default function LibraryBookCard({ book, onRemove, onToggleLike }: LibraryBookCardProps) {
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -94,26 +95,41 @@ export default function LibraryBookCard({ book, onRemove }: LibraryBookCardProps
             </div>
           </div>
 
-          {onRemove && (
-            <button
-              onClick={handleRemoveClick}
-              title={confirming ? 'Confirm removal' : 'Remove from library'}
-              className={`flex flex-shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition-all ${
-                confirming
-                  ? 'bg-destructive/15 text-destructive hover:bg-destructive/25'
-                  : 'text-muted-foreground opacity-0 hover:bg-muted hover:text-destructive focus:opacity-100 group-hover:opacity-100'
-              }`}
-            >
-              {confirming ? (
-                <>
-                  <X className="h-3.5 w-3.5" />
-                  Remove?
-                </>
-              ) : (
-                <Trash2 className="h-3.5 w-3.5" />
-              )}
-            </button>
-          )}
+          <div className="flex flex-shrink-0 items-center gap-1">
+            {onToggleLike && (
+              <button
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleLike(book.id, !!book.is_liked); }}
+                className={`flex items-center rounded-lg p-1.5 transition-all ${
+                  book.is_liked
+                    ? 'text-red-500 opacity-100'
+                    : 'text-muted-foreground opacity-0 hover:text-red-400 focus:opacity-100 group-hover:opacity-100'
+                }`}
+              >
+                <Heart className={`h-4 w-4 ${book.is_liked ? 'fill-current' : ''}`} />
+              </button>
+            )}
+
+            {onRemove && (
+              <button
+                onClick={handleRemoveClick}
+                title={confirming ? 'Confirm removal' : 'Remove from library'}
+                className={`flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition-all ${
+                  confirming
+                    ? 'bg-destructive/15 text-destructive hover:bg-destructive/25'
+                    : 'text-muted-foreground opacity-0 hover:bg-muted hover:text-destructive focus:opacity-100 group-hover:opacity-100'
+                }`}
+              >
+                {confirming ? (
+                  <>
+                    <X className="h-3.5 w-3.5" />
+                    Remove?
+                  </>
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+              </button>
+            )}
+          </div>
         </div>
 
         {book.author && (

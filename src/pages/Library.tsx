@@ -9,6 +9,7 @@ import AuthorBooksSection from '@/components/library/AuthorBooksSection';
 import LibraryBookCard from '@/components/library/LibraryBookCard';
 import ContinueReadingCard from '@/components/library/ContinueReadingCard';
 import CreateBookDialog from '@/components/library/CreateBookDialog';
+import ImportBookDialog from '@/components/library/ImportBookDialog';
 import ReadingStreakCard from '@/components/library/ReadingStreakCard';
 import BookCard from '@/components/library/BookCard';
 import ReadingOverview from '@/components/library/ReadingOverview';
@@ -31,6 +32,7 @@ import {
   LayoutGrid,
   List,
   ArrowUpDown,
+  Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -44,7 +46,7 @@ export default function Library() {
   const { authorGroups, isLoading: loadingBrowse } = useBooksByAuthor();
   const { books: myBooks, isLoading: loadingMyBooks, refetch: refetchMyBooks } = useMyBooks();
   const { books: libraryBooks, isLoading: loadingLibrary, refetch: refetchLibrary } = useUserLibrary();
-  const { removeFromLibrary } = useBookActions();
+  const { removeFromLibrary, toggleBookLike } = useBookActions();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<TabValue>(user ? 'my-library' : 'browse');
   const [sortBy, setSortBy] = useState<SortOption>('recent');
@@ -139,11 +141,18 @@ export default function Library() {
     (book) => book.completed_count === book.total_chapters && book.total_chapters > 0
   );
 
+  const heartedBooks = genreFilteredLibrary.filter((book) => book.is_liked);
+
   const heroBook = currentlyReading[0];
 
   const handleRemoveFromLibrary = async (bookId: string) => {
     const removed = await removeFromLibrary(bookId);
     if (removed) refetchLibrary();
+  };
+
+  const handleToggleLike = async (bookId: string, isCurrentlyLiked: boolean) => {
+    const success = await toggleBookLike(bookId, isCurrentlyLiked);
+    if (success) refetchLibrary();
   };
 
   const tabs = [
@@ -185,12 +194,14 @@ export default function Library() {
             </div>
 
             {canCreateBooks && (
-              <CreateBookDialog onBookCreated={refetchMyBooks}>
-                <Button className="h-11 rounded-xl px-5 font-semibold shadow-md shadow-primary/20">
-                  <Plus className="h-4 w-4" />
-                  Create book
-                </Button>
-              </CreateBookDialog>
+              <div className="flex items-center gap-3">
+                <CreateBookDialog onBookCreated={refetchMyBooks}>
+                  <Button className="h-11 rounded-xl px-5 font-semibold shadow-md shadow-primary/20">
+                    <Plus className="h-4 w-4" />
+                    Create book
+                  </Button>
+                </CreateBookDialog>
+              </div>
             )}
           </div>
 
@@ -373,13 +384,13 @@ export default function Library() {
                         {viewMode === 'grid' ? (
                           <div className="grid gap-4 md:grid-cols-2">
                             {currentlyReading.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} />
+                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} onToggleLike={handleToggleLike} />
                             ))}
                           </div>
                         ) : (
                           <div className="space-y-3">
                             {currentlyReading.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} />
+                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} onToggleLike={handleToggleLike} />
                             ))}
                           </div>
                         )}
@@ -396,13 +407,13 @@ export default function Library() {
                         {viewMode === 'grid' ? (
                           <div className="grid gap-4 md:grid-cols-2">
                             {notStarted.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} />
+                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} onToggleLike={handleToggleLike} />
                             ))}
                           </div>
                         ) : (
                           <div className="space-y-3">
                             {notStarted.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} />
+                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} onToggleLike={handleToggleLike} />
                             ))}
                           </div>
                         )}
@@ -419,13 +430,36 @@ export default function Library() {
                         {viewMode === 'grid' ? (
                           <div className="grid gap-4 md:grid-cols-2">
                             {completedBooks.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} />
+                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} onToggleLike={handleToggleLike} />
                             ))}
                           </div>
                         ) : (
                           <div className="space-y-3">
                             {completedBooks.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} />
+                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} onToggleLike={handleToggleLike} />
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    )}
+
+                    {heartedBooks.length > 0 && (
+                      <section>
+                        {renderSectionHeader('Hearted', (
+                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10">
+                            <Heart className="h-4 w-4 text-red-500" />
+                          </span>
+                        ), undefined, heartedBooks.length)}
+                        {viewMode === 'grid' ? (
+                          <div className="grid gap-4 md:grid-cols-2">
+                            {heartedBooks.map((book) => (
+                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} onToggleLike={handleToggleLike} />
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {heartedBooks.map((book) => (
+                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} onToggleLike={handleToggleLike} />
                             ))}
                           </div>
                         )}
@@ -555,11 +589,8 @@ export default function Library() {
                     Get verified or upgrade to premium to create and publish books in the library.
                   </p>
                 </div>
-                <Button variant="outline" className="h-11 rounded-xl border-primary/30 font-semibold hover:bg-primary/10" asChild>
-                  <Link to="/pricing">
-                    <Sparkles className="h-4 w-4" />
-                    View plans
-                  </Link>
+                <Button variant="outline" className="h-11 rounded-xl border-primary/30 font-semibold hover:bg-primary/10" disabled>
+                  View plans
                 </Button>
               </div>
             </div>

@@ -78,7 +78,7 @@ const MAX_MULTI_FACE_FRAMES = 0; // any multi-face frame is suspicious
 
 // How many consecutive frames must satisfy an instruction to be accepted.
 function sustainFrames(samplingRate: number): number {
-  return Math.max(2, Math.round(samplingRate * 1.4)); // >= ~1.4s of hold
+  return Math.max(2, Math.round(samplingRate * 1.0)); // >= ~1.0s of hold
 }
 
 export function validateLivenessProof(

@@ -6,9 +6,11 @@ import { useGroupPostComments, useGroupActions, GroupPostComment } from '@/hooks
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { MessageCircle, Send, Loader2, Trash2, Reply, ChevronDown, ChevronUp, X, MessageSquare } from 'lucide-react';
+import { MessageCircle, Send, Loader2, Trash2, Reply, ChevronDown, ChevronUp, X, MessageSquare, Flag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { buildDmUrl, snippet } from '@/lib/dm';
+import RichText from '@/components/rich/RichText';
+import ReportDialog from '@/components/social/ReportDialog';
 
 interface GroupPostCommentsProps {
   postId: string;
@@ -23,10 +25,11 @@ interface CommentItemProps {
   currentUserId?: string;
   onReply: (commentId: string, username: string) => void;
   onDelete: (commentId: string) => void;
+  onReport: (commentId: string) => void;
   isDeleting: boolean;
 }
 
-function CommentItem({ comment, replies, currentUserId, onReply, onDelete, isDeleting }: CommentItemProps) {
+function CommentItem({ comment, replies, currentUserId, onReply, onDelete, onReport, isDeleting }: CommentItemProps) {
   const [showReplies, setShowReplies] = useState(true);
   const navigate = useNavigate();
   const hasReplies = replies.length > 0;
@@ -59,7 +62,7 @@ function CommentItem({ comment, replies, currentUserId, onReply, onDelete, isDel
                 @{username}
               </span>
             </div>
-            <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap break-words mt-0.5">{comment.content}</p>
+            <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap break-words mt-0.5"><RichText text={comment.content} /></p>
           </div>
 
           <div className="flex items-center gap-3 mt-1.5 px-0.5">
@@ -89,6 +92,16 @@ function CommentItem({ comment, replies, currentUserId, onReply, onDelete, isDel
               >
                 <Trash2 className="h-3 w-3" />
                 Delete
+              </button>
+            )}
+            {currentUserId !== comment.user_id && (
+              <button
+                onClick={() => onReport(comment.id)}
+                title="Report"
+                className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground hover:text-destructive transition-colors"
+              >
+                <Flag className="h-3 w-3" />
+                Report
               </button>
             )}
           </div>
@@ -127,7 +140,7 @@ function CommentItem({ comment, replies, currentUserId, onReply, onDelete, isDel
                           @{reply.profiles?.username}
                         </span>
                       </div>
-                      <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap break-words mt-0.5">{reply.content}</p>
+                      <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap break-words mt-0.5"><RichText text={reply.content} /></p>
                     </div>
                     <div className="flex items-center gap-3 mt-1.5 px-0.5">
                       <span className="font-mono text-[11px] text-muted-foreground">
@@ -150,6 +163,16 @@ function CommentItem({ comment, replies, currentUserId, onReply, onDelete, isDel
                           Delete
                         </button>
                       )}
+                      {currentUserId !== reply.user_id && (
+                        <button
+                          onClick={() => onReport(reply.id)}
+                          title="Report"
+                          className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <Flag className="h-3 w-3" />
+                          Report
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -169,6 +192,7 @@ export default function GroupPostComments({ postId, commentCount, open, onOpenCh
 
   const [newComment, setNewComment] = useState('');
   const [replyingTo, setReplyingTo] = useState<{ id: string; username: string } | null>(null);
+  const [reportId, setReportId] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -205,6 +229,10 @@ export default function GroupPostComments({ postId, commentCount, open, onOpenCh
 
   const handleDelete = async (commentId: string) => {
     await deleteComment.mutateAsync({ commentId, postId });
+  };
+
+  const handleReport = (commentId: string) => {
+    setReportId(commentId);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -257,6 +285,7 @@ export default function GroupPostComments({ postId, commentCount, open, onOpenCh
               currentUserId={user?.id}
               onReply={handleReply}
               onDelete={handleDelete}
+              onReport={handleReport}
               isDeleting={deleteComment.isPending}
             />
           ))
@@ -326,6 +355,14 @@ export default function GroupPostComments({ postId, commentCount, open, onOpenCh
           </p>
         </div>
       )}
+
+      <ReportDialog
+        open={!!reportId}
+        onOpenChange={(next) => !next && setReportId(null)}
+        targetType="group_post_comment"
+        targetId={reportId || ''}
+        targetLabel="comment"
+      />
     </section>
   );
 }

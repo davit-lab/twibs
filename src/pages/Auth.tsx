@@ -37,7 +37,7 @@ function getPasswordStrength(pw: string): { score: number; label: string; color:
   return { score: 5, label: 'Very strong', color: 'bg-success' };
 }
 
-type AuthMode = 'login' | 'signup' | 'otp-request' | 'otp-verify' | 'phone-request' | 'phone-verify';
+type AuthMode = 'login' | 'signup' | 'otp-request' | 'otp-verify' | 'phone-request' | 'phone-verify' | 'forgot-password' | 'reset-password';
 
 const inputField =
   'h-11 bg-surface border-border rounded-lg focus-visible:ring-primary/30 focus-visible:ring-offset-0 transition-colors';
@@ -68,10 +68,22 @@ export default function Auth() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [selectedCountry, setSelectedCountry] = useState<Country>(countries.find(c => c.code === 'US')!);
   const [phoneOtpCode, setPhoneOtpCode] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [isRecovery, setIsRecovery] = useState(false);
+
+  // Detect a password-recovery redirect (Supabase appends
+  // #access_token=...&type=recovery to the redirect URL).
+  useEffect(() => {
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    if (hashParams.get('type') === 'recovery') {
+      setIsRecovery(true);
+      setAuthMode('reset-password');
+    }
+  }, []);
 
   useEffect(() => {
-    if (!authLoading && user) navigate('/');
-  }, [user, authLoading, navigate]);
+    if (!authLoading && user && !isRecovery) navigate('/');
+  }, [user, authLoading, navigate, isRecovery]);
 
   const switchTab = (tab: 'login' | 'signup') => {
     setActiveTab(tab);
@@ -278,6 +290,45 @@ export default function Auth() {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+      setErrors({ email: emailValidation.error || 'Please enter a valid email address' });
+      return;
+    }
+    setErrors({});
+    setLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth`,
+    });
+    setLoading(false);
+    if (error) {
+      toast({ variant: 'destructive', title: 'Failed to send reset link', description: error.message });
+    } else {
+      setAuthMode('forgot-password');
+      toast({ title: 'Reset link sent', description: 'If an account exists for that email, a password reset link is on its way.' });
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const passwordResult = passwordSchema.safeParse(resetPassword);
+    if (!passwordResult.success) {
+      toast({ variant: 'destructive', title: 'Invalid password', description: passwordResult.error.errors[0].message });
+      return;
+    }
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: resetPassword });
+    setLoading(false);
+    if (error) {
+      toast({ variant: 'destructive', title: 'Reset failed', description: error.message });
+      return;
+    }
+    toast({ title: 'Password updated', description: 'You can now log in with your new password.' });
+    navigate('/');
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -413,6 +464,83 @@ export default function Auth() {
     </div>
   );
 
+  const renderForgotPasswordFlow = () => (
+    <div>
+      <button type="button" onClick={() => setAuthMode('login')}
+        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6">
+        <ArrowLeft className="h-4 w-4" /> Back to log in
+      </button>
+
+      <div className="text-center mb-6">
+        <div className="w-12 h-12 rounded-xl bg-surface-2 flex items-center justify-center mx-auto mb-3">
+          <KeyRound className="h-5 w-5 text-primary" />
+        </div>
+        <h1 className="text-xl font-bold mb-1">Reset your password</h1>
+        <p className="text-sm text-muted-foreground">
+          Enter your email and we'll send you a link to create a new password.
+        </p>
+      </div>
+
+      <form onSubmit={handleForgotPassword} className="space-y-4">
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium">Email</Label>
+          <div className="relative">
+            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input type="email" placeholder="name@example.com" value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={cn(inputField, 'pl-10', errors.email && 'border-destructive')}
+              disabled={loading} />
+          </div>
+          {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+        </div>
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {loading ? 'Sending…' : 'Send reset link'}
+        </Button>
+      </form>
+
+      <p className="text-center text-xs text-muted-foreground mt-5">
+        Forgot your email? <a href="/auth" className="text-primary font-medium hover:underline">Log in another way</a>
+      </p>
+    </div>
+  );
+
+  const renderResetPasswordFlow = () => (
+    <div>
+      <div className="text-center mb-6">
+        <div className="w-12 h-12 rounded-xl bg-surface-2 flex items-center justify-center mx-auto mb-3">
+          <KeyRound className="h-5 w-5 text-primary" />
+        </div>
+        <h1 className="text-xl font-bold mb-1">Set a new password</h1>
+        <p className="text-sm text-muted-foreground">
+          Choose a strong password you haven't used before.
+        </p>
+      </div>
+
+      <form onSubmit={handleResetPassword} className="space-y-4">
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium">New password</Label>
+          <div className="relative">
+            <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input ref={passwordInputRef} type={showPassword ? 'text' : 'password'} placeholder="Create a strong password"
+              value={resetPassword}
+              onChange={(e) => setResetPassword(e.target.value)}
+              className={cn(inputField, 'pl-10 pr-11')}
+              disabled={loading} />
+            <button type="button" onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1.5">
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {loading ? 'Updating…' : 'Update password'}
+        </Button>
+      </form>
+    </div>
+  );
+
   const renderAuthForm = () => (
     <div>
       <p className="text-center text-sm text-muted-foreground mb-6">
@@ -486,6 +614,13 @@ export default function Auth() {
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {loading ? 'Logging in…' : 'Log In'}
           </Button>
+
+          <div className="flex justify-end -mt-1">
+            <button type="button" onClick={() => { setAuthMode('forgot-password'); setErrors({}); }}
+              className="text-sm text-muted-foreground hover:text-primary font-medium transition-colors">
+              Forgot password?
+            </button>
+          </div>
 
           <div className="grid grid-cols-2 gap-2.5">
             <button type="button" onClick={() => setAuthMode('otp-request')}
@@ -664,6 +799,8 @@ export default function Auth() {
           <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/20">
             {(authMode === 'otp-request' || authMode === 'otp-verify') && renderOtpFlow()}
             {(authMode === 'phone-request' || authMode === 'phone-verify') && renderPhoneFlow()}
+            {authMode === 'forgot-password' && renderForgotPasswordFlow()}
+            {authMode === 'reset-password' && renderResetPasswordFlow()}
             {authMode === 'login' && renderAuthForm()}
           </div>
 

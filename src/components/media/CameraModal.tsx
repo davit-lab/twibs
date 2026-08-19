@@ -19,12 +19,166 @@ interface CameraModalProps {
 
 const MAX_VIDEO_DEFAULT = 30;
 
+function CropView({ file, type, onBack, onConfirm }: { file: File | null; type: 'image' | 'video'; onBack: () => void; onConfirm: (f: File) => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [offsetX, setOffsetX] = useState(0);
+  const [offsetY, setOffsetY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0, offX: 0, offY: 0 });
+  const [mediaNatural, setMediaNatural] = useState<{ w: number; h: number } | null>(null);
+  const [containerSize, setContainerSize] = useState<{ w: number; h: number } | null>(null);
+  const url = file ? URL.createObjectURL(file) : null;
+
+  const TARGET_RATIO = 9 / 16;
+
+  const handleMediaLoad = useCallback(() => {
+    const natural = type === 'image'
+      ? { w: imgRef.current?.naturalWidth || 0, h: imgRef.current?.naturalHeight || 0 }
+      : { w: videoRef.current?.videoWidth || 0, h: videoRef.current?.videoHeight || 0 };
+    setMediaNatural(natural);
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setContainerSize({ w: rect.width, h: rect.height });
+    }
+    setOffsetX(0);
+    setOffsetY(0);
+  }, [type]);
+
+  useEffect(() => {
+    if (url && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setContainerSize({ w: rect.width, h: rect.height });
+    }
+  }, [url]);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    setDragging(true);
+    dragStart.current = { x: e.clientX, y: e.clientY, offX: offsetX, offY: offsetY };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!dragging) return;
+    setOffsetX(dragStart.current.offX + (e.clientX - dragStart.current.x));
+    setOffsetY(dragStart.current.offY + (e.clientY - dragStart.current.y));
+  };
+  const handlePointerUp = () => setDragging(false);
+
+  const computeCrop = useCallback(async (): Promise<File | null> => {
+    if (!mediaNatural || !containerSize || !file) return null;
+    const { w: natW, h: natH } = mediaNatural;
+    const { w: cW, h: cH } = containerSize;
+    let vpW: number, vpH: number;
+    if (cW / cH > TARGET_RATIO) { vpH = cH; vpW = cH * TARGET_RATIO; } else { vpW = cW; vpH = cW / TARGET_RATIO; }
+    const vpX = (cW - vpW) / 2;
+    const vpY = (cH - vpH) / 2;
+    const mediaScale = Math.max(cW / natW, cH / natH);
+    const mediaX = (cW - natW * mediaScale) / 2 + offsetX;
+    const mediaY = (cH - natH * mediaScale) / 2 + offsetY;
+    const sx = (vpX - mediaX) / mediaScale;
+    const sy = (vpY - mediaY) / mediaScale;
+    const sw = vpW / mediaScale;
+    const sh = vpH / mediaScale;
+
+    if (type === 'image') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1080; canvas.height = 1920;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      const img = imgRef.current;
+      if (!img) return null;
+      ctx.drawImage(img, Math.max(0, sx), Math.max(0, sy), Math.min(sw, natW), Math.min(sh, natH), 0, 0, 1080, 1920);
+      return new Promise<File>((resolve) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }));
+        }, 'image/jpeg', 0.92);
+      });
+    }
+    const video = videoRef.current;
+    if (!video) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 1080; canvas.height = 1920;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const mimeType = 'video/webm;codecs=vp9';
+    const stream = canvas.captureStream(0);
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 6_000_000 });
+    const chunks: Blob[] = [];
+    return new Promise<File>((resolve) => {
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.webm'), { type: 'video/webm' }));
+      };
+      recorder.start();
+      ctx.drawImage(video, Math.max(0, sx), Math.max(0, sy), Math.min(sw, natW), Math.min(sh, natH), 0, 0, 1080, 1920);
+      setTimeout(() => recorder.stop(), 100);
+    });
+  }, [mediaNatural, containerSize, offsetX, offsetY, file, type]);
+
+  const handleConfirm = async () => {
+    const result = await computeCrop();
+    if (result) { setOffsetX(0); setOffsetY(0); onConfirm(result); }
+  };
+
+  if (!url) return null;
+
+  return (
+    <div className="relative w-full h-full bg-black">
+      {/* Top bar */}
+      <div className="absolute top-0 inset-x-0 z-30 flex items-center justify-between px-4 pt-4">
+        <Button variant="ghost" size="icon" onClick={() => { setOffsetX(0); setOffsetY(0); onBack(); }} className="h-10 w-10 rounded-full bg-black/40 backdrop-blur text-white hover:bg-black/60">
+          <X className="h-5 w-5" />
+        </Button>
+        <span className="text-white font-semibold text-sm bg-black/40 backdrop-blur rounded-full px-3 py-1.5">Crop to 9:16</span>
+        <div className="w-10" />
+      </div>
+
+      {/* Crop viewport */}
+      <div
+        ref={containerRef}
+        className="absolute inset-0 overflow-hidden cursor-grab active:cursor-grabbing"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        style={{ touchAction: 'none' }}
+      >
+        {type === 'image' ? (
+          <img ref={imgRef} src={url} onLoad={handleMediaLoad} draggable={false} className="absolute inset-0 w-full h-full object-contain pointer-events-none" style={{ transform: `translate(${offsetX}px, ${offsetY}px)` }} />
+        ) : (
+          <video ref={videoRef} src={url} onLoadedData={handleMediaLoad} autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-contain pointer-events-none" style={{ transform: `translate(${offsetX}px, ${offsetY}px)` }} />
+        )}
+        {/* Mask overlay — darken outside the 9:16 viewport */}
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+          <div className="relative" style={{ width: 'min(100%, calc(100dvh * 0.5625))', height: 'min(calc(100vw / 0.5625), 100%)' }}>
+            <div className="absolute inset-0 border-2 border-white/40 rounded-sm" />
+          </div>
+        </div>
+        <div className="absolute inset-0 pointer-events-none" style={{
+          background: 'radial-gradient(ellipse calc(min(100%, calc(100dvh * 0.5625)) + 4px) calc(min(calc(100vw / 0.5625), 100%) + 4px) at center, transparent 100%, rgba(0,0,0,0.65) 100%)',
+        }} />
+      </div>
+
+      {/* Bottom */}
+      <div className="absolute bottom-0 inset-x-0 z-30 pb-8 pt-10 bg-gradient-to-t from-black/80 to-transparent">
+        <div className="flex items-center justify-center gap-4 px-6">
+          <Button onClick={handleConfirm} className="flex-1 rounded-full h-12 bg-primary text-primary-foreground font-semibold text-sm">Crop &amp; Continue</Button>
+        </div>
+        <p className="text-center text-white/50 text-xs mt-3">Drag to reposition, then crop</p>
+      </div>
+    </div>
+  );
+}
+
 export default function CameraModal({ open, onClose, mode, startMode = 'photo', maxVideoDuration = MAX_VIDEO_DEFAULT, onDone }: CameraModalProps) {
   const { stream, error, facing, torch, start, stop, toggleFacing, setTorch, attachStream } = useCamera();
   const { toast } = useToast();
-  const [step, setStep] = useState<'camera' | 'edit'>('camera');
+  const [step, setStep] = useState<'camera' | 'crop' | 'edit'>('camera');
   const [captureMode, setCaptureMode] = useState<'photo' | 'video'>(startMode);
   const [media, setMedia] = useState<MediaEditorMedia | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingType, setPendingType] = useState<'image' | 'video'>('image');
   const [flash, setFlash] = useState(false);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -83,6 +237,12 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
     onClose();
   };
 
+  const enterCrop = (file: File) => {
+    setPendingFile(file);
+    setPendingType(file.type.startsWith('video/') ? 'video' : 'image');
+    setStep('crop');
+  };
+
   const enterEdit = (file: File) => {
     const url = URL.createObjectURL(file);
     setMedia({
@@ -111,7 +271,7 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
     canvas.toBlob(
       (blob) => {
         if (!blob) return;
-        enterEdit(new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+        enterCrop(new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' }));
       },
       'image/jpeg',
       0.92,
@@ -156,7 +316,7 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
       if (blob.size > 0) {
         const file = new File([blob], `video-${Date.now()}.${ext}`, { type: mimeType });
         setPendingDuration(duration);
-        enterEdit(file);
+        enterCrop(file);
       }
     };
     recorder.start(100);
@@ -205,7 +365,7 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
       return;
     }
     setPendingDuration(undefined);
-    enterEdit(file);
+    enterCrop(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -380,6 +540,13 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
               className="hidden"
             />
           </div>
+        ) : step === 'crop' ? (
+          <CropView
+            file={pendingFile}
+            type={pendingType}
+            onBack={() => { setPendingFile(null); setStep('camera'); }}
+            onConfirm={(cropped) => { setPendingFile(null); enterEdit(cropped); }}
+          />
         ) : (
           media && (
             <FilterEditor
@@ -388,7 +555,7 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
               onBack={() => {
                 URL.revokeObjectURL(media.url);
                 setMedia(null);
-                setStep('camera');
+                setStep('crop');
               }}
               onClose={handleClose}
               onDone={(result) => {

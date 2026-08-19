@@ -124,6 +124,7 @@ export default function Profile() {
   const [followModalType, setFollowModalType] = useState<'followers' | 'following'>('followers');
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
   const [libraryCount, setLibraryCount] = useState(0);
+  const [reelsCount, setReelsCount] = useState(0);
 
   const hasStories = groupedStories.length > 0 && groupedStories[0]?.stories.length > 0;
   const currentGroup = groupedStories[0];
@@ -169,6 +170,18 @@ export default function Profile() {
           .eq('user_id', data.user_id);
 
         setLibraryCount(count || 0);
+
+        // Fetch reels count and total views for this profile
+        try {
+          const { count: reelsCnt } = await supabase
+            .from('reels')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', data.user_id)
+            .eq('is_published', true);
+          setReelsCount(reelsCnt || 0);
+        } catch (err) {
+          console.error('Failed to fetch reels stats', err);
+        }
       }
       setLoading(false);
     };
@@ -521,6 +534,15 @@ export default function Profile() {
                   label="Library"
                   onClick={() => setLibraryModalOpen(true)}
                 />
+                  <div className="w-px h-8 bg-border" />
+                  <StatButton
+                    value={reelsCount.toLocaleString()}
+                    label="Reels"
+                    onClick={() => {
+                      if (!profileData) return;
+                      navigate(`/reels?user=${profileData.user_id}`);
+                    }}
+                  />
               </div>
 
               {/* Mobile action buttons */}

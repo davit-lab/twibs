@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import PostCard from './PostCard';
+import HomeInterestFeed from './HomeInterestFeed';
 import SponsoredPost from '@/components/ads/SponsoredPost';
 import { fetchFeedAds } from '@/hooks/useAds';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -55,7 +56,7 @@ interface FeedAdItem {
   date: string;
 }
 
-type FeedType = 'all' | 'following';
+type FeedType = 'all' | 'following' | 'interests';
 
 interface FeedProps {
   userId?: string;
@@ -103,6 +104,12 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
   const segmentedRef = useRef<HTMLDivElement | null>(null);
   const showFeedTabs = !userId && user;
 
+  // Keep latest filter state available to the realtime channel (avoids stale closures)
+  const feedTypeRef = useRef(feedType);
+  feedTypeRef.current = feedType;
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
+
   const attachStars = useCallback(async (posts: Post[]): Promise<Post[]> => {
     if (!user || posts.length === 0) return posts;
     const postIds = posts.map(p => p.id);
@@ -126,6 +133,17 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
       setLoading(true);
     }
     setError(null);
+
+    if (feedType === 'interests' && !userId) {
+      if (!loadMore) {
+        setItems([]);
+        setHasMore(false);
+      }
+      setLoading(false);
+      setLoadingMore(false);
+      onRefreshComplete?.();
+      return;
+    }
 
     try {
       let cursor: string | null = null;
@@ -157,6 +175,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
       const postsQuery = supabase
         .from('posts')
         .select(POST_SELECT)
+        .eq('hidden', false)
         .order('created_at', { ascending: false })
         .limit(PAGE_SIZE);
 
@@ -203,7 +222,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
           const reposterIds = [...new Set(reposts.map(r => r.user_id))];
 
           const [{ data: repostedPosts }, { data: reposterProfiles }] = await Promise.all([
-            supabase.from('posts').select(POST_SELECT).in('id', repostIds),
+            supabase.from('posts').select(POST_SELECT).in('id', repostIds).eq('hidden', false),
             supabase
               .from('profiles')
               .select('user_id, username, display_name, avatar_url, is_verified')
@@ -310,17 +329,96 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
       const aRect = active.getBoundingClientRect();
       const left = aRect.left - cRect.left;
       const width = aRect.width;
-      container.style.setProperty('--slider-x', `${left}px`);
-      container.style.setProperty('--slider-w', `${width}px`);
+      try {
+        container.style.setProperty('--slider-x', `${left}px`);
+        container.style.setProperty('--slider-w', `${width}px`);
+        // debug logs to help diagnose layout races
+        // eslint-disable-next-line no-console
+        console.debug('[Feed] segmented slider update', { left, width });
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[Feed] failed to set slider vars', e);
+      }
     };
 
-    // run once and on next frame for smoothness
+    // run synchronously and again on the next frames for reliability
+    update();
     requestAnimationFrame(update);
+    requestAnimationFrame(() => requestAnimationFrame(update));
 
+    // Some browsers/layouts need an extra delayed pass
+    const delayed = setTimeout(update, 80);
+
+    // Observe size changes of the container and its children
+    let ro: ResizeObserver | null = null;
+    try {
+      ro = new ResizeObserver(() => {
+        requestAnimationFrame(update);
+      });
+      ro.observe(container);
+      // also observe each tab in case their size changes
+      Array.from(container.querySelectorAll('.segmented__tab')).forEach((el) => ro?.observe(el as Element));
+    } catch (e) {
+      // ResizeObserver may not be available in some environments
+    }
     const onResize = () => requestAnimationFrame(update);
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      clearTimeout(delayed);
+      if (ro) {
+        try { ro.disconnect(); } catch {}
+      }
+    };
   }, [feedType]);
+
+  // Fetch a single post with its full embedded data + star state
+  const fetchPostFull = useCallback(
+    async (id: string): Promise<Post | null> => {
+      const { data, error } = await supabase
+        .from('posts')
+        .select(POST_SELECT)
+        .eq('id', id)
+        .eq('hidden', false)
+        .maybeSingle();
+      if (error || !data) return null;
+      const post: Post = {
+        ...(data as Post),
+        profiles: Array.isArray((data as any).profiles)
+          ? (data as any).profiles[0]
+          : (data as any).profiles,
+        post_media: (data as any).post_media || [],
+      };
+      const [annotated] = await attachStars([post]);
+      return annotated || null;
+    },
+    [attachStars]
+  );
+
+  // Does a post belong in the currently visible feed view?
+  const belongsInCurrentView = useCallback(
+    async (p: Post): Promise<boolean> => {
+      const currentFeed = feedTypeRef.current;
+      const ownerId = userIdRef.current;
+      const viewerId = user?.id;
+
+      if (ownerId) return p.user_id === ownerId;
+      if (currentFeed === 'interests') return false; // handled by HomeInterestFeed
+      if (currentFeed === 'following') {
+        if (!viewerId) return false;
+        const { data: f } = await supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', viewerId)
+          .eq('following_id', p.user_id)
+          .eq('status', 'accepted')
+          .maybeSingle();
+        return !!f;
+      }
+      return true;
+    },
+    [user]
+  );
 
   useEffect(() => {
     const channel = supabase
@@ -328,31 +426,49 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'posts' },
-        () => fetchPosts()
+        async (payload) => {
+          const newId = (payload.new as Post).id;
+          const p = await fetchPostFull(newId);
+          if (!p) return;
+          if (!(await belongsInCurrentView(p))) return;
+          if (mutedIds.includes(p.user_id)) return;
+          setItems((prev) =>
+            prev.some((item) => item.type !== 'ad' && item.post.id === p.id)
+              ? prev
+              : [{ type: 'post', post: p, date: p.created_at }, ...prev]
+          );
+        }
       )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'posts' },
-        (payload) => {
-          const updated = payload.new as Post;
-          setItems(prev => prev.map(item =>
-            item.type !== 'ad' && item.post.id === updated.id
-              ? { ...item, post: { ...item.post, ...updated } }
-              : item
-          ));
+        async (payload) => {
+          const updatedId = (payload.new as Post).id;
+          const p = await fetchPostFull(updatedId);
+          if (!p) return;
+          setItems((prev) =>
+            prev.some((item) => item.type !== 'ad' && item.post.id === updatedId)
+              ? prev.map((item) =>
+                  item.type !== 'ad' && item.post.id === updatedId ? { ...item, post: p } : item
+                )
+              : prev
+          );
         }
       )
       .on(
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'posts' },
-        (payload) => setItems(prev => prev.filter(item => item.type === 'ad' || item.post.id !== payload.old.id))
+        (payload) =>
+          setItems((prev) =>
+            prev.filter((item) => item.type === 'ad' || item.post.id !== (payload.old as Post).id)
+          )
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [fetchPostFull, belongsInCurrentView, mutedIds]);
 
   const handlePostDeleted = () => {};
   const handleStarChange = () => fetchPosts();
@@ -364,6 +480,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
           <div className="flex gap-1 p-1 bg-muted border border-border/60 rounded-full w-fit">
             <div className="px-5 py-2 rounded-full bg-primary text-white text-sm font-semibold">For You</div>
             <div className="px-5 py-2 rounded-full text-sm font-medium text-muted-foreground">Following</div>
+            <div className="px-5 py-2 rounded-full text-sm font-medium text-muted-foreground">Interests</div>
           </div>
         )}
         {[1, 2, 3].map((i) => (
@@ -436,64 +553,81 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
           >
             Following
           </button>
+          <button
+            onClick={() => setFeedType('interests')}
+            className={cn(
+              "segmented__tab px-5 py-2 rounded-full text-sm font-semibold transition-all duration-200",
+              feedType === 'interests'
+                ? "segmented__tab--active"
+                : "segmented__tab--idle"
+            )}
+          >
+            Interests
+          </button>
         </div>
       )}
 
       {/* Posts */}
-      {items.length === 0 ? (
-        <div className="text-center py-16 px-4">
-          <div className="bg-card rounded-3xl border border-border/60 shadow-sm shadow-black/[0.03] p-8 max-w-sm mx-auto">
-            <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-              <Sparkles className="h-9 w-9 text-primary" />
-            </div>
-            <p className="font-bold text-xl mb-2">
-              {feedType === 'following' ? 'Your feed is empty' : 'No posts yet'}
-            </p>
-            <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-              {feedType === 'following'
-                ? 'Follow some people to see their posts here!'
-                : 'Be the first to share something with the community!'}
-            </p>
-          </div>
-        </div>
+      {feedType === 'interests' ? (
+        <HomeInterestFeed />
       ) : (
-        <div className="space-y-4">
-          {items.map((item, index) => (
-            <div key={`${item.type}-${item.type === 'ad' ? item.ad.advertisement_id : item.post.id}-${index}`} className="animate-fade-in" style={{ animationDelay: `${Math.min(index * 40, 240)}ms` }}>
-              {item.type === 'ad' ? (
-                <SponsoredPost ad={item.ad} />
-              ) : (
-                <PostCard
-                  post={item.post}
-                  reposter={item.reposter}
-                  onPostDeleted={handlePostDeleted}
-                  onStarChange={handleStarChange}
-                />
-              )}
+        <>
+          {items.length === 0 ? (
+            <div className="text-center py-16 px-4">
+              <div className="bg-card rounded-3xl border border-border/60 shadow-sm shadow-black/[0.03] p-8 max-w-sm mx-auto">
+                <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                  <Sparkles className="h-9 w-9 text-primary" />
+                </div>
+                <p className="font-bold text-xl mb-2">
+                  {feedType === 'following' ? 'Your feed is empty' : 'No posts yet'}
+                </p>
+                <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                  {feedType === 'following'
+                    ? 'Follow some people to see their posts here!'
+                    : 'Be the first to share something with the community!'}
+                </p>
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+          ) : (
+            <div className="space-y-4">
+              {items.map((item, index) => (
+                <div key={`${item.type}-${item.type === 'ad' ? item.ad.advertisement_id : item.post.id}-${index}`} className="animate-fade-in" style={{ animationDelay: `${Math.min(index * 40, 240)}ms` }}>
+                  {item.type === 'ad' ? (
+                    <SponsoredPost ad={item.ad} />
+                  ) : (
+                    <PostCard
+                      post={item.post}
+                      reposter={item.reposter}
+                      onPostDeleted={handlePostDeleted}
+                      onStarChange={handleStarChange}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
-      {/* Load More */}
-      {hasMore && items.length > 0 && (
-        <div className="text-center py-6">
-          <Button
-            variant="outline"
-            onClick={() => fetchPosts(true)}
-            disabled={loadingMore}
-            className="gap-2 rounded-full border-border/60 px-6 hover:border-primary/50 hover:text-primary hover:bg-primary/5 transition-all"
-          >
-            {loadingMore ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading...
-              </>
-            ) : (
-              'Show more'
-            )}
-          </Button>
-        </div>
+          {/* Load More */}
+          {hasMore && items.length > 0 && (
+            <div className="text-center py-6">
+              <Button
+                variant="outline"
+                onClick={() => fetchPosts(true)}
+                disabled={loadingMore}
+                className="gap-2 rounded-full border-border/60 px-6 hover:border-primary/50 hover:text-primary hover:bg-primary/5 transition-all"
+              >
+                {loadingMore ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  'Show more'
+                )}
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

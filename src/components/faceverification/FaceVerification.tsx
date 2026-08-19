@@ -39,7 +39,7 @@ interface FaceVerificationProps {
   className?: string;
 }
 
-const STABLE_FRAMES_REQUIRED = 10;
+const STABLE_FRAMES_REQUIRED = 7;
 
 export default function FaceVerification({
   mode,
@@ -102,6 +102,7 @@ export default function FaceVerification({
   const beginChallenge = useCallback(async () => {
     if (startedRef.current) return;
     startedRef.current = true;
+    embeddingHook.load();
     const res = await startChallenge(mode);
     if (!res.ok) {
       startedRef.current = false;
@@ -116,7 +117,7 @@ export default function FaceVerification({
     setChallenge(issued);
     challengeStartAtRef.current = performance.now();
     go('liveness_in_progress');
-  }, [mode, go]);
+  }, [mode, go, embeddingHook]);
 
   // ---- Per-frame detection routing ----------------------------------------
   const handleDetection = useCallback(

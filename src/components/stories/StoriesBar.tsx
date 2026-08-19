@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import CameraModal from '@/components/media/CameraModal';
+import StoryCropDialog from '@/components/media/StoryCropDialog';
+import StoryPreviewDialog from '@/components/media/StoryPreviewDialog';
 import type { MediaEditorResult } from '@/components/media/FilterEditor';
 import StoryViewer from '@/components/stories/StoryViewer';
 import { Plus, Loader2, X, Camera, Video, ImagePlus, Megaphone } from 'lucide-react';
@@ -24,6 +26,12 @@ export default function StoriesBar() {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraMode, setCameraMode] = useState<'photo' | 'video'>('photo');
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [cropType, setCropType] = useState<'image' | 'video'>('image');
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [previewType, setPreviewType] = useState<'image' | 'video'>('image');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Append a single sponsored story to the tray (real active campaign only).
@@ -79,9 +87,31 @@ export default function StoriesBar() {
       return;
     }
 
+    setCropFile(file);
+    setCropType(file.type.startsWith('video/') ? 'video' : 'image');
+    setCropOpen(true);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleCropConfirm = (cropped: File) => {
+    setCropOpen(false);
+    setCropFile(null);
+    setPreviewFile(cropped);
+    setPreviewType(cropped.type.startsWith('video/') ? 'video' : 'image');
+    setPreviewOpen(true);
+  };
+
+  const handleCropClose = () => {
+    setCropOpen(false);
+    setCropFile(null);
+  };
+
+  const handlePreviewConfirm = async () => {
+    if (!previewFile) return;
+    setPreviewOpen(false);
     setUploading(true);
     try {
-      await uploadStory(file);
+      await uploadStory(previewFile);
     } catch (error: unknown) {
       toast({
         variant: 'destructive',
@@ -90,8 +120,18 @@ export default function StoriesBar() {
       });
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      setPreviewFile(null);
     }
+  };
+
+  const handlePreviewBack = () => {
+    setPreviewOpen(false);
+    setPreviewFile(null);
+  };
+
+  const handlePreviewClose = () => {
+    setPreviewOpen(false);
+    setPreviewFile(null);
   };
 
   const handleCameraDone = async (file: File, result: MediaEditorResult) => {
@@ -275,6 +315,24 @@ export default function StoriesBar() {
         startMode={cameraMode}
         maxVideoDuration={15}
         onDone={handleCameraDone}
+      />
+
+      <StoryCropDialog
+        open={cropOpen}
+        onClose={handleCropClose}
+        onConfirm={handleCropConfirm}
+        file={cropFile}
+        type={cropType}
+      />
+
+      <StoryPreviewDialog
+        open={previewOpen}
+        onClose={handlePreviewClose}
+        onBack={handlePreviewBack}
+        onConfirm={handlePreviewConfirm}
+        file={previewFile}
+        type={previewType}
+        uploading={uploading}
       />
 
       {/* ─── Story Theater ─── */}

@@ -30,6 +30,7 @@ export interface InterestPost {
     is_verified: boolean;
   };
   user_has_liked?: boolean;
+  user_has_saved?: boolean;
 }
 
 export interface InterestPostComment {
@@ -40,10 +41,12 @@ export interface InterestPostComment {
   parent_id: string | null;
   like_count: number;
   created_at: string;
+  updated_at: string;
   profiles: {
     username: string;
     display_name: string;
     avatar_url: string | null;
+    is_verified: boolean;
   };
 }
 
@@ -74,6 +77,7 @@ export function useInterestPosts(options: UseInterestPostsOptions = {}) {
             color
           )
         `)
+        .eq('hidden', false)
         .order('created_at', { ascending: false })
         .limit(limit);
 
@@ -100,50 +104,124 @@ export function useInterestPosts(options: UseInterestPostsOptions = {}) {
 
       if (error) throw error;
 
-      // Fetch profiles separately (interest_posts has no FK to profiles,
-      // so PostgREST cannot embed it in the same select).
-      let postsWithProfiles = data || [];
-      const profileIds = [...new Set((data || []).map((p: any) => p.user_id))];
-      if (profileIds.length > 0) {
-        const { data: profiles } = await (supabase as any)
-          .from('profiles')
-          .select('user_id, username, display_name, avatar_url, is_verified')
-          .in('user_id', profileIds);
-        const profilesMap = new Map((profiles || []).map((pr: any) => [pr.user_id, pr]));
-        postsWithProfiles = (data || []).map((post: any) => ({
-          ...post,
-          profiles: profilesMap.get(post.user_id),
-        }));
-      }
-
-      // Check if current user has liked each post
-      let postsWithLikes = postsWithProfiles;
-      if (user && postsWithLikes.length > 0) {
-        const postIds = postsWithLikes.map((p: any) => p.id);
-        const { data: likes } = await (supabase as any)
-          .from('interest_post_likes')
-          .select('post_id')
-          .eq('user_id', user.id)
-          .in('post_id', postIds);
-
-        const likedPostIds = new Set(likes?.map((l: any) => l.post_id) || []);
-        
-        postsWithLikes = postsWithLikes.map((post: any) => ({
-          ...post,
-          user_has_liked: likedPostIds.has(post.id),
-        }));
-      }
+      const enriched = await enrichInterestPosts(data || [], user?.id);
 
       // Determine next cursor
-      const nextCursor = postsWithLikes.length === limit 
-        ? postsWithLikes[postsWithLikes.length - 1].created_at 
+      const nextCursor = (data || []).length === limit
+        ? (data as any[])[(data as any[]).length - 1].created_at
         : null;
 
-      return { posts: postsWithLikes, nextCursor };
+      return { posts: enriched, nextCursor };
     },
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
   });
+}
+
+export function useSavedInterestPosts(userId: string | undefined, limit = 10) {
+  const { user } = useAuth();
+
+  return useInfiniteQuery({
+    queryKey: ['saved-interest-posts', userId],
+    queryFn: async ({ pageParam }): Promise<{ posts: InterestPost[]; nextCursor: string | null }> => {
+      if (!userId) return { posts: [], nextCursor: null };
+
+      let saveQuery = (supabase as any)
+        .from('interest_post_saves')
+        .select('post_id, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (pageParam) {
+        saveQuery = saveQuery.lt('created_at', pageParam);
+      }
+
+      const { data: saves, error } = await saveQuery;
+      if (error) throw error;
+
+      const postIds = (saves || []).map((s: any) => s.post_id);
+      if (postIds.length === 0) return { posts: [], nextCursor: null };
+
+      const { data: rawPosts, error: postsError } = await (supabase as any)
+        .from('interest_posts')
+        .select(`
+          *,
+          interest_categories (
+            id,
+            name,
+            icon,
+            color
+          )
+        `)
+        .in('id', postIds)
+        .eq('hidden', false);
+
+      if (postsError) throw postsError;
+
+      const orderMap = new Map(postIds.map((id: string, i: number) => [id, i]));
+      const orderedPosts = (rawPosts || [])
+        .slice()
+        .sort((a: any, b: any) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+
+      const enriched = await enrichInterestPosts(orderedPosts, user?.id);
+      const nextCursor = (saves || []).length === limit
+        ? (saves as any[])[(saves as any[]).length - 1].created_at
+        : null;
+
+      return { posts: enriched, nextCursor };
+    },
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    enabled: !!userId,
+  });
+}
+
+async function enrichInterestPosts(posts: any[], userId?: string): Promise<InterestPost[]> {
+  let result = posts;
+
+  // Fetch profiles separately (interest_posts has no FK to profiles,
+  // so PostgREST cannot embed it in the same select).
+  const profileIds = [...new Set(posts.map((p: any) => p.user_id))];
+  if (profileIds.length > 0) {
+    const { data: profiles } = await (supabase as any)
+      .from('profiles')
+      .select('user_id, username, display_name, avatar_url, is_verified')
+      .in('user_id', profileIds);
+    const profilesMap = new Map((profiles || []).map((pr: any) => [pr.user_id, pr]));
+    result = posts.map((post: any) => ({
+      ...post,
+      profiles: profilesMap.get(post.user_id),
+    }));
+  }
+
+  // Check if current user has liked / saved each post
+  if (userId && result.length > 0) {
+    const postIds = result.map((p: any) => p.id);
+    const [{ data: likes }, { data: saves }] = await Promise.all([
+      (supabase as any)
+        .from('interest_post_likes')
+        .select('post_id')
+        .eq('user_id', userId)
+        .in('post_id', postIds),
+      (supabase as any)
+        .from('interest_post_saves')
+        .select('post_id')
+        .eq('user_id', userId)
+        .in('post_id', postIds),
+    ]);
+
+    const likedPostIds = new Set(likes?.map((l: any) => l.post_id) || []);
+    const savedPostIds = new Set(saves?.map((s: any) => s.post_id) || []);
+
+    result = result.map((post: any) => ({
+      ...post,
+      user_has_liked: likedPostIds.has(post.id),
+      user_has_saved: savedPostIds.has(post.id),
+    }));
+  }
+
+  return result as InterestPost[];
 }
 
 export function useInterestPostActions() {
@@ -259,11 +337,50 @@ export function useInterestPostActions() {
     },
   });
 
+  const savePost = useMutation({
+    mutationFn: async (postId: string) => {
+      if (!user) throw new Error('Not authenticated');
+
+      const { error } = await (supabase as any)
+        .from('interest_post_saves')
+        .insert({
+          post_id: postId,
+          user_id: user.id,
+        });
+
+      if (error && !error.message?.includes('duplicate')) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['interest-posts'] });
+      queryClient.invalidateQueries({ queryKey: ['saved-interest-posts'] });
+    },
+  });
+
+  const unsavePost = useMutation({
+    mutationFn: async (postId: string) => {
+      if (!user) throw new Error('Not authenticated');
+
+      const { error } = await (supabase as any)
+        .from('interest_post_saves')
+        .delete()
+        .eq('post_id', postId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['interest-posts'] });
+      queryClient.invalidateQueries({ queryKey: ['saved-interest-posts'] });
+    },
+  });
+
   return {
     createPost,
     deletePost,
     likePost,
     unlikePost,
+    savePost,
+    unsavePost,
   };
 }
 
@@ -275,6 +392,7 @@ export function useInterestPostComments(postId: string) {
         .from('interest_post_comments')
         .select('*')
         .eq('post_id', postId)
+        .eq('hidden', false)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -286,7 +404,7 @@ export function useInterestPostComments(postId: string) {
 
       const { data: profiles } = await (supabase as any)
         .from('profiles')
-        .select('user_id, username, display_name, avatar_url')
+        .select('user_id, username, display_name, avatar_url, is_verified')
         .in('user_id', profileIds);
 
       const profilesMap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
@@ -354,8 +472,35 @@ export function useInterestCommentActions() {
     },
   });
 
+  const updateComment = useMutation({
+    mutationFn: async ({ commentId, postId, content }: { commentId: string; postId: string; content: string }) => {
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await (supabase as any)
+        .from('interest_post_comments')
+        .update({ content })
+        .eq('id', commentId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return { data, postId };
+    },
+    onSuccess: ({ postId }) => {
+      queryClient.invalidateQueries({ queryKey: ['interest-post-comments', postId] });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to update comment',
+        description: error?.message || 'Something went wrong. Please try again.',
+      });
+    },
+  });
+
   return {
     addComment,
     deleteComment,
+    updateComment,
   };
 }

@@ -602,6 +602,35 @@ export type Database = {
           },
         ]
       }
+      book_likes: {
+        Row: {
+          book_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          book_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          book_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "book_likes_book_id_fkey"
+            columns: ["book_id"]
+            isOneToOne: false
+            referencedRelation: "books"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       book_purchases: {
         Row: {
           amount_paid: number
@@ -1058,6 +1087,13 @@ export type Database = {
             referencedRelation: "posts"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "campaigns_user_id_profiles_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       chapters: {
@@ -1213,6 +1249,7 @@ export type Database = {
           content: string
           created_at: string
           downvote_count: number | null
+          hidden: boolean
           id: string
           is_edited: boolean | null
           parent_id: string | null
@@ -1225,6 +1262,7 @@ export type Database = {
           content: string
           created_at?: string
           downvote_count?: number | null
+          hidden?: boolean
           id?: string
           is_edited?: boolean | null
           parent_id?: string | null
@@ -1237,6 +1275,7 @@ export type Database = {
           content?: string
           created_at?: string
           downvote_count?: number | null
+          hidden?: boolean
           id?: string
           is_edited?: boolean | null
           parent_id?: string | null
@@ -1712,6 +1751,7 @@ export type Database = {
         Row: {
           content: string
           created_at: string
+          hidden: boolean
           id: string
           like_count: number
           parent_id: string | null
@@ -1722,6 +1762,7 @@ export type Database = {
         Insert: {
           content: string
           created_at?: string
+          hidden?: boolean
           id?: string
           like_count?: number
           parent_id?: string | null
@@ -1732,6 +1773,7 @@ export type Database = {
         Update: {
           content?: string
           created_at?: string
+          hidden?: boolean
           id?: string
           like_count?: number
           parent_id?: string | null
@@ -1805,6 +1847,7 @@ export type Database = {
           content: string
           created_at: string
           group_id: string
+          hidden: boolean
           id: string
           like_count: number
           media_type: string | null
@@ -1817,6 +1860,7 @@ export type Database = {
           content: string
           created_at?: string
           group_id: string
+          hidden?: boolean
           id?: string
           like_count?: number
           media_type?: string | null
@@ -1829,6 +1873,7 @@ export type Database = {
           content?: string
           created_at?: string
           group_id?: string
+          hidden?: boolean
           id?: string
           like_count?: number
           media_type?: string | null
@@ -1934,6 +1979,7 @@ export type Database = {
         Row: {
           content: string
           created_at: string
+          hidden: boolean
           id: string
           like_count: number
           parent_id: string | null
@@ -1944,6 +1990,7 @@ export type Database = {
         Insert: {
           content: string
           created_at?: string
+          hidden?: boolean
           id?: string
           like_count?: number
           parent_id?: string | null
@@ -1954,6 +2001,7 @@ export type Database = {
         Update: {
           content?: string
           created_at?: string
+          hidden?: boolean
           id?: string
           like_count?: number
           parent_id?: string | null
@@ -2007,12 +2055,42 @@ export type Database = {
           },
         ]
       }
+      interest_post_saves: {
+        Row: {
+          created_at: string
+          id: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interest_post_saves_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "interest_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       interest_posts: {
         Row: {
           category_id: string
           comment_count: number
           content: string
           created_at: string
+          hidden: boolean
           id: string
           like_count: number
           media_type: string | null
@@ -2025,6 +2103,7 @@ export type Database = {
           comment_count?: number
           content: string
           created_at?: string
+          hidden?: boolean
           id?: string
           like_count?: number
           media_type?: string | null
@@ -2037,6 +2116,7 @@ export type Database = {
           comment_count?: number
           content?: string
           created_at?: string
+          hidden?: boolean
           id?: string
           like_count?: number
           media_type?: string | null

@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { getViewerLocation, geocodeLocation, haversineKm } from '@/lib/geolocation';
@@ -70,17 +71,36 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 
 export function useExplore() {
   const { user, profile } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [users, setUsers] = useState<ExploreUser[]>([]);
   const [posts, setPosts] = useState<ExplorePost[]>([]);
   const [reels, setReels] = useState<ExploreReel[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
   const [activeTab, setActiveTab] = useState<ExploreTab>('all');
   const [refreshKey, setRefreshKey] = useState(0);
   const [viewerLocationKnown, setViewerLocationKnown] = useState(false);
   const [distancesReady, setDistancesReady] = useState(false);
   const [distancesLoading, setDistancesLoading] = useState(false);
   const distanceTokenRef = useRef(0);
+
+  useEffect(() => {
+    const q = searchParams.get('q') || '';
+    if (q !== searchQuery) setSearchQuery(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const updateSearch = useCallback(
+    (q: string) => {
+      setSearchQuery(q);
+      if (q) {
+        setSearchParams({ q });
+      } else if (searchParams.has('q')) {
+        setSearchParams({});
+      }
+    },
+    [searchParams, setSearchParams]
+  );
 
   const attachDistances = useCallback(
     async (list: ExploreUser[]) => {
@@ -137,6 +157,7 @@ export function useExplore() {
       .from('posts')
       .select('id, content, visibility, star_count, comment_count, created_at, user_id, profiles:user_id(username, display_name, avatar_url, is_verified), post_media(id, url, type)')
       .eq('visibility', 'public')
+      .eq('hidden', false)
       .order('star_count', { ascending: false })
       .limit(20);
 
@@ -248,7 +269,7 @@ export function useExplore() {
     reels,
     loading,
     searchQuery,
-    setSearchQuery,
+    setSearchQuery: updateSearch,
     activeTab,
     setActiveTab,
     handleFollowChange,

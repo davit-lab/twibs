@@ -504,7 +504,7 @@
   padding: 8px 18px;
   border-radius: 999px;
   background: transparent;
-  color: hsl(var(--muted-foreground));
+  color: hsl(220 70% 55% / 0.92);
   font-weight: 600;
   transition: transform 260ms cubic-bezier(.2,.9,.2,1), color 200ms ease, background 200ms ease, box-shadow 200ms ease;
   -webkit-tap-highlight-color: transparent;
@@ -513,14 +513,18 @@
 .segmented__tab--idle:hover {
   color: hsl(var(--foreground));
   transform: translateY(-2px);
-  background: rgba(255,255,255,0.02);
-  box-shadow: 0 8px 20px rgba(2,6,23,0.25);
+  background: rgba(59,130,246,0.06);
+  box-shadow: 0 8px 20px rgba(14,46,86,0.12);
+}
+
+.segmented__tab:active {
+  transform: translateY(0) scale(0.98);
 }
 
 .segmented__tab--active {
-  color: hsl(var(--primary-foreground));
-  background: linear-gradient(90deg, hsl(var(--primary) / 1), rgba(255,255,255,0.06));
-  box-shadow: 0 12px 34px rgba(79,70,229,0.18), inset 0 1px 0 rgba(255,255,255,0.14);
+  color: hsl(0 0% 100%);
+  background: linear-gradient(90deg, hsl(220 70% 55%), hsl(210 60% 45%));
+  box-shadow: 0 14px 36px rgba(14,46,86,0.22), inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
 .segmented__tab--active::after {
@@ -547,11 +551,12 @@
   width: var(--slider-w, 0px);
   transform: translateX(var(--slider-x, 0px));
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(168,85,247,1), rgba(79,70,229,1));
-  box-shadow: 0 12px 30px rgba(79,70,229,0.12), inset 0 1px 0 rgba(255,255,255,0.12);
-  transition: transform 420ms cubic-bezier(.22,.9,.3,1), width 420ms cubic-bezier(.22,.9,.3,1);
+  background: linear-gradient(90deg, hsl(220 70% 55%), hsl(210 60% 45%));
+  box-shadow: 0 14px 36px rgba(14,46,86,0.14), inset 0 1px 0 rgba(255,255,255,0.06);
+  transition: transform 320ms cubic-bezier(.2,.9,.2,1), width 320ms cubic-bezier(.2,.9,.2,1), background 300ms ease;
   z-index: 1;
   pointer-events: none;
+  will-change: transform, width;
 }
 
 /* ensure tabs sit above the slider */
@@ -700,5 +705,23 @@
   .create-btn:focus-visible {
     outline: none;
     box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.12), 0 12px 36px rgba(14, 46, 86, 0.55);
+  }
+
+  .lightbox-backdrop {
+    animation: lightbox-fade-in 0.2s ease both;
+  }
+
+  @keyframes lightbox-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .lightbox-image-in {
+    animation: lightbox-image-zoom 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes lightbox-image-zoom {
+    from { opacity: 0; transform: scale(0.92); }
+    to { opacity: 1; transform: scale(1); }
   }
 }

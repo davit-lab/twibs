@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, BadgeCheck, Loader2, Check, Twitter, Facebook, MessageSquare, Copy, Send } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, BadgeCheck, Loader2, Check, Twitter, Facebook, MessageSquare, Copy, Send, Flag } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -11,6 +11,8 @@ import { useGroupActions, GroupPost } from '@/hooks/useGroups';
 import { useToast } from '@/hooks/use-toast';
 import GroupPostComments from './GroupPostComments';
 import MediaLightbox from '@/components/MediaLightbox';
+import RichText from '@/components/rich/RichText';
+import ReportDialog from '@/components/social/ReportDialog';
 import { cn } from '@/lib/utils';
 import { buildDmUrl, snippet } from '@/lib/dm';
 
@@ -29,6 +31,7 @@ export default function GroupPostCard({ post, groupName }: GroupPostCardProps) {
   const [copied, setCopied] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const handleLike = async () => {
     if (!user) return;
@@ -97,27 +100,36 @@ export default function GroupPostCard({ post, groupName }: GroupPostCardProps) {
             </DropdownMenuContent>
           </DropdownMenu>
         ) : user ? (
-          <button
-            onClick={() =>
-              navigate(
-                buildDmUrl(
-                  post.user_id,
-                  post.profiles?.username || '',
-                  `your post in ${groupName}: ${snippet(post.content, 48)}`
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={() => setReportOpen(true)}
+              title="Report"
+              className="flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            >
+              <Flag className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() =>
+                navigate(
+                  buildDmUrl(
+                    post.user_id,
+                    post.profiles?.username || '',
+                    `your post in ${groupName}: ${snippet(post.content, 48)}`
+                  )
                 )
-              )
-            }
-            title={`Message ${post.profiles?.display_name}`}
-            className="flex items-center gap-1.5 h-8 px-2.5 flex-shrink-0 rounded-lg text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground hover:text-primary hover:bg-primary/5 border border-border/50 hover:border-primary/30 transition-colors"
-          >
-            <Send className="h-3.5 w-3.5" />
-            Message
-          </button>
+              }
+              title={`Message ${post.profiles?.display_name}`}
+              className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground hover:text-primary hover:bg-primary/5 border border-border/50 hover:border-primary/30 transition-colors"
+            >
+              <Send className="h-3.5 w-3.5" />
+              Message
+            </button>
+          </div>
         ) : null}
       </header>
 
       {/* Content */}
-      <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{post.content}</p>
+      <p className="text-[15px] leading-relaxed whitespace-pre-wrap"><RichText text={post.content} /></p>
 
       {post.media_url && (
         <figure className="mt-3 rounded-xl overflow-hidden bg-muted ring-1 ring-border/60">
@@ -207,6 +219,14 @@ export default function GroupPostCard({ post, groupName }: GroupPostCardProps) {
           onClose={() => setLightboxOpen(false)}
         />
       )}
+
+      <ReportDialog
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        targetType="group_post"
+        targetId={post.id}
+        targetLabel="post"
+      />
     </article>
   );
 }

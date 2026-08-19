@@ -317,6 +317,7 @@ export function useGroupPosts(groupId: string, limit = 10) {
           profiles!group_posts_user_id_fkey (${GROUP_PROFILES_JOIN})
         `)
         .eq('group_id', groupId)
+        .eq('hidden', false)
         .order('created_at', { ascending: false })
         .limit(limit);
 
@@ -394,6 +395,7 @@ export function useGroupPostComments(postId: string) {
           )
         `)
         .eq('post_id', postId)
+        .eq('hidden', false)
         .order('created_at', { ascending: true });
 
       if (error) throw error;

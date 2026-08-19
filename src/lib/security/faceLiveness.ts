@@ -72,7 +72,7 @@ export const QUALITY_MIN = 0.55;
 export const PROOF_SAMPLING_MS = 200;
 
 export function sustainFrames(samplingRate: number): number {
-  return Math.max(2, Math.round(samplingRate * 1.4));
+  return Math.max(2, Math.round(samplingRate * 1.0));
 }
 
 export function instructionSatisfied(action: InstructionType, f: FrameSignals): boolean {

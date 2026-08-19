@@ -268,6 +268,7 @@ export interface LibraryBookWithProgress extends Book {
   current_chapter_title?: string;
   total_chapters: number;
   completed_count: number;
+  is_liked?: boolean;
 }
 
 export function useUserLibrary() {
@@ -337,6 +338,15 @@ export function useUserLibrary() {
         .in('book_id', bookIds)
         .order('position', { ascending: true });
 
+      // Fetch book likes
+      const { data: likesData } = await supabase
+        .from('book_likes')
+        .select('book_id')
+        .eq('user_id', user.id)
+        .in('book_id', bookIds);
+
+      const likedBookIds = new Set(likesData?.map((l) => l.book_id) || []);
+
       // Build chapter maps
       const chapterCountMap = new Map<string, number>();
       const chapterTitleMap = new Map<string, string>();
@@ -361,6 +371,7 @@ export function useUserLibrary() {
           current_chapter_title: currentChapterTitle,
           total_chapters: chapterCountMap.get(book.id) || 0,
           completed_count: progress?.completed_chapters?.length || 0,
+          is_liked: likedBookIds.has(book.id),
         };
       });
 
@@ -531,6 +542,30 @@ export function useBookActions() {
     }
   }, [user, toast]);
 
+  const toggleBookLike = useCallback(async (bookId: string, isCurrentlyLiked: boolean) => {
+    if (!user) return false;
+
+    try {
+      if (isCurrentlyLiked) {
+        const { error } = await supabase
+          .from('book_likes')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('book_id', bookId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('book_likes')
+          .insert({ user_id: user.id, book_id: bookId });
+        if (error) throw error;
+      }
+      return true;
+    } catch (error: any) {
+      console.error('Error toggling book like:', error);
+      return false;
+    }
+  }, [user]);
+
   const updateProgress = useCallback(async (
     bookId: string,
     chapterId: string | null,
@@ -586,6 +621,7 @@ export function useBookActions() {
     addToLibrary,
     removeFromLibrary,
     updateProgress,
+    toggleBookLike,
   }), [
     createBook,
     updateBook,
@@ -594,6 +630,7 @@ export function useBookActions() {
     addToLibrary,
     removeFromLibrary,
     updateProgress,
+    toggleBookLike,
   ]);
 }
 

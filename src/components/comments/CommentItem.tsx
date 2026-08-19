@@ -26,6 +26,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import type { Comment } from '@/hooks/useComments';
 import defaultAvatar from '@/assets/default-avatar.png';
+import RichText from '@/components/rich/RichText';
 
 interface CommentItemProps {
   comment: Comment;
@@ -164,7 +165,7 @@ export default function CommentItem({
               </div>
             ) : (
               <p className="text-sm text-foreground/90 mt-0.5 break-words">
-                {comment.content}
+                <RichText text={comment.content} />
               </p>
             )}
           </div>

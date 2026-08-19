@@ -239,9 +239,6 @@ export default function Interests() {
           <div className="max-w-3xl mx-auto px-4 py-10 md:py-12">
             <div className="flex items-end justify-between gap-6">
               <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-primary mb-4">
-                  Your feed, filtered
-                </p>
                 <h1 className="text-5xl md:text-6xl font-black tracking-tight leading-none">
                   Interests
                 </h1>
@@ -277,18 +274,16 @@ export default function Interests() {
                     )}
                     style={
                       chip.id !== 'all' && active
-                        ? { backgroundColor: `${chip.color}18`, color: chip.color, borderColor: chip.color }
+                        ? {
+                            backgroundColor: 'hsl(var(--primary) / 0.08)',
+                            color: 'hsl(var(--primary))',
+                            borderColor: 'hsl(var(--primary) / 0.15)',
+                          }
                         : chip.id !== 'all'
-                          ? { borderColor: `${chip.color}55` }
+                          ? { borderColor: 'hsl(var(--primary) / 0.18)' }
                           : undefined
                     }
                   >
-                    {chip.id !== 'all' && (
-                      <span
-                        className={cn('w-1.5 h-1.5 rounded-full', !active && 'opacity-60')}
-                        style={{ backgroundColor: active ? chip.color : `${chip.color}99` }}
-                      />
-                    )}
                     {chip.name}
                   </button>
                 );

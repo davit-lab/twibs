@@ -131,6 +131,7 @@ function BoostPostPicker({
           post_media (id, url, type)
         `)
         .eq('user_id', user.id)
+        .eq('hidden', false)
         .order('created_at', { ascending: false })
         .limit(20);
       if (error) throw error;

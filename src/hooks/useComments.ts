@@ -42,6 +42,7 @@ export function useComments(postId: string) {
         .from('comments')
         .select('*')
         .eq('post_id', postId)
+        .eq('hidden', false)
         .order('created_at', { ascending: true });
 
       if (commentsError) throw commentsError;

@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import { useBook, useBookActions, useBooks } from '@/hooks/useBooks';
 import { useBookPurchaseStatus, useAuthorStripeStatus } from '@/hooks/useBookPurchase';
+import { useOpenLibrary } from '@/hooks/useOpenLibrary';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -29,6 +30,8 @@ import {
   FileText,
   ArrowLeft,
   ArrowUpRight,
+  ExternalLink,
+  Loader2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -46,6 +49,9 @@ export default function BookDetail() {
   const { books: moreBooks, isLoading: loadingMoreBooks } = useBooks({ status: 'published' });
   const [isUpdatingLibrary, setIsUpdatingLibrary] = useState(false);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
+  const [resolvedPdfUrl, setResolvedPdfUrl] = useState<string | null>(null);
+  const [isResolvingPdf, setIsResolvingPdf] = useState(false);
+  const { fetchPdfUrl } = useOpenLibrary();
 
   const isAuthor = user && book?.author_id === user.id;
   const completedCount = progress?.completed_chapters?.length || 0;
@@ -69,13 +75,36 @@ export default function BookDetail() {
   }, [searchParams]);
 
   const isFree = book?.is_free || !book?.price || book?.price === 0;
-  const hasPdf = !!book?.pdf_url;
+  const hasPdf = !!(book?.pdf_url || resolvedPdfUrl);
   const hasAccess = isAuthor || isFree || purchaseStatus?.hasPurchased;
+  const pdfUrlToUse = book?.pdf_url || resolvedPdfUrl;
+  const isExternalPdf = pdfUrlToUse && (pdfUrlToUse.startsWith('http://') || pdfUrlToUse.startsWith('https://'));
+  const isEpub = pdfUrlToUse?.endsWith('.epub');
   const priceDisplay = isFree ? 'Free' : `$${((book?.price || 0) / 100).toFixed(2)}`;
 
   const relatedBooks = moreBooks
     .filter((b) => b.id !== bookId)
     .slice(0, 8);
+
+  // Resolve PDF URL on-demand for imported books that don't have one yet
+  useEffect(() => {
+    if (!book || !hasAccess || book.pdf_url || resolvedPdfUrl || isResolvingPdf) return;
+
+    const olTag = book.tags?.find((t) => t.startsWith('ol:'));
+    if (!olTag) return;
+
+    const olKey = olTag.replace('ol:', '');
+    const resolve = async () => {
+      setIsResolvingPdf(true);
+      try {
+        const url = await fetchPdfUrl(`/works/${olKey}`, book.tags?.filter((t) => !t.startsWith('ol:')));
+        if (url) setResolvedPdfUrl(url);
+      } finally {
+        setIsResolvingPdf(false);
+      }
+    };
+    resolve();
+  }, [book, hasAccess, resolvedPdfUrl, isResolvingPdf, fetchPdfUrl]);
 
   const getInitials = (name: string) => {
     return name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
@@ -105,7 +134,17 @@ export default function BookDetail() {
   };
 
   const handleReadPdf = () => {
-    setShowPdfViewer(true);
+    if (isEpub && pdfUrlToUse) {
+      // For EPUBs, open the Internet Archive reader in a new tab
+      const iaId = pdfUrlToUse.match(/download\/([^/]+)/)?.[1];
+      if (iaId) {
+        window.open(`https://archive.org/details/${iaId}`, '_blank');
+      } else {
+        window.open(pdfUrlToUse, '_blank');
+      }
+    } else {
+      setShowPdfViewer(true);
+    }
   };
 
   if (isLoading) {
@@ -146,11 +185,12 @@ export default function BookDetail() {
     );
   }
 
-  if (showPdfViewer && hasPdf && hasAccess) {
+  if (showPdfViewer && hasPdf && hasAccess && !isEpub) {
     return (
       <FullScreenPdfViewer
         bookId={bookId!}
         bookTitle={book.title}
+        pdfUrl={isExternalPdf ? pdfUrlToUse! : undefined}
         onClose={() => setShowPdfViewer(false)}
       />
     );
@@ -290,8 +330,8 @@ export default function BookDetail() {
               <div className="mt-7 flex flex-wrap items-center gap-3">
                 {hasPdf && hasAccess ? (
                   <Button onClick={handleReadPdf} className="h-11 rounded-xl px-6 font-semibold shadow-md shadow-primary/20">
-                    <BookOpen className="mr-2 h-4 w-4" />
-                    Read book
+                    {isEpub ? <ExternalLink className="mr-2 h-4 w-4" /> : <BookOpen className="mr-2 h-4 w-4" />}
+                    {isEpub ? 'Read on Open Library' : 'Read book'}
                   </Button>
                 ) : hasPdf && !hasAccess ? (
                   <BookPurchaseButton
@@ -319,6 +359,11 @@ export default function BookDetail() {
                     authorHasStripe={authorHasStripe}
                     authorId={book.author_id}
                   />
+                ) : isResolvingPdf ? (
+                  <Button disabled className="h-11 rounded-xl px-6 font-semibold">
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Loading book...
+                  </Button>
                 ) : null}
 
                 {user && !isAuthor && (

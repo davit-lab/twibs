@@ -36,13 +36,13 @@ const INSTRUCTIONS: Record<
   Exclude<InstructionType, "center">,
   { label: string; windowMs: number }
 > = {
-  left: { label: "Turn your head left", windowMs: 3200 },
-  right: { label: "Turn your head right", windowMs: 3200 },
-  up: { label: "Tilt your head up", windowMs: 3200 },
-  down: { label: "Tilt your head down", windowMs: 3200 },
-  blink: { label: "Blink twice", windowMs: 4200 },
-  smile: { label: "Smile", windowMs: 4200 },
-  open_mouth: { label: "Open your mouth", windowMs: 4200 },
+  left: { label: "Turn your head left", windowMs: 2000 },
+  right: { label: "Turn your head right", windowMs: 2000 },
+  up: { label: "Tilt your head up", windowMs: 2000 },
+  down: { label: "Tilt your head down", windowMs: 2000 },
+  blink: { label: "Blink twice", windowMs: 2800 },
+  smile: { label: "Smile", windowMs: 2800 },
+  open_mouth: { label: "Open your mouth", windowMs: 2800 },
 };
 
 /** Pick a random instruction type that is not `previous`. */
@@ -75,7 +75,7 @@ export function generateSequence(): ChallengeInstruction[] {
     return a;
   };
 
-  const seq: ChallengeInstruction[] = [{ type: "center", label: "Look at the camera", windowMs: 2800 }];
+  const seq: ChallengeInstruction[] = [{ type: "center", label: "Look at the camera", windowMs: 2000 }];
 
   const chosenGazes = shuffle(gazes).slice(0, 1 + Math.floor(Math.random() * 2)); // 1-2
   const chosenMicros = shuffle(micros).slice(0, 2); // exactly 2 micros
@@ -88,7 +88,7 @@ export function generateSequence(): ChallengeInstruction[] {
     prev = type;
   }
 
-  seq.push({ type: "center", label: "Look at the camera", windowMs: 2000 });
+  seq.push({ type: "center", label: "Look at the camera", windowMs: 1500 });
   return seq;
 }
 

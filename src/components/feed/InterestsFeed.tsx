@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -21,16 +21,17 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import InterestPostCard from './InterestPostCard';
+import SavedInterestPosts from './SavedInterestPosts';
 import InterestCard from '@/components/onboarding/InterestCard';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
+import { cn } from '@/lib/utils';
 import {
   PlusCircle,
   Loader2,
   ImagePlus,
   X,
-  Sparkles,
   Plus,
 } from 'lucide-react';
 
@@ -51,25 +52,40 @@ export default function InterestsFeed({ userId, isOwnProfile = false }: Interest
   const { data: userInterests, isLoading: interestsLoading } = useUserInterests(userId);
   const { data: allCategories } = useInterestCategories();
   const { addInterest, removeInterest } = useInterestActions();
-  const {
-    data: postsData,
-    isLoading: postsLoading,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useInterestPosts({ userId, includeAll: true });
-  const { createPost } = useInterestPostActions();
-  const queryClient = useQueryClient();
-  const { data: mutedIds = [] } = useMutedUsers();
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [addInterestsOpen, setAddInterestsOpen] = useState(false);
+  const [view, setView] = useState<'posts' | 'saved'>('posts');
+  const [activeCategory, setActiveCategory] = useState<string>('all');
   const [newPostContent, setNewPostContent] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [mediaPreview, setMediaPreview] = useState<MediaPreview | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  const ownerCategories = useMemo(
+    () =>
+      (userInterests
+        ?.map((ui) => ui.interest_categories)
+        .filter((c): c is { id: string; name: string; icon: string; color: string } => !!c) || []),
+    [userInterests]
+  );
+
+  const {
+    data: postsData,
+    isLoading: postsLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInterestPosts(
+    activeCategory !== 'all'
+      ? { userId, categoryId: activeCategory }
+      : { userId, includeAll: true }
+  );
+  const { createPost } = useInterestPostActions();
+  const queryClient = useQueryClient();
+  const { data: mutedIds = [] } = useMutedUsers();
 
   const posts =
     postsData?.pages.flatMap((page) => page.posts).filter((p) => !mutedIds.includes(p.user_id)) ||
@@ -231,7 +247,7 @@ export default function InterestsFeed({ userId, isOwnProfile = false }: Interest
     );
   }
 
-  const interests = userInterests?.map((ui) => ui.interest_categories).filter(Boolean) || [];
+  const interests = ownerCategories;
   const availableCategories = interests;
   const interestIds = new Set(interests.map((i) => i.id));
 
@@ -249,17 +265,88 @@ export default function InterestsFeed({ userId, isOwnProfile = false }: Interest
 
   return (
     <div className="space-y-5">
-      {/* User's Interests Display */}
+      {/* Posts / Saved toggle (own profile only) */}
+      {isOwnProfile && (
+        <div className="flex gap-1 p-1 bg-muted border border-border/60 rounded-full w-fit">
+          <button
+            onClick={() => setView('posts')}
+            className={cn(
+              'px-4 py-1.5 rounded-full text-sm font-semibold transition-all duration-200',
+              view === 'posts'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            Posts
+          </button>
+          <button
+            onClick={() => setView('saved')}
+            className={cn(
+              'px-4 py-1.5 rounded-full text-sm font-semibold transition-all duration-200',
+              view === 'saved'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            Saved
+          </button>
+        </div>
+      )}
+
+      {view === 'saved' && isOwnProfile ? (
+        <SavedInterestPosts userId={userId} />
+      ) : (
+        <>
+          {/* Category filter */}
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide py-1 pr-2">
+            <button
+              onClick={() => setActiveCategory('all')}
+              className={cn(
+                'inline-flex items-center rounded-full px-3.5 py-2 text-xs font-bold whitespace-nowrap transition-all duration-200',
+                activeCategory === 'all'
+                  ? 'bg-foreground text-background shadow-sm'
+                  : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
+              )}
+            >
+              All posts
+            </button>
+            {ownerCategories.map((c) => {
+              const active = activeCategory === c.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setActiveCategory(c.id)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-bold whitespace-nowrap transition-all duration-200 border',
+                    active ? 'shadow-sm' : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
+                  )}
+                  style={
+                    active
+                      ? {
+                          backgroundColor: 'hsl(var(--primary) / 0.08)',
+                          color: 'hsl(var(--primary))',
+                          borderColor: 'hsl(var(--primary) / 0.15)',
+                        }
+                      : { borderColor: 'hsl(var(--primary) / 0.18)' }
+                  }
+                >
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: c.color }} />
+                  {c.name}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* User's Interests Display */}
       <div className="flex flex-wrap items-center gap-2">
         {interests.map((interest) => (
           <span
             key={interest.id}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border"
             style={{
-              backgroundColor: `${interest.color}20`,
-              color: interest.color,
-              borderColor: interest.color,
-              borderWidth: 1,
+              backgroundColor: 'hsl(var(--primary) / 0.08)',
+              color: 'hsl(var(--primary))',
+              borderColor: 'hsl(var(--primary) / 0.15)',
             }}
           >
             {interest.name}
@@ -321,7 +408,7 @@ export default function InterestsFeed({ userId, isOwnProfile = false }: Interest
       ) : (
         <div className="text-center py-12">
           <div className="w-16 h-16 rounded-2xl bg-muted mx-auto mb-4 flex items-center justify-center">
-            <Sparkles className="h-8 w-8 text-muted-foreground" />
+            <div className="h-8 w-8 rounded-full bg-surface-2" />
           </div>
           <h3 className="font-bold text-lg mb-2">No interest posts yet</h3>
           <p className="text-muted-foreground text-sm max-w-sm mx-auto">
@@ -336,8 +423,8 @@ export default function InterestsFeed({ userId, isOwnProfile = false }: Interest
             </Button>
           )}
           {isOwnProfile && availableCategories.length === 0 && (
-            <Button variant="outline" className="mt-4" asChild>
-              <Link to="/interests">Add interests</Link>
+            <Button variant="outline" className="mt-4" disabled>
+              Add interests
             </Button>
           )}
         </div>
@@ -484,6 +571,8 @@ export default function InterestsFeed({ userId, isOwnProfile = false }: Interest
           </div>
         </DialogContent>
       </Dialog>
+        </>
+      )}
     </div>
   );
 }

@@ -17,6 +17,8 @@ import {
 } from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
 import CommentSection from '@/components/comments/CommentSection';
+import MediaLightbox from '@/components/MediaLightbox';
+import RichText from '@/components/rich/RichText';
 import ReportDialog from '@/components/social/ReportDialog';
 import LikesDialog from '@/components/social/LikesDialog';
 import { useBlockedUsers, useMutedUsers, useSavedPosts, useRepostedPosts, useSafetyActions } from '@/hooks/useSafety';
@@ -78,11 +80,14 @@ interface PostData {
   user_has_starred?: boolean;
 }
 
+export type { PostData };
+
 interface PostCardProps {
   post: PostData;
   onPostDeleted?: () => void;
   onStarChange?: () => void;
   reposter?: ReposterProfile | null;
+  defaultCommentsOpen?: boolean;
 }
 
 interface ReposterProfile {
@@ -98,7 +103,7 @@ const visibilityIcons = {
   private: Lock,
 };
 
-export default function PostCard({ post, onPostDeleted, onStarChange, reposter }: PostCardProps) {
+export default function PostCard({ post, onPostDeleted, onStarChange, reposter, defaultCommentsOpen = false }: PostCardProps) {
   const { user, profile: currentUserProfile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -109,11 +114,12 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter }
   const [repostCount, setRepostCount] = useState(post.repost_count || 0);
   const [isStarring, setIsStarring] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [showComments, setShowComments] = useState(false);
+  const [showComments, setShowComments] = useState(defaultCommentsOpen);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const { data: savedPostIds = [] } = useSavedPosts();
   const { data: repostedPostIds = [] } = useRepostedPosts();
@@ -374,6 +380,7 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter }
             <span className="text-muted-foreground/50">·</span>
             <time
               dateTime={post.created_at}
+              onClick={() => navigate(`/post/${post.id}`)}
               className="text-muted-foreground text-sm hover:text-foreground transition-colors cursor-pointer"
             >
               {formatDistanceToNow(new Date(post.created_at), { addSuffix: false })}
@@ -511,7 +518,12 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter }
               </div>
             </div>
           ) : (
-            <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">{post.content}</p>
+            <p
+              onClick={() => navigate(`/post/${post.id}`)}
+              className="text-[15px] leading-relaxed whitespace-pre-wrap break-words cursor-pointer"
+            >
+              <RichText text={post.content} />
+            </p>
           )}
         </div>
       ) : null}
@@ -534,12 +546,18 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter }
                 )}
               >
                 {media.type === 'image' ? (
-                  <img
-                    src={media.url}
-                    alt={media.alt_text || 'Post image'}
-                    className="w-full h-full object-cover max-h-[400px] hover:opacity-95 transition-opacity"
-                    loading="lazy"
-                  />
+                  <button
+                    onClick={() => setLightboxIndex(index)}
+                    className="block w-full cursor-zoom-in"
+                    aria-label="Open image"
+                  >
+                    <img
+                      src={media.url}
+                      alt={media.alt_text || 'Post image'}
+                      className="w-full h-full object-cover max-h-[400px] opacity-100 transition-opacity"
+                      loading="lazy"
+                    />
+                  </button>
                 ) : (
                   <video
                     src={media.url}
@@ -668,6 +686,18 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter }
         targetId={post.id}
         targetLabel="post"
       />
+      {lightboxIndex !== null && post.post_media[lightboxIndex] && (
+        <MediaLightbox
+          src={post.post_media[lightboxIndex].url}
+          alt={post.post_media[lightboxIndex].alt_text || 'Post photo'}
+          images={post.post_media.map((m) => ({
+            src: m.url,
+            alt: m.alt_text || 'Post photo',
+          }))}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
     </article>
   );
 }
