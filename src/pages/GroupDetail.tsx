@@ -1,6 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { formatDistanceToNow } from 'date-fns';
 import MainLayout from '@/components/layout/MainLayout';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -242,11 +241,8 @@ export default function GroupDetail() {
                     <Users className="h-4 w-4" />
                     {group.member_count.toLocaleString()} members
                   </span>
-                  <span className="flex items-center gap-1.5">
-                    <MessageSquare className="h-4 w-4" />
-                    {group.post_count.toLocaleString()} posts
-                  </span>
-                  <span>· created {formatDistanceToNow(new Date(group.created_at), { addSuffix: true })}</span>
+                  {/* post count removed */}
+                  {/* created date removed */}
                 </div>
                 {group.description && (
                   <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">{group.description}</p>
@@ -365,9 +361,6 @@ export default function GroupDetail() {
           {/* Composer */}
           {isMember ? (
             <div className="mt-5 bg-card border border-border/60 rounded-2xl p-4 sm:p-5">
-              <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground mb-3">
-                Share something
-              </p>
               <div className="flex items-start gap-3">
                 <Avatar className="h-9 w-9 flex-shrink-0">
                   <AvatarFallback className="text-xs">U</AvatarFallback>
@@ -502,10 +495,7 @@ export default function GroupDetail() {
           {/* Feed header */}
           <div className="mt-8">
             <div className="flex items-baseline justify-between gap-4">
-              <h2 className="font-mono text-[11px] uppercase tracking-[0.3em] text-primary">Community feed</h2>
-              <span className="font-mono text-[10px] text-muted-foreground whitespace-nowrap">
-                {group.post_count} post{group.post_count === 1 ? '' : 's'}
-              </span>
+              {/* Feed header label removed */}
             </div>
             <div className="mt-2 h-px bg-border" />
           </div>

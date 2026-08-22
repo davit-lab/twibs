@@ -157,7 +157,6 @@ export default function CreateGroupDialog({ open, onOpenChange }: CreateGroupDia
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-primary">New community</p>
           <DialogTitle className="text-2xl">Create a group</DialogTitle>
           <DialogDescription>
             A place where people can share, post and answer together.
@@ -166,8 +165,7 @@ export default function CreateGroupDialog({ open, onOpenChange }: CreateGroupDia
 
         <div className="pt-2">
           {/* Cover */}
-          <div>
-            <FieldLabel>Cover photo · optional</FieldLabel>
+            <div>
             <div className="relative h-36 rounded-xl overflow-hidden bg-surface border border-border/60">
               {coverPreview ? (
                 <img src={coverPreview} alt="Group cover" className="w-full h-full object-cover" />
@@ -237,7 +235,6 @@ export default function CreateGroupDialog({ open, onOpenChange }: CreateGroupDia
               </button>
             </div>
             <div className="flex-1 min-w-0">
-              <FieldLabel>Group name *</FieldLabel>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -265,7 +262,6 @@ export default function CreateGroupDialog({ open, onOpenChange }: CreateGroupDia
 
           {/* Description */}
           <div className="mt-5">
-            <FieldLabel>Description · optional</FieldLabel>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value.slice(0, DESC_MAX))}
@@ -280,7 +276,6 @@ export default function CreateGroupDialog({ open, onOpenChange }: CreateGroupDia
 
           {/* Privacy */}
           <div className="mt-5">
-            <FieldLabel>Privacy</FieldLabel>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {([
                 { value: 'public' as const, icon: Globe, title: 'Public', desc: 'Anyone can see and join instantly' },

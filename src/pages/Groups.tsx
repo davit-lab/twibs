@@ -6,22 +6,19 @@ import { Skeleton } from '@/components/ui/skeleton';
 import GroupCard from '@/components/groups/GroupCard';
 import CreateGroupDialog from '@/components/groups/CreateGroupDialog';
 import { useGroups, useGroupActions, Group } from '@/hooks/useGroups';
-import { Users, Search, X, Plus, Globe, Lock, Sparkles } from 'lucide-react';
+import { Users, Search, X, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type Tab = 'discover' | 'mine';
 type PrivacyFilter = 'all' | 'public' | 'private';
 
+const EmptyIcon: React.FC = () => null;
 const TABS: { value: Tab; label: string; icon: React.ElementType }[] = [
-  { value: 'discover', label: 'Discover', icon: Sparkles },
+  { value: 'discover', label: 'Discover', icon: EmptyIcon },
   { value: 'mine', label: 'My Groups', icon: Users },
 ];
 
-const PRIVACY_FILTERS: { value: PrivacyFilter; label: string; icon: React.ElementType }[] = [
-  { value: 'all', label: 'All', icon: Globe },
-  { value: 'public', label: 'Public', icon: Globe },
-  { value: 'private', label: 'Private', icon: Lock },
-];
+// privacy filters removed from UI
 
 export default function Groups() {
   const [tab, setTab] = useState<Tab>('discover');
@@ -102,7 +99,6 @@ export default function Groups() {
         {/* Editorial hero */}
         <div className="border-b border-border">
           <div className="max-w-5xl mx-auto px-4 py-10 md:py-14">
-            <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-primary mb-4">Communities</p>
             <div className="flex items-end justify-between gap-6 flex-wrap">
               <div>
                 <h1 className="text-5xl md:text-6xl font-black tracking-tight leading-none">Groups</h1>
@@ -146,21 +142,7 @@ export default function Groups() {
               </div>
             </div>
 
-            {/* Stats strip */}
-            <div className="mt-6 flex items-center gap-6 sm:gap-10">
-              {[
-                { value: counts.all, label: 'Communities' },
-                { value: mine.length, label: 'Joined' },
-                { value: counts.private, label: 'Private' },
-              ].map((stat) => (
-                <div key={stat.label}>
-                  <p className="font-black text-2xl md:text-3xl leading-none tracking-tight">{stat.value}</p>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground mt-1.5">
-                    {stat.label}
-                  </p>
-                </div>
-              ))}
-            </div>
+            {/* Stats strip removed */}
           </div>
         </div>
 
@@ -196,29 +178,7 @@ export default function Groups() {
                 );
               })}
 
-              <div className="ml-auto flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
-                {PRIVACY_FILTERS.map(({ value, label, icon: Icon }) => {
-                  const active = privacy === value;
-                  return (
-                    <button
-                      key={value}
-                      onClick={() => setPrivacy(value)}
-                      className={cn(
-                        'flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-bold whitespace-nowrap transition-all duration-200',
-                        active
-                          ? 'bg-primary text-primary-foreground shadow-sm'
-                          : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
-                      )}
-                    >
-                      {value !== 'all' && <Icon className="h-3.5 w-3.5" />}
-                      {label}
-                      <span className={cn('tabular-nums', active ? 'text-primary-foreground/70' : 'text-muted-foreground/60')}>
-                        {counts[value]}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              <div className="ml-auto" />
             </div>
           </div>
         </div>

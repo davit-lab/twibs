@@ -20,6 +20,7 @@ function initials(name: string) {
   return (name || '?').slice(0, 2).toUpperCase();
 }
 
+
 export default function AdminAuditTab() {
   const { entries, loading, total, page, setPage, search, setSearch, refetch, pageSize } = useAdminAudit();
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -78,6 +79,7 @@ export default function AdminAuditTab() {
                         {entry.actor_email || entry.actor_id?.slice(0, 8) || 'system'}
                       </span>
                     </div>
+                    
                   </TableCell>
                   <TableCell>
                     <Badge className={ACTION_COLORS[entry.action] || 'bg-muted text-muted-foreground'}>

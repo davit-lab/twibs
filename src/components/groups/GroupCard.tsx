@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
-import { formatDistanceToNow } from 'date-fns';
-import { Users, MessageSquare, Lock, Globe, UserPlus, Check, Loader2, Clock } from 'lucide-react';
+import { Users, UserPlus, Check, Loader2, Clock } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { Group } from '@/hooks/useGroups';
@@ -52,18 +51,7 @@ export default function GroupCard({ group, onJoin, onLeave, isJoining }: GroupCa
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/5 to-transparent" />
 
-        {/* Privacy badge */}
-        <span
-          className={cn(
-            'absolute top-2.5 right-2.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] backdrop-blur-md border',
-            isPrivate
-              ? 'bg-black/40 text-white border-white/15'
-              : 'bg-background/80 text-foreground/80 border-border/60'
-          )}
-        >
-          {isPrivate ? <Lock className="h-3 w-3" /> : <Globe className="h-3 w-3" />}
-          {isPrivate ? 'Private' : 'Public'}
-        </span>
+        {/* Privacy badge removed */}
 
         {/* Avatar */}
         <div className="absolute -bottom-5 left-4">
@@ -83,12 +71,7 @@ export default function GroupCard({ group, onJoin, onLeave, isJoining }: GroupCa
         <h3 className="font-black text-lg tracking-tight truncate group-hover:text-primary transition-colors">
           {group.name}
         </h3>
-        <p className="text-xs text-muted-foreground font-medium mt-0.5">
-          {formatDistanceToNow(new Date(group.created_at), { addSuffix: true })}
-          {group.profiles?.display_name && (
-            <> · by <span className="text-foreground/80 font-semibold">{group.profiles.display_name}</span></>
-          )}
-        </p>
+        {/* created-at and author removed */}
 
         {group.description && (
           <p className="text-sm text-muted-foreground/90 mt-2 line-clamp-2 leading-relaxed">{group.description}</p>
@@ -99,10 +82,7 @@ export default function GroupCard({ group, onJoin, onLeave, isJoining }: GroupCa
             <Users className="h-3.5 w-3.5" />
             {group.member_count.toLocaleString()}
           </span>
-          <span className="flex items-center gap-1.5">
-            <MessageSquare className="h-3.5 w-3.5" />
-            {group.post_count.toLocaleString()} posts
-          </span>
+          {/* post count removed */}
         </div>
 
         <button
