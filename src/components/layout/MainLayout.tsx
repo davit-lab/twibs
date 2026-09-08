@@ -1,4 +1,5 @@
 import { ReactNode, useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserBan } from '@/hooks/useUserBan';
@@ -412,27 +413,63 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
               }
 
               return (
-                <Link
-                  key={item.id}
-                  to={item.href}
-                  className={cn(
-                    "flex flex-col items-center justify-center gap-1 rounded-full px-3.5 py-1.5 transition-all duration-200",
-                    active
-                      ? "text-primary bg-primary/10"
-                      : "text-muted-foreground hover:text-foreground"
+                <div key={item.id} className="relative flex items-center">
+                  {active && (
+                    <motion.div
+                      layoutId="mobile-nav-cloud"
+                      transition={{ type: 'spring', stiffness: 340, damping: 32, opacity: { duration: 0.15 } }}
+                      className="absolute inset-0 z-0 flex items-center justify-center"
+                    >
+                      <svg
+                        viewBox="0 0 96 80"
+                        className="h-16 w-20 -translate-y-1 overflow-visible drop-shadow-[0_5px_14px_rgba(124,58,237,0.45)]"
+                        aria-hidden="true"
+                      >
+                        <defs>
+                          <linearGradient
+                            id="nav-cloud-grad"
+                            x1="0"
+                            y1="0"
+                            x2="96"
+                            y2="80"
+                            gradientUnits="userSpaceOnUse"
+                          >
+                            <stop offset="0%" stopColor="#a78bfa" />
+                            <stop offset="50%" stopColor="hsl(var(--primary))" />
+                            <stop offset="100%" stopColor="#4f46e5" />
+                          </linearGradient>
+                        </defs>
+                        <g fill="url(#nav-cloud-grad)">
+                          <rect x="4" y="46" width="74" height="28" rx="14" />
+                          <circle cx="24" cy="40" r="16" />
+                          <circle cx="44" cy="30" r="19" />
+                          <circle cx="66" cy="37" r="17" />
+                          <circle cx="82" cy="48" r="12" />
+                        </g>
+                      </svg>
+                    </motion.div>
                   )}
-                >
-                  {item.icon && (
-                    <item.icon
-                      className={cn("h-5 w-5 transition-transform duration-200", active && "scale-110")}
-                      strokeWidth={active ? 2.5 : 1.5}
-                      fill={active ? 'currentColor' : 'none'}
-                    />
-                  )}
-                  <span className={cn("text-[10px]", active && "font-semibold")}>
-                    {item.label}
-                  </span>
-                </Link>
+                  <Link
+                    to={item.href}
+                    className={cn(
+                      "relative z-10 flex flex-col items-center justify-center gap-1 px-3.5 py-2 transition-all duration-200",
+                      active
+                        ? "text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {item.icon && (
+                      <item.icon
+                        className={cn("h-5 w-5 transition-transform duration-200", active && "scale-110")}
+                        strokeWidth={active ? 2.5 : 1.5}
+                        fill={active ? 'currentColor' : 'none'}
+                      />
+                    )}
+                    <span className={cn("text-[10px]", active && "font-semibold")}>
+                      {item.label}
+                    </span>
+                  </Link>
+                </div>
               );
             })}
           </div>

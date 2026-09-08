@@ -14,6 +14,8 @@ import { useFollowStats } from '@/hooks/useFollowStats';
 import { useStories } from '@/hooks/useStories';
 import { useMutualConnections } from '@/hooks/useMutualConnections';
 import { usePremiumStatus } from '@/hooks/usePremiumStatus';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
+import ProfileViewersDialog from '@/components/profile/ProfileViewersDialog';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -41,6 +43,7 @@ import {
   ImagePlus,
   Megaphone,
   Repeat,
+  Eye,
 } from 'lucide-react';
 import LibraryModal from '@/components/library/LibraryModal';
 import CoverUploadDialog from '@/components/profile/CoverUploadDialog';
@@ -95,6 +98,7 @@ export default function Profile() {
   const { username } = useParams<{ username: string }>();
   const navigate = useNavigate();
   const { user, profile: currentUserProfile } = useAuth();
+  const { preferences } = useUserPreferences();
   const { toast } = useToast();
 
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
@@ -104,6 +108,8 @@ export default function Profile() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [coverDialogOpen, setCoverDialogOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [viewersOpen, setViewersOpen] = useState(false);
+  const recordedViewFor = useRef<string | null>(null);
 
   // Story states
   const [uploading, setUploading] = useState(false);
@@ -194,6 +200,24 @@ export default function Profile() {
   useEffect(() => {
     setViewerOpen(false);
   }, [viewedUserId]);
+
+  // Ghost Mode: record a profile visit unless the viewer is on their own
+  // profile or has ghost mode enabled (then they're invisible to viewers).
+  useEffect(() => {
+    if (!user || !profileData) return;
+    if (user.id === profileData.user_id) return;
+    if (recordedViewFor.current === profileData.user_id) return;
+    if (!preferences) return;
+    if (preferences.ghost_mode) return;
+
+    recordedViewFor.current = profileData.user_id;
+    supabase
+      .from('profile_views')
+      .insert({ viewer_id: user.id, target_id: profileData.user_id })
+      .then(({ error }) => {
+        if (error) console.error('Profile view record error:', error);
+      });
+  }, [user, profileData, preferences]);
 
   const handleFollowChange = () => {
     setRefreshKey(prev => prev + 1);
@@ -545,6 +569,17 @@ export default function Profile() {
                   />
               </div>
 
+              {/* Profile viewers — only the profile owner can see who visited */}
+              {isOwnProfile && user && (
+                <button
+                  onClick={() => setViewersOpen(true)}
+                  className="mt-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-primary transition-colors pl-3"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  Profile viewers
+                </button>
+              )}
+
               {/* Mobile action buttons */}
               <div className="flex md:hidden gap-2 mt-4">
                 {isOwnProfile ? (
@@ -667,6 +702,12 @@ export default function Profile() {
         userId={profileData.user_id}
         type={followModalType}
         username={profileData.username}
+      />
+
+      <ProfileViewersDialog
+        open={viewersOpen}
+        onOpenChange={setViewersOpen}
+        targetUserId={profileData.user_id}
       />
 
       <CoverUploadDialog

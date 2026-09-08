@@ -67,6 +67,8 @@ const POST_SELECT = `
   created_at,
   updated_at,
   is_edited,
+  expires_at,
+  context_meta,
   user_id,
   profiles!inner (
     username,
@@ -81,6 +83,8 @@ const POST_SELECT = `
     alt_text
   )
 `;
+
+const ACTIVE_POST_FILTER = 'expires_at.is.null,expires_at.gt.now()';
 
 export default function RepostsFeed({ userId, refreshTrigger, onRefreshComplete }: RepostsFeedProps) {
   const { user } = useAuth();
@@ -149,7 +153,7 @@ export default function RepostsFeed({ userId, refreshTrigger, onRefreshComplete 
       const reposterIds = [...new Set(reposts.map(r => r.user_id))];
 
       const [{ data: repostedPosts }, { data: reposterProfiles }] = await Promise.all([
-        supabase.from('posts').select(POST_SELECT).in('id', repostIds).eq('hidden', false),
+        supabase.from('posts').select(POST_SELECT).in('id', repostIds).eq('hidden', false).or(ACTIVE_POST_FILTER),
         supabase
           .from('profiles')
           .select('user_id, username, display_name, avatar_url, is_verified')

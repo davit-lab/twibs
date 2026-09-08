@@ -7,8 +7,8 @@ import SponsoredPost from '@/components/ads/SponsoredPost';
 import { fetchFeedAds } from '@/hooks/useAds';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Loader2, Sparkles } from 'lucide-react';
-import { useMutedUsers } from '@/hooks/useSafety';
+import { RefreshCw, Loader2, Sparkles, Zap, MessageCircle, TrendingUp, Users } from 'lucide-react';
+import { useMutedUsers, useHiddenFeedPosts } from '@/hooks/useSafety';
 import { cn } from '@/lib/utils';
 import type { FeedAd } from '@/lib/ads';
 
@@ -41,6 +41,17 @@ interface Post {
   profiles: PostProfile;
   post_media: PostMedia[];
   user_has_starred?: boolean;
+  expires_at?: string | null;
+  context_meta?: PostContextMeta | null;
+}
+
+interface PostContextMeta {
+  location?: string | null;
+  source_url?: string | null;
+  when?: string | null;
+  is_edited?: boolean;
+  is_ai_generated?: boolean;
+  references?: string | null;
 }
 
 interface FeedItem {
@@ -75,6 +86,8 @@ const POST_SELECT = `
   created_at,
   updated_at,
   is_edited,
+  expires_at,
+  context_meta,
   user_id,
   profiles!inner (
     username,
@@ -93,16 +106,66 @@ const POST_SELECT = `
 export default function Feed({ userId, refreshTrigger, onRefreshComplete }: FeedProps) {
   const { user } = useAuth();
   const { data: mutedIds = [] } = useMutedUsers();
+  const { data: hiddenPostIds = [] } = useHiddenFeedPosts();
   const [items, setItems] = useState<(FeedItem | FeedAdItem)[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [feedType, setFeedType] = useState<FeedType>('all');
+  const [catchUp, setCatchUp] = useState<null | {
+    posts: number;
+    fromFriends: number;
+    trending: number;
+    messages: number;
+    creatorsFollowing: number;
+  }>(null);
   
   const PAGE_SIZE = 10;
   const segmentedRef = useRef<HTMLDivElement | null>(null);
   const showFeedTabs = !userId && user;
+
+  // Catch Me Up: show a summary when the user hasn't opened the app in 3+ days.
+  useEffect(() => {
+    if (!user || userId) return;
+    let cancelled = false;
+    let lastVisit: string | null = null;
+    try {
+      lastVisit = localStorage.getItem('twibsers-last-visit');
+    } catch { /* ignore */ }
+    const now = Date.now();
+    localStorage.setItem('twibsers-last-visit', new Date().toISOString());
+    if (!lastVisit) return;
+
+    const threeDays = 3 * 24 * 60 * 60 * 1000;
+    if (now - new Date(lastVisit).getTime() < threeDays) return;
+
+    (async () => {
+      try {
+        const since = new Date(now - threeDays).toISOString();
+        const [{ count: posts }, { data: newPosts }, { count: messages }, { data: newFollowers }] = await Promise.all([
+          supabase.from('posts').select('*', { count: 'exact', head: true }).gte('created_at', since).eq('hidden', false),
+          supabase.from('posts').select('user_id').gte('created_at', since).eq('hidden', false).limit(300),
+          supabase.from('messages').select('*', { count: 'exact', head: true }).gte('created_at', since).or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`),
+          supabase.from('follows').select('following_id').eq('following_id', user.id).gte('created_at', since).limit(200),
+        ]);
+        if (cancelled) return;
+        const creatorCount = Math.min((newPosts || []).length, 20);
+        const newCreatorIds = new Set((newFollowers || []).map((f) => f.following_id));
+        const friendPostsCount = (newPosts || []).filter((p) => newCreatorIds.has(p.user_id)).length;
+        setCatchUp({
+          posts: posts || 0,
+          fromFriends: friendPostsCount,
+          trending: Math.min(posts || 0, 9),
+          messages: messages || 0,
+          creatorsFollowing: creatorCount,
+        });
+      } catch (e) {
+        console.error('Catch me up error:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user, userId]);
 
   // Keep latest filter state available to the realtime channel (avoids stale closures)
   const feedTypeRef = useRef(feedType);
@@ -176,6 +239,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
         .from('posts')
         .select(POST_SELECT)
         .eq('hidden', false)
+        .or('expires_at.is.null,expires_at.gt.now()')
         .order('created_at', { ascending: false })
         .limit(PAGE_SIZE);
 
@@ -192,15 +256,18 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
       const { data, error: fetchError } = await postsQuery;
       if (fetchError) throw fetchError;
 
-      let nextItems: FeedItem[] = (data || []).map(post => ({
-        type: 'post' as const,
-        post: {
-          ...post,
-          profiles: Array.isArray(post.profiles) ? post.profiles[0] : post.profiles,
-          post_media: post.post_media || [],
-        },
-        date: post.created_at,
-      }));
+      let nextItems: FeedItem[] = (data || []).map((row) => {
+        const post = row as unknown as Post;
+        return {
+          type: 'post' as const,
+          post: {
+            ...post,
+            profiles: Array.isArray(post.profiles) ? (post.profiles as PostProfile[])[0] : post.profiles,
+            post_media: post.post_media || [],
+          },
+          date: post.created_at,
+        };
+      });
 
       // In following mode, also surface reposts made by followed users
       if (feedType === 'following' && !userId) {
@@ -222,7 +289,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
           const reposterIds = [...new Set(reposts.map(r => r.user_id))];
 
           const [{ data: repostedPosts }, { data: reposterProfiles }] = await Promise.all([
-            supabase.from('posts').select(POST_SELECT).in('id', repostIds).eq('hidden', false),
+            supabase.from('posts').select(POST_SELECT).in('id', repostIds).eq('hidden', false).or('expires_at.is.null,expires_at.gt.now()'),
             supabase
               .from('profiles')
               .select('user_id, username, display_name, avatar_url, is_verified')
@@ -255,9 +322,12 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
         }
       }
 
-      // Hide content from muted users
-      if (mutedIds.length > 0) {
-        nextItems = nextItems.filter(item => !mutedIds.includes(item.post.user_id));
+      // Hide content from muted users and posts the user asked to see fewer of
+      if (mutedIds.length > 0 || hiddenPostIds.length > 0) {
+        nextItems = nextItems.filter(item => {
+          if (hiddenPostIds.includes(item.post.id)) return false;
+          return !mutedIds.includes(item.post.user_id);
+        });
       }
 
       // Merge, sort newest-first, and slice to a full page
@@ -272,6 +342,8 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
         ...item,
         post: annotatedMap.get(item.post.id) || item.post,
       }));
+
+      let finalItems: (FeedItem | FeedAdItem)[] = nextItems;
 
       // Pull sponsored posts into the home feeds ("For You" + "Following"), interleaved between posts.
       if (!loadMore && !userId && user && (feedType === 'all' || feedType === 'following')) {
@@ -290,19 +362,19 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
             }
           });
           if (adItems.length > 0) merged.push(...adItems);
-          nextItems = merged;
+          finalItems = merged;
         } catch (e) {
           console.error('Feed ads fetch error:', e);
         }
       }
 
       if (loadMore) {
-        setItems(prev => [...prev, ...nextItems]);
+        setItems(prev => [...prev, ...finalItems]);
       } else {
-        setItems(nextItems);
+        setItems(finalItems);
       }
 
-      setHasMore(nextItems.length === PAGE_SIZE);
+      setHasMore(finalItems.length === PAGE_SIZE);
     } catch (err: unknown) {
       console.error('Feed fetch error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load posts');
@@ -380,6 +452,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
         .select(POST_SELECT)
         .eq('id', id)
         .eq('hidden', false)
+        .or('expires_at.is.null,expires_at.gt.now()')
         .maybeSingle();
       if (error || !data) return null;
       const post: Post = {
@@ -432,6 +505,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
           if (!p) return;
           if (!(await belongsInCurrentView(p))) return;
           if (mutedIds.includes(p.user_id)) return;
+          if (hiddenPostIds.includes(p.id)) return;
           setItems((prev) =>
             prev.some((item) => item.type !== 'ad' && item.post.id === p.id)
               ? prev
@@ -468,7 +542,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchPostFull, belongsInCurrentView, mutedIds]);
+  }, [fetchPostFull, belongsInCurrentView, mutedIds, hiddenPostIds]);
 
   const handlePostDeleted = () => {};
   const handleStarChange = () => fetchPosts();
@@ -572,6 +646,44 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
         <HomeInterestFeed />
       ) : (
         <>
+          {catchUp && !userId && (catchUp.posts > 0 || catchUp.messages > 0) && (
+            <div className="mb-4 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.07] to-accent/[0.05] p-4 overflow-hidden">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
+                  <Zap className="h-4.5 w-4.5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-bold leading-tight">While you were away</p>
+                  <p className="text-xs text-muted-foreground">You're 3 days behind — here's the summary</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="flex items-center gap-2 rounded-xl bg-card/70 border border-border/60 px-3 py-2.5">
+                  <Sparkles className="h-4 w-4 text-primary shrink-0" />
+                  <span className="font-semibold tabular-nums">{catchUp.posts}</span>
+                  <span className="text-muted-foreground">new posts</span>
+                </div>
+                <div className="flex items-center gap-2 rounded-xl bg-card/70 border border-border/60 px-3 py-2.5">
+                  <Users className="h-4 w-4 text-primary shrink-0" />
+                  <span className="font-semibold tabular-nums">{catchUp.fromFriends}</span>
+                  <span className="text-muted-foreground">from people you follow</span>
+                </div>
+                <div className="flex items-center gap-2 rounded-xl bg-card/70 border border-border/60 px-3 py-2.5">
+                  <TrendingUp className="h-4 w-4 text-primary shrink-0" />
+                  <span className="font-semibold tabular-nums">{catchUp.trending}</span>
+                  <span className="text-muted-foreground">trending discussions</span>
+                </div>
+                <div className="flex items-center gap-2 rounded-xl bg-card/70 border border-border/60 px-3 py-2.5">
+                  <MessageCircle className="h-4 w-4 text-primary shrink-0" />
+                  <span className="font-semibold tabular-nums">{catchUp.messages}</span>
+                  <span className="text-muted-foreground">new messages</span>
+                </div>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground/80 text-right font-medium">
+                You're caught up.
+              </p>
+            </div>
+          )}
           {items.length === 0 ? (
             <div className="text-center py-16 px-4">
               <div className="bg-card rounded-3xl border border-border/60 shadow-sm shadow-black/[0.03] p-8 max-w-sm mx-auto">
@@ -600,6 +712,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
                       reposter={item.reposter}
                       onPostDeleted={handlePostDeleted}
                       onStarChange={handleStarChange}
+                      showRecommendationInfo={!userId && feedType === 'all'}
                     />
                   )}
                 </div>

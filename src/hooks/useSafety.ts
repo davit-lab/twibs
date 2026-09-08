@@ -47,6 +47,24 @@ export function useRepostedPosts() {
   return useIdList('reposted-posts', 'reposts', 'post_id');
 }
 
+export function useHiddenFeedPosts() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ['hidden-feed-posts'],
+    queryFn: async (): Promise<string[]> => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('feed_signals')
+        .select('post_id')
+        .eq('user_id', user.id)
+        .eq('signal', 'less');
+      if (error) throw error;
+      return (data || []).map((row) => row.post_id as string);
+    },
+    enabled: !!user,
+  });
+}
+
 interface SafetyActions {
   blockUser: (userId: string) => Promise<boolean>;
   unblockUser: (userId: string) => Promise<boolean>;

@@ -158,6 +158,7 @@ export function useExplore() {
       .select('id, content, visibility, star_count, comment_count, created_at, user_id, profiles:user_id(username, display_name, avatar_url, is_verified), post_media(id, url, type)')
       .eq('visibility', 'public')
       .eq('hidden', false)
+      .or('expires_at.is.null,expires_at.gt.now()')
       .order('star_count', { ascending: false })
       .limit(20);
 

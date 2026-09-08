@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useLoginSessions } from '@/hooks/useLoginSessions';
@@ -10,8 +10,10 @@ import { useAdminActions } from '@/hooks/useAdminActions';
 import InterestCard from '@/components/onboarding/InterestCard';
 import VerifyCodeDialog from '@/components/settings/VerifyCodeDialog';
 import OtpInput from '@/components/settings/OtpInput';
+import SocialCleanupSection from '@/components/settings/SocialCleanup';
 import { supabase } from '@/integrations/supabase/client';
 import MainLayout from '@/components/layout/MainLayout';
+import BrandLogo from '@/components/brand/BrandLogo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
@@ -28,17 +31,24 @@ import {
   Loader2, Camera, User, Bell, Lock, Shield, Palette, Eye,
   Globe, Moon, Smartphone, Laptop, MapPin,
   LogOut, Trash2, Key, AlertTriangle, Check, Mail, Upload,
-  PhoneOff, UserX, ChevronRight, ChevronLeft, Settings2,
-  MessageSquare, Heart, Bookmark, Search, Accessibility, BadgeCheck,
-  Sparkles, ShieldCheck, KeyRound, Megaphone
+  UserX, ChevronRight, PlayCircle,
+  MessageSquare, Accessibility, BadgeCheck, Heart,
+  Sparkles, ShieldCheck, KeyRound, Megaphone,
+  Info, HelpCircle, LifeBuoy, FileText, CalendarDays, Database,
+  Type, SlidersHorizontal, BellOff, ExternalLink, CheckCircle2, MoonStar, Ban, BookMarked,
+  RotateCcw, Ghost
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { getAllLanguages } from '@/lib/languageDetection';
 import { validateEmail } from '@/lib/emailValidation';
+import { normalizeHex, colorToHslTriple, hexToHsl } from '@/hooks/useUserPreferences';
 import ProfessionalAccountsSection from '@/components/ads/ProfessionalAccountsSection';
 
 const LANGUAGES = getAllLanguages();
+
+const APP_VERSION = '1.0.0';
+const SUPPORT_EMAIL = 'support@twibsers.com';
 
 const CONTENT_FILTERS = [
   { value: 'strict', label: 'Strict', description: 'Hide all potentially sensitive content' },
@@ -46,14 +56,37 @@ const CONTENT_FILTERS = [
   { value: 'none', label: 'None', description: 'Show all content without warnings' },
 ];
 
-const COLOR_ACCENTS = [
-  { value: 'purple', color: 'hsl(270 70% 55%)', label: 'Purple' },
-  { value: 'blue', color: 'hsl(220 70% 55%)', label: 'Blue' },
-  { value: 'green', color: 'hsl(160 70% 45%)', label: 'Green' },
-  { value: 'orange', color: 'hsl(30 90% 55%)', label: 'Orange' },
-  { value: 'pink', color: 'hsl(330 80% 55%)', label: 'Pink' },
-  { value: 'red', color: 'hsl(0 75% 55%)', label: 'Red' },
+const ACCENT_PRESETS = [
+  { value: '#7c3aed', label: 'Violet' },
+  { value: '#6d28d9', label: 'Purple' },
+  { value: '#3b82f6', label: 'Blue' },
+  { value: '#22d3ee', label: 'Cyan' },
+  { value: '#14b8a6', label: 'Teal' },
+  { value: '#22c55e', label: 'Green' },
+  { value: '#a3e635', label: 'Lime' },
+  { value: '#f59e0b', label: 'Amber' },
+  { value: '#f97316', label: 'Orange' },
+  { value: '#ef4444', label: 'Red' },
+  { value: '#e11d48', label: 'Rose' },
+  { value: '#f472b6', label: 'Pink' },
 ];
+
+const LEGACY_ACCENT_HEX: Record<string, string> = {
+  purple: '#7c3aed',
+  blue: '#3b82f6',
+  green: '#22c55e',
+  orange: '#f97316',
+  pink: '#f472b6',
+  red: '#ef4444',
+};
+
+function resolveAccentHex(stored?: string | null): string {
+  if (!stored) return '#7c3aed';
+  if (ACCENT_PRESETS.some((p) => p.value === stored)) return stored;
+  if (LEGACY_ACCENT_HEX[stored]) return LEGACY_ACCENT_HEX[stored];
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(stored)) return normalizeHex(stored) || '#7c3aed';
+  return '#7c3aed';
+}
 
 const BUBBLE_COLORS = [
   { value: 'purple', color: 'hsl(262 83% 62%)', label: 'Purple' },
@@ -66,6 +99,25 @@ const BUBBLE_COLORS = [
   { value: 'indigo', color: 'hsl(245 60% 62%)', label: 'Indigo' },
 ];
 
+const FAQ_ITEMS = [
+  {
+    q: 'Changing my username or display name requires verification?',
+    a: 'Yes — to keep your account secure, changing your name or username is confirmed with a one-time code sent to your email. There is also a monthly limit so those fields can\u2019t be changed endlessly.',
+  },
+  {
+    q: 'How do I change my password?',
+    a: `Open Security → Change Password. Enter your current password, pick a new one, then confirm with a one-time code sent to ${SUPPORT_EMAIL.replace('support@', 'your account email ')}.`,
+  },
+  {
+    q: 'What happens when I delete my account?',
+    a: 'Your profile and login are removed immediately. Your posts, reels and messages may be retained for up to 7 days so our support team can send you a copy of your data before everything is permanently purged. This action cannot be undone.',
+  },
+  {
+    q: 'Where can I report a problem?',
+    a: `For anything at all — bugs, reports, or a copy of your data — email us at ${SUPPORT_EMAIL}. We usually respond within a couple of days.`,
+  },
+];
+
 type SettingsSection =
   | 'account'
   | 'interests'
@@ -75,25 +127,51 @@ type SettingsSection =
   | 'privacy'
   | 'accessibility'
   | 'security'
-  | 'sessions'
-  | 'blocked'
-  | 'professional';
+  | 'professional'
+  | 'cleanup'
+  | 'about'
+  | 'help';
 
-const NAV_ITEMS: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
-  { id: 'account', label: 'Account', icon: User },
-  { id: 'interests', label: 'Interests', icon: Sparkles },
-  { id: 'appearance', label: 'Appearance', icon: Palette },
-  { id: 'content', label: 'Content & Feed', icon: Eye },
-  { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'privacy', label: 'Privacy', icon: Lock },
-  { id: 'accessibility', label: 'Accessibility', icon: Accessibility },
-  { id: 'security', label: 'Security', icon: Shield },
-  { id: 'professional', label: 'Professional', icon: Megaphone },
+const NAV_GROUPS: { label: string; items: { id: SettingsSection; label: string; icon: React.ElementType }[] }[] = [
+  {
+    label: 'Profile',
+    items: [
+      { id: 'account', label: 'Account', icon: User },
+      { id: 'interests', label: 'Interests', icon: Sparkles },
+      { id: 'professional', label: 'Professional', icon: Megaphone },
+    ],
+  },
+  {
+    label: 'Experience',
+    items: [
+      { id: 'appearance', label: 'Appearance', icon: Palette },
+      { id: 'content', label: 'Content & Feed', icon: Eye },
+      { id: 'notifications', label: 'Notifications', icon: Bell },
+    ],
+  },
+  {
+    label: 'Safety',
+    items: [
+      { id: 'privacy', label: 'Privacy', icon: Lock },
+      { id: 'accessibility', label: 'Accessibility', icon: Accessibility },
+      { id: 'security', label: 'Security', icon: Shield },
+      { id: 'cleanup', label: 'Social Cleanup', icon: Sparkles },
+    ],
+  },
+  {
+    label: 'More',
+    items: [
+      { id: 'about', label: 'About & Data', icon: FileText },
+      { id: 'help', label: 'Help & Support', icon: HelpCircle },
+    ],
+  },
 ];
+
+const NAV_ITEMS = NAV_GROUPS.flatMap((group) => group.items);
+const VALID_SECTIONS = new Set<string>(NAV_ITEMS.map((item) => item.id));
 
 export default function Settings() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, profile, loading: authLoading, updateProfile, signOut } = useAuth();
   const { deleteOwnAccount } = useAdminActions();
@@ -149,8 +227,7 @@ export default function Settings() {
 
   useEffect(() => {
     const section = searchParams.get('section');
-    const valid = NAV_ITEMS.some((item) => item.id === section);
-    if (valid) setActiveSection(section as SettingsSection);
+    if (section && VALID_SECTIONS.has(section)) setActiveSection(section as SettingsSection);
   }, [searchParams]);
 
   useEffect(() => {
@@ -420,35 +497,84 @@ export default function Settings() {
 
   return (
     <MainLayout>
-      <div className="max-w-5xl mx-auto px-4 py-6 pb-24 lg:pb-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">Settings</h1>
+      <div className="max-w-6xl mx-auto px-4 py-8 pb-28 lg:pb-10">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Settings</p>
+              <h1 className="mt-1.5 text-2xl sm:text-3xl font-bold tracking-tight">Make Twibsers yours</h1>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                Your profile, appearance, privacy and security — all in one place.
+              </p>
+            </div>
+            {user && profile && (
+              <Link
+                to={`/profile/${profile.username}`}
+                className="group flex shrink-0 items-center gap-3 rounded-2xl border border-border/70 bg-card p-2.5 pr-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-200 hover:border-primary/40 hover:bg-primary/[0.03]"
+              >
+                <Avatar className="h-10 w-10 ring-2 ring-primary/20 transition-shadow group-hover:ring-primary/40">
+                  <AvatarImage src={profile.avatar_url || undefined} />
+                  <AvatarFallback className="bg-muted text-sm font-semibold text-muted-foreground">
+                    {getInitials(profile.display_name || 'U')}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 text-left">
+                  <p className="flex items-center gap-1 text-sm font-semibold leading-tight">
+                    <span className="truncate max-w-[140px]">{profile.display_name || 'You'}</span>
+                    {profile.is_verified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                  </p>
+                  <p className="text-xs text-muted-foreground">@{profile.username || 'username'}</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5" />
+              </Link>
+            )}
+          </div>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-6">
+        <div className="flex flex-col lg:flex-row gap-7">
           {/* Sidebar Navigation */}
-          <nav className="lg:w-56 flex-shrink-0">
-            <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 -mx-4 px-4 lg:mx-0 lg:px-0">
-              {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => setSearchParams({ section: id })}
-                  className={cn(
-                    "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors",
-                    activeSection === id
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {label}
-                </button>
+          <nav className="lg:w-60 lg:flex-shrink-0">
+            <div className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 -mx-4 px-4 lg:mx-0 lg:px-0">
+              {NAV_GROUPS.map((group) => (
+                <div key={group.label} className="shrink-0 lg:mb-2 lg:w-full">
+                  <p className="hidden lg:block mb-1.5 px-3 pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground/60">
+                    {group.label}
+                  </p>
+                  <div className="flex lg:flex-col gap-1">
+                    {group.items.map(({ id, label, icon: Icon }) => {
+                      const active = activeSection === id;
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => setSearchParams({ section: id })}
+                          className={cn(
+                            "group flex items-center gap-2.5 rounded-xl px-2.5 py-[7px] text-sm font-medium whitespace-nowrap transition-all duration-200",
+                            active
+                              ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted/70"
+                          )}
+                        >
+                          <Icon
+                            className={cn(
+                              "h-[17px] w-[17px] shrink-0 transition-transform duration-200",
+                              active ? "scale-110" : "group-hover:scale-105"
+                            )}
+                            strokeWidth={active ? 2.4 : 1.8}
+                          />
+                          <span>{label}</span>
+                          {active && <ChevronRight className="ml-auto hidden lg:block h-4 w-4" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               ))}
             </div>
           </nav>
 
           {/* Content Area */}
-          <div className="flex-1 min-w-0">
+          <div key={activeSection} className="min-w-0 flex-1 animate-fade-in">
             {activeSection === 'account' && (
               <AccountSection
                 profile={profile}
@@ -469,9 +595,7 @@ export default function Settings() {
               />
             )}
 
-            {activeSection === 'interests' && (
-              <InterestsSection />
-            )}
+            {activeSection === 'interests' && <InterestsSection />}
 
             {activeSection === 'appearance' && (
               <AppearanceSection
@@ -507,6 +631,8 @@ export default function Settings() {
                 unblockUser={unblockUser}
                 saving={saving}
                 onSave={handleSave}
+                preferences={preferences}
+                updatePreferences={updatePreferences}
               />
             )}
 
@@ -533,6 +659,12 @@ export default function Settings() {
             )}
 
             {activeSection === 'professional' && <ProfessionalAccountsSection />}
+
+            {activeSection === 'cleanup' && <SocialCleanupSection />}
+
+            {activeSection === 'about' && <AboutSection profile={profile} />}
+
+            {activeSection === 'help' && <HelpSection />}
           </div>
         </div>
       </div>
@@ -792,36 +924,58 @@ export default function Settings() {
   );
 }
 
-// ─── Section Components ──────────────────────────────────────────────────────
+// ─── Section Primitives ──────────────────────────────────────────────────────
 
-function SectionCard({ title, description, children, className }: { title: string; description?: string; children: React.ReactNode; className?: string }) {
+function SectionCard({ icon: Icon, title, description, children, className }: { icon?: React.ElementType; title: string; description?: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("border border-border rounded-xl", className)}>
-      <div className="px-5 py-4 border-b border-border">
-        <h2 className="text-base font-semibold">{title}</h2>
-        {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
+    <section className={cn("rounded-2xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden", className)}>
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-border/70 bg-gradient-to-b from-primary/[0.06] to-transparent">
+        <span className="h-5 w-1 shrink-0 rounded-full bg-primary/60" />
+        {Icon && (
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Icon className="h-[18px] w-[18px]" />
+          </span>
+        )}
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-semibold leading-tight">{title}</h2>
+          {description && <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{description}</p>}
+        </div>
       </div>
       <div className="p-5">{children}</div>
+    </section>
+  );
+}
+
+function SettingRow({ icon: Icon, label, description, children, className }: { icon?: React.ElementType; label: string; description?: string; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn("group/setting flex items-center justify-between gap-4 py-3.5", className)}>
+      <div className="flex min-w-0 flex-1 items-start gap-3">
+        {Icon && (
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/70 text-muted-foreground transition-colors group-hover/setting:text-primary">
+            <Icon className="h-[17px] w-[17px]" />
+          </span>
+        )}
+        <div className="min-w-0">
+          <p className="text-sm font-medium leading-snug">{label}</p>
+          {description && <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{description}</p>}
+        </div>
+      </div>
+      <div className="shrink-0">{children}</div>
     </div>
   );
 }
 
-function SettingRow({ label, description, children, className }: { label: string; description?: string; children: React.ReactNode; className?: string }) {
-  return (
-    <div className={cn("flex items-center justify-between py-3", className)}>
-      <div className="flex-1 min-w-0 mr-4">
-        <p className="text-sm font-medium">{label}</p>
-        {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
-      </div>
-      <div className="flex-shrink-0">{children}</div>
-    </div>
-  );
-}
+// ─── Account ─────────────────────────────────────────────────────────────────
 
 function AccountSection({ profile, formData, setFormData, user, saving, uploadingAvatar, avatarInputRef, onUploadAvatar, onSave, onChangePassword, onChangeEmail, usernameUsageLabel, usernameRemaining, nameUsageLabel, nameRemaining }: any) {
+  const memberSince = profile?.created_at ? format(new Date(profile.created_at), 'MMMM yyyy') : null;
+  const emailVerified = !!user?.email_confirmed_at;
+
   return (
     <div className="space-y-5">
-      <SectionCard title="Profile Information" description="Update your public profile details">
+      <ProfileCompletionCard profile={profile} formData={formData} />
+
+      <SectionCard icon={User} title="Profile Information" description="Update your public profile details">
         <div className="flex items-center gap-5 mb-6">
           <div className="relative group">
             <Avatar className="h-20 w-20">
@@ -848,32 +1002,32 @@ function AccountSection({ profile, formData, setFormData, user, saving, uploadin
         </div>
 
         <div className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="display_name">Display Name</Label>
-                <Input id="display_name" value={formData.display_name} onChange={(e) => setFormData({ ...formData, display_name: e.target.value })} placeholder="Your display name" />
-                {nameUsageLabel && (
-                  <p className={cn('text-xs', nameRemaining <= 0 ? 'text-destructive font-medium' : 'text-muted-foreground')}>
-                    {nameRemaining <= 0 ? 'No display name changes left this month' : `${nameUsageLabel} · ${nameRemaining} left`}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="username">Username</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
-                  <Input id="username" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })} placeholder="username" className="pl-7" maxLength={30} />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  3-30 characters. Letters, numbers, underscores only.
-                  {usernameUsageLabel && (
-                    <span className={cn('ml-1', usernameRemaining <= 0 ? 'text-destructive font-medium' : '')}>
-                      · {usernameRemaining <= 0 ? 'no changes left this month' : `${usernameUsageLabel}, ${usernameRemaining} left`}
-                    </span>
-                  )}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="display_name">Display Name</Label>
+              <Input id="display_name" value={formData.display_name} onChange={(e) => setFormData({ ...formData, display_name: e.target.value })} placeholder="Your display name" />
+              {nameUsageLabel && (
+                <p className={cn('text-xs', nameRemaining <= 0 ? 'text-destructive font-medium' : 'text-muted-foreground')}>
+                  {nameRemaining <= 0 ? 'No display name changes left this month' : `${nameUsageLabel} · ${nameRemaining} left`}
                 </p>
-              </div>
+              )}
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="username">Username</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
+                <Input id="username" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })} placeholder="username" className="pl-7" maxLength={30} />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                3-30 characters. Letters, numbers, underscores only.
+                {usernameUsageLabel && (
+                  <span className={cn('ml-1', usernameRemaining <= 0 ? 'text-destructive font-medium' : '')}>
+                    · {usernameRemaining <= 0 ? 'no changes left this month' : `${usernameUsageLabel}, ${usernameRemaining} left`}
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="bio">Bio</Label>
@@ -893,19 +1047,39 @@ function AccountSection({ profile, formData, setFormData, user, saving, uploadin
         </div>
       </SectionCard>
 
-      <SectionCard title="Email Address" description="Your email is used for sign-in and notifications">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-muted">
+      <SectionCard icon={CalendarDays} title="Member Since" description="A little info about your account">
+        <div className="divide-y divide-border/70">
+          <SettingRow icon={CalendarDays} label="Member since">
+            <span className="text-sm font-medium">{memberSince || '—'}</span>
+          </SettingRow>
+          <SettingRow icon={Lock} label="Account type">
+            <span className="text-sm font-medium capitalize">{profile?.privacy === 'private' ? 'Private' : 'Public'}</span>
+          </SettingRow>
+        </div>
+      </SectionCard>
+
+      <SectionCard icon={Mail} title="Email Address" description="Your email is used for sign-in and notifications">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2 rounded-lg bg-muted shrink-0">
               <Mail className="h-4 w-4" />
             </div>
-            <span className="text-sm font-medium">{user?.email}</span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium truncate">{user?.email}</p>
+              <span className={cn(
+                "inline-flex items-center gap-1 text-xs font-medium",
+                emailVerified ? "text-success" : "text-warning"
+              )}>
+                {emailVerified ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                {emailVerified ? 'Verified' : 'Not verified'}
+              </span>
+            </div>
           </div>
           <Button variant="outline" size="sm" onClick={onChangeEmail}>Change Email</Button>
         </div>
       </SectionCard>
 
-      <SectionCard title="Password" description="Manage your account password">
+      <SectionCard icon={Key} title="Password" description="Manage your account password">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-muted">
@@ -913,21 +1087,21 @@ function AccountSection({ profile, formData, setFormData, user, saving, uploadin
             </div>
             <div>
               <p className="text-sm font-medium">Password</p>
-              <p className="text-xs text-muted-foreground">Last changed: Unknown</p>
+              <p className="text-xs text-muted-foreground">Change it anytime — a code confirms the change.</p>
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={onChangePassword}>Change Password</Button>
         </div>
       </SectionCard>
 
-      <SectionCard title="Verification" description="Get the blue badge for your account">
+      <SectionCard icon={BadgeCheck} title="Verification" description="Get the blue badge for your account">
         <VerificationRequestCard profile={profile} />
       </SectionCard>
 
       <div className="flex justify-end">
-        <Button onClick={onSave} disabled={saving}>
-          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Save Changes
+        <Button onClick={onSave} disabled={saving} className="gap-2">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+          {saving ? 'Saving…' : 'Save Changes'}
         </Button>
       </div>
     </div>
@@ -1013,6 +1187,8 @@ function VerificationRequestCard({ profile }: { profile: { is_verified?: boolean
   );
 }
 
+// ─── Interests ───────────────────────────────────────────────────────────────
+
 function InterestsSection() {
   const { data: userInterests, isLoading } = useUserInterests();
   const { data: categories } = useInterestCategories();
@@ -1034,6 +1210,7 @@ function InterestsSection() {
   return (
     <div className="space-y-5">
       <SectionCard
+        icon={Sparkles}
         title="Your Interests"
         description="These topics fill your Interests feed. Add or remove any you like."
       >
@@ -1077,10 +1254,167 @@ function InterestsSection() {
   );
 }
 
+// ─── Appearance ──────────────────────────────────────────────────────────────
+
+function AccentColorCard({ preferences, updatePreferences }: any) {
+  const stored = preferences?.color_accent || 'purple';
+  const [draft, setDraft] = useState<string>(resolveAccentHex(stored));
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const currentHex = resolveAccentHex(stored);
+  const isCustom = !ACCENT_PRESETS.some((p) => p.value === draft);
+
+  const previewColors = useMemo(() => {
+    const c = colorToHslTriple(draft) || { primary: '270 70% 55%', glow: '270 100% 65%' };
+    return {
+      solid: draft,
+      soft: `hsl(${c.primary} / 0.14)`,
+      muted: `hsl(${c.primary} / 0.08)`,
+    };
+  }, [draft]);
+
+  const applyDraft = (hex: string) => {
+    setDraft(hex);
+    const root = document.documentElement;
+    const c = colorToHslTriple(hex);
+    if (c) {
+      root.style.setProperty('--primary', c.primary);
+      root.style.setProperty('--primary-glow', c.glow);
+      root.style.setProperty('--ring', c.primary);
+    }
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    persistTimer.current = setTimeout(() => {
+      updatePreferences({ color_accent: hex });
+    }, 450);
+  };
+
+  const pickCustom = (value: string) => {
+    const hex = normalizeHex(value);
+    if (hex) applyDraft(hex);
+  };
+
+  const resetToDefault = () => {
+    applyDraft('#7c3aed');
+  };
+
+  useEffect(() => {
+    return () => {
+      if (persistTimer.current) clearTimeout(persistTimer.current);
+    };
+  }, []);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2.5">Presets</p>
+        <div className="grid grid-cols-4 sm:grid-cols-6 gap-2.5">
+          {ACCENT_PRESETS.map(({ value, label }) => {
+            const active = value === currentHex;
+            return (
+              <button
+                key={value}
+                onClick={() => applyDraft(value)}
+                className="flex flex-col items-center gap-1.5 group"
+                title={label}
+              >
+                <span
+                  className={cn(
+                    "flex h-10 w-10 items-center justify-center rounded-full transition-all duration-200 group-hover:scale-110",
+                    active && "scale-105"
+                  )}
+                  style={{
+                    backgroundColor: value,
+                    boxShadow: active ? `0 0 0 2px ${value}, 0 0 0 4px rgba(0,0,0,0.12), 0 6px 16px -6px ${value}66` : undefined,
+                  }}
+                >
+                  {active && <Check className="h-5 w-5 text-white" strokeWidth={3} />}
+                </span>
+                <span className={cn("text-[10px] leading-none", active ? "text-primary font-semibold" : "text-muted-foreground")}>
+                  {label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="border-t border-border/70 pt-4">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2.5">Custom color</p>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-border/70 p-3.5">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <label
+              className="relative h-11 w-11 shrink-0 cursor-pointer overflow-hidden rounded-xl ring-1 ring-border/60 shadow-inner"
+              title="Open color picker"
+            >
+              <span className="absolute inset-0 transition-colors" style={{ backgroundColor: draft }} />
+              <span className="absolute inset-0 bg-black/10 transition-opacity hover:bg-black/20" />
+              <input
+                type="color"
+                value={draft}
+                onChange={(e) => pickCustom(e.target.value)}
+                className="absolute inset-0 cursor-pointer opacity-0"
+                aria-label="Custom accent color"
+              />
+            </label>
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Pick any shade</p>
+              <p className="text-xs text-muted-foreground">Tap the swatch to open the picker, or type a hex code.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              value={draft}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9a-fA-F#]/g, '').slice(0, 7);
+                setDraft(val);
+              }}
+              onBlur={() => pickCustom(draft)}
+              onKeyDown={(e) => { if (e.key === 'Enter') pickCustom(draft); }}
+              className="h-9 w-28 font-mono text-xs uppercase"
+              aria-label="Hex color"
+            />
+            {isCustom && (
+              <Button variant="ghost" size="sm" onClick={resetToDefault} className="h-9 gap-1.5 px-2.5">
+                <RotateCcw className="h-3.5 w-3.5" />
+                Reset
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl bg-muted/40 p-4">
+        <p className="text-xs font-medium text-muted-foreground mb-3">Preview</p>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium"
+            style={{ color: draft, backgroundColor: previewColors.soft }}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Active tab
+          </span>
+          <span className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white" style={{ backgroundColor: draft, boxShadow: `0 6px 16px -6px ${draft}66` }}>
+            Button
+          </span>
+          <span
+            className="inline-flex h-6 w-11 items-center rounded-full p-0.5"
+            style={{ backgroundColor: draft, boxShadow: `0 4px 12px -4px ${draft}66` }}
+          >
+            <span className="ml-auto block h-5 w-5 rounded-full bg-white shadow-sm" />
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium" style={{ color: draft, backgroundColor: previewColors.muted }}>
+            <Heart className="h-3 w-3 fill-current" /> 1.2k
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AppearanceSection({ preferences, updatePreferences }: any) {
   return (
     <div className="space-y-5">
-      <SectionCard title="Theme" description="Twibsers is dark mode only">
+      <SectionCard icon={MoonStar} title="Theme" description="Twibsers is dark mode only">
         <div className="grid grid-cols-1 gap-3">
           {[
             { value: 'dark', icon: Moon, label: 'Dark', desc: 'Easy on eyes' },
@@ -1106,7 +1440,7 @@ function AppearanceSection({ preferences, updatePreferences }: any) {
         </div>
       </SectionCard>
 
-      <SectionCard title="Typography" description="Adjust text size and display density">
+      <SectionCard icon={Type} title="Typography" description="Adjust text size and display density">
         <div className="space-y-5">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -1171,28 +1505,11 @@ function AppearanceSection({ preferences, updatePreferences }: any) {
         </div>
       </SectionCard>
 
-      <SectionCard title="Accent Color" description="Personalize your color theme">
-        <div className="grid grid-cols-6 gap-3">
-          {COLOR_ACCENTS.map(({ value, color, label }) => (
-            <button
-              key={value}
-              onClick={() => updatePreferences({ color_accent: value })}
-              className={cn(
-                "relative aspect-square rounded-xl transition-all flex items-center justify-center",
-                preferences?.color_accent === value
-                  ? "ring-2 ring-offset-2 ring-offset-background scale-110"
-                  : "hover:scale-105"
-              )}
-              style={{ backgroundColor: color, '--tw-ring-color': color } as React.CSSProperties}
-              title={label}
-            >
-              {preferences?.color_accent === value && <Check className="h-5 w-5 text-white" />}
-            </button>
-          ))}
-        </div>
+      <SectionCard icon={Palette} title="Accent Color" description="The color that paints Twibsers for you — presets or any custom shade">
+        <AccentColorCard preferences={preferences} updatePreferences={updatePreferences} />
       </SectionCard>
 
-      <SectionCard title="Chat Colors" description="Pick the color of the messages you send">
+      <SectionCard icon={MessageSquare} title="Chat Colors" description="Pick the color of the messages you send">
         <div className="space-y-4">
           <div className="p-4 rounded-xl bg-muted/40 flex flex-col gap-2">
             <div className="flex justify-start">
@@ -1237,22 +1554,26 @@ function AppearanceSection({ preferences, updatePreferences }: any) {
   );
 }
 
+// ─── Content & Feed ──────────────────────────────────────────────────────────
+
 function ContentSection({ preferences, updatePreferences }: any) {
   return (
     <div className="space-y-5">
-      <SectionCard title="Feed Settings" description="Control what you see in your feed">
-        <div className="space-y-4">
-          <SettingRow label="Autoplay Videos" description="Automatically play videos as you scroll">
+      <SectionCard icon={SlidersHorizontal} title="Feed Settings" description="Control what you see in your feed">
+        <div className="space-y-1">
+          <SettingRow icon={PlayCircle} label="Autoplay Videos" description="Automatically play videos as you scroll">
             <Switch checked={preferences?.autoplay_videos ?? true} onCheckedChange={(c: boolean) => updatePreferences({ autoplay_videos: c })} />
           </SettingRow>
-
-          <SettingRow label="Show Sensitive Content" description="Display content marked as sensitive" className="border-t border-border">
+          <SettingRow icon={Heart} label="No Like Counts" description="Hide popularity metrics — visitors see that people enjoyed it instead of exact counts" className="border-t border-border/70">
+            <Switch checked={preferences?.hide_like_counts ?? false} onCheckedChange={(c: boolean) => updatePreferences({ hide_like_counts: c })} />
+          </SettingRow>
+          <SettingRow icon={Eye} label="Show Sensitive Content" description="Display content marked as sensitive" className="border-t border-border/70">
             <Switch checked={preferences?.show_sensitive_content ?? false} onCheckedChange={(c: boolean) => updatePreferences({ show_sensitive_content: c })} />
           </SettingRow>
         </div>
       </SectionCard>
 
-      <SectionCard title="Content Filter" description="Choose how to filter sensitive content">
+      <SectionCard icon={Ban} title="Content Filter" description="Choose how to filter sensitive content">
         <RadioGroup
           value={preferences?.content_filter || 'standard'}
           onValueChange={(v: string) => updatePreferences({ content_filter: v })}
@@ -1277,7 +1598,7 @@ function ContentSection({ preferences, updatePreferences }: any) {
         </RadioGroup>
       </SectionCard>
 
-      <SectionCard title="Language" description="Choose your preferred language">
+      <SectionCard icon={Globe} title="Language" description="Choose your preferred language">
         <Select value={preferences?.language || 'en'} onValueChange={(v: string) => updatePreferences({ language: v })}>
           <SelectTrigger className="w-full">
             <SelectValue />
@@ -1293,28 +1614,30 @@ function ContentSection({ preferences, updatePreferences }: any) {
   );
 }
 
+// ─── Notifications ───────────────────────────────────────────────────────────
+
 function NotificationsSection({ formData, setFormData, preferences, updatePreferences, saving, onSave }: any) {
   return (
     <div className="space-y-5">
-      <SectionCard title="Notification Preferences" description="Choose how you want to be notified">
+      <SectionCard icon={Bell} title="Notification Preferences" description="Choose how you want to be notified">
         <div className="space-y-1">
-          <SettingRow label="Email Notifications" description="Receive email updates about activity on your account">
+          <SettingRow icon={Mail} label="Email Notifications" description="Receive email updates about activity on your account">
             <Switch checked={formData.email_notifications} onCheckedChange={(c: boolean) => setFormData({ ...formData, email_notifications: c })} />
           </SettingRow>
-          <SettingRow label="Push Notifications" description="Receive push notifications on your devices" className="border-t border-border">
+          <SettingRow icon={Smartphone} label="Push Notifications" description="Receive push notifications on your devices" className="border-t border-border/70">
             <Switch checked={formData.push_notifications} onCheckedChange={(c: boolean) => setFormData({ ...formData, push_notifications: c })} />
           </SettingRow>
         </div>
       </SectionCard>
 
-      <SectionCard title="Do Not Disturb" description="Silence incoming calls and notifications">
+      <SectionCard icon={BellOff} title="Do Not Disturb" description="Silence incoming calls and notifications">
         <div className="space-y-3">
-          <SettingRow label="Enable Do Not Disturb" description="When enabled, incoming calls will be silently declined">
+          <SettingRow icon={BellOff} label="Enable Do Not Disturb" description="When enabled, incoming calls will be silently declined">
             <Switch checked={preferences?.do_not_disturb ?? false} onCheckedChange={(c: boolean) => updatePreferences({ do_not_disturb: c })} />
           </SettingRow>
           {preferences?.do_not_disturb && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-              <Bell className="h-4 w-4 text-amber-500" />
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
               <p className="text-sm text-amber-600 dark:text-amber-400">Do Not Disturb is active. All incoming calls will be silently declined.</p>
             </div>
           )}
@@ -1322,25 +1645,30 @@ function NotificationsSection({ formData, setFormData, preferences, updatePrefer
       </SectionCard>
 
       <div className="flex justify-end">
-        <Button onClick={onSave} disabled={saving}>
-          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Save Changes
+        <Button onClick={onSave} disabled={saving} className="gap-2">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+          {saving ? 'Saving…' : 'Save Changes'}
         </Button>
       </div>
     </div>
   );
 }
 
-function PrivacySection({ formData, setFormData, blockedUsers, blocksLoading, unblockUser, saving, onSave }: any) {
+// ─── Privacy ─────────────────────────────────────────────────────────────────
+
+function PrivacySection({ formData, setFormData, blockedUsers, blocksLoading, unblockUser, saving, onSave, preferences, updatePreferences }: any) {
   return (
     <div className="space-y-5">
-      <SectionCard title="Account Privacy" description="Control who can see your content">
-        <SettingRow label="Private Account" description="Only approved followers can see your posts and profile">
+      <SectionCard icon={Lock} title="Account Privacy" description="Control who can see your content">
+        <SettingRow icon={Eye} label="Private Account" description="Only approved followers can see your posts and profile">
           <Switch checked={formData.privacy === 'private'} onCheckedChange={(c: boolean) => setFormData({ ...formData, privacy: c ? 'private' : 'public' })} />
+        </SettingRow>
+        <SettingRow icon={Ghost} label="Ghost Mode" description="Browse profiles privately — your visits won't appear in their profile viewers" className="border-t border-border/70">
+          <Switch checked={preferences?.ghost_mode ?? false} onCheckedChange={(c: boolean) => updatePreferences({ ghost_mode: c })} />
         </SettingRow>
       </SectionCard>
 
-      <SectionCard title="Blocked Users" description="Users you've blocked cannot contact or call you">
+      <SectionCard icon={UserX} title="Blocked Users" description="Users you've blocked cannot contact or call you">
         {blocksLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -1376,27 +1704,29 @@ function PrivacySection({ formData, setFormData, blockedUsers, blocksLoading, un
       </SectionCard>
 
       <div className="flex justify-end">
-        <Button onClick={onSave} disabled={saving}>
-          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Save Changes
+        <Button onClick={onSave} disabled={saving} className="gap-2">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+          {saving ? 'Saving…' : 'Save Changes'}
         </Button>
       </div>
     </div>
   );
 }
 
+// ─── Accessibility ───────────────────────────────────────────────────────────
+
 function AccessibilitySection({ preferences, updatePreferences }: any) {
   return (
     <div className="space-y-5">
-      <SectionCard title="Accessibility" description="Make Twibsers easier to use">
+      <SectionCard icon={Accessibility} title="Accessibility" description="Make Twibsers easier to use">
         <div className="space-y-1">
-          <SettingRow label="Reduce Motion" description="Minimize animations and transitions">
+          <SettingRow icon={Moon} label="Reduce Motion" description="Minimize animations and transitions">
             <Switch checked={preferences?.reduced_motion ?? false} onCheckedChange={(c: boolean) => updatePreferences({ reduced_motion: c })} />
           </SettingRow>
-          <SettingRow label="High Contrast" description="Increase color contrast for better visibility" className="border-t border-border">
+          <SettingRow icon={Eye} label="High Contrast" description="Increase color contrast for better visibility" className="border-t border-border/70">
             <Switch checked={preferences?.high_contrast ?? false} onCheckedChange={(c: boolean) => updatePreferences({ high_contrast: c })} />
           </SettingRow>
-          <SettingRow label="Screen Reader Optimized" description="Optimize experience for screen readers" className="border-t border-border">
+          <SettingRow icon={Accessibility} label="Screen Reader Optimized" description="Optimize experience for screen readers" className="border-t border-border/70">
             <Switch checked={preferences?.screen_reader_optimized ?? false} onCheckedChange={(c: boolean) => updatePreferences({ screen_reader_optimized: c })} />
           </SettingRow>
         </div>
@@ -1405,21 +1735,23 @@ function AccessibilitySection({ preferences, updatePreferences }: any) {
   );
 }
 
+// ─── Security ────────────────────────────────────────────────────────────────
+
 function SecuritySection({ user, sessions, sessionsLoading, preferences, updatePreferences, revokeSession, revokeAllOtherSessions, onChangePassword, onDeleteAccount, getDeviceIcon }: any) {
   return (
     <div className="space-y-5">
-      <SectionCard title="Account Security" description="Manage your security settings">
+      <SectionCard icon={Shield} title="Account Security" description="Manage your security settings">
         <div className="space-y-1">
-          <SettingRow label="Two-Factor Authentication" description="Add an extra layer of security to your account">
+          <SettingRow icon={Shield} label="Two-Factor Authentication" description="Add an extra layer of security to your account">
             <Switch checked={preferences?.two_factor_enabled ?? false} onCheckedChange={(c: boolean) => updatePreferences({ two_factor_enabled: c })} />
           </SettingRow>
-          <SettingRow label="Login Alerts" description="Get notified of new logins to your account" className="border-t border-border">
+          <SettingRow icon={AlertTriangle} label="Login Alerts" description="Get notified of new logins to your account" className="border-t border-border/70">
             <Switch checked={preferences?.login_alerts ?? true} onCheckedChange={(c: boolean) => updatePreferences({ login_alerts: c })} />
           </SettingRow>
         </div>
       </SectionCard>
 
-      <SectionCard title="Active Sessions" description="Manage devices logged into your account">
+      <SectionCard icon={Smartphone} title="Active Sessions" description="Manage devices logged into your account">
         {sessionsLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -1470,7 +1802,7 @@ function SecuritySection({ user, sessions, sessionsLoading, preferences, updateP
         )}
       </SectionCard>
 
-      <SectionCard title="Danger Zone" description="Irreversible actions" className="border-destructive/30">
+      <SectionCard icon={AlertTriangle} title="Danger Zone" description="Irreversible actions" className="border-destructive/30">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Delete Account</p>
@@ -1483,6 +1815,172 @@ function SecuritySection({ user, sessions, sessionsLoading, preferences, updateP
         </div>
       </SectionCard>
     </div>
+  );
+}
+
+// ─── About & Data ────────────────────────────────────────────────────────────
+
+function AboutSection({ profile }: { profile: { privacy?: string } | null }) {
+  return (
+    <div className="space-y-5">
+      <SectionCard icon={Info} title="About Twibsers" description="Version and basic information">
+        <div className="flex items-center gap-4">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-muted/40">
+            <BrandLogo className="h-7" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">Twibsers</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Version {APP_VERSION}</p>
+            <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+              A place for you, your friends, your reels and the community you build in between.
+            </p>
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard icon={FileText} title="Legal" description="The rules that keep Twibsers safe and fair">
+        <div className="space-y-1">
+          <SettingRow icon={FileText} label="Terms of Service" description="The agreement you agreed to when you signed up">
+            <Button variant="ghost" size="sm" asChild className="gap-1.5">
+              <Link to="/terms">
+                View
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </SettingRow>
+          <SettingRow icon={ShieldCheck} label="Privacy Policy" description="How your data is collected and used" className="border-t border-border/70">
+            <Button variant="ghost" size="sm" asChild className="gap-1.5">
+              <Link to="/privacy">
+                View
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </SettingRow>
+          <SettingRow icon={BookMarked} label="Community Guidelines" description="What we expect from the community" className="border-t border-border/70">
+            <Button variant="ghost" size="sm" asChild className="gap-1.5">
+              <Link to="/community-guidelines">
+                View
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </SettingRow>
+        </div>
+      </SectionCard>
+
+      <SectionCard icon={Database} title="Your Data" description="What we store and how to get it">
+        <div className="space-y-1">
+          <SettingRow icon={Database} label="Account data" description="Profile, posts, messages and settings you created">
+            <span className="text-xs font-medium text-muted-foreground">On Twibsers servers</span>
+          </SettingRow>
+          <SettingRow icon={Mail} label="Request a copy of your data" description="Email support and we\u2019ll prepare an export of your account" className="border-t border-border/70">
+            <Button variant="outline" size="sm" asChild className="gap-1.5">
+              <a href={`mailto:${SUPPORT_EMAIL}?subject=Data%20export%20request`}>
+                Request
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </Button>
+          </SettingRow>
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
+
+// ─── Help & Support ──────────────────────────────────────────────────────────
+
+function HelpSection() {
+  return (
+    <div className="space-y-5">
+      <SectionCard icon={HelpCircle} title="Frequently asked questions" description="Quick answers to common questions">
+        <Accordion type="single" collapsible className="w-full">
+          {FAQ_ITEMS.map((item, i) => (
+            <AccordionItem key={i} value={`faq-${i}`} className="border-b border-border/70 last:border-b-0">
+              <AccordionTrigger className="text-sm font-medium text-left gap-3 py-3.5">
+                {item.q}
+              </AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed pb-4">
+                {item.a}
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      </SectionCard>
+
+      <SectionCard icon={LifeBuoy} title="Still stuck?" description="We\u2019re happy to help">
+        <div className="space-y-1">
+          <SettingRow icon={Mail} label="Contact support" description={`Email us any time at ${SUPPORT_EMAIL}`}>
+            <Button variant="outline" size="sm" asChild className="gap-1.5">
+              <a href={`mailto:${SUPPORT_EMAIL}`}>
+                Send email
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </Button>
+          </SettingRow>
+          <SettingRow icon={BookMarked} label="Read the guidelines" description="Understand what's allowed on Twibsers" className="border-t border-border/70">
+            <Button variant="ghost" size="sm" asChild className="gap-1.5">
+              <Link to="/community-guidelines">
+                View
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </SettingRow>
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
+
+function ProfileCompletionCard({ profile, formData }: any) {
+  const steps = [
+    { label: 'Profile photo', done: !!profile?.avatar_url, hint: 'Add a photo' },
+    { label: 'Display name', done: !!formData.display_name, hint: 'Add a name' },
+    { label: 'Username', done: !!formData.username, hint: 'Add a username' },
+    { label: 'Bio', done: !!formData.bio, hint: 'Add a bio' },
+    { label: 'Location', done: !!formData.location, hint: 'Add a location' },
+    { label: 'Website', done: !!formData.website, hint: 'Add a website' },
+  ];
+  const pct = Math.round((steps.filter((s) => s.done).length / steps.length) * 100);
+  const ttl = 1200;
+  const dash = 2 * Math.PI * (ttl / 2);
+  const offset = dash - (pct / 100) * dash;
+
+  return (
+    <section className="rounded-2xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
+      <div className="px-5 py-4 flex items-center gap-4">
+        <div className="relative h-[34px] w-[34px] shrink-0">
+          <svg viewBox="0 0 34 34" className="h-full w-full -rotate-90">
+            <circle cx="17" cy="17" r="15" fill="none" stroke="var(--border)" strokeWidth="4" strokeLinecap="round" />
+            <circle
+              cx="17" cy="17" r="15" fill="none"
+              stroke="hsl(var(--primary))" strokeWidth="4" strokeLinecap="round"
+              strokeDasharray={dash} strokeDashoffset={offset}
+              className="transition-[stroke-dashoffset] duration-500 ease-out"
+            />
+          </svg>
+          <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold tabular-nums">
+            {pct}
+          </span>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[15px] font-semibold leading-tight">Profile strength</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {pct === 100 ? 'You look great — your profile is complete.' : `${pct}% complete · fill in the highlights to stand out.`}
+          </p>
+        </div>
+      </div>
+      {pct < 100 && (
+        <div className="px-5 pb-4">
+          <div className="flex flex-wrap gap-1.5 border-t border-border/70 pt-3.5">
+            {steps.filter((s) => !s.done).map((s) => (
+              <span key={s.label} className="inline-flex items-center gap-1.5 rounded-full bg-muted/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                <AlertTriangle className="h-3 w-3" />
+                {s.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

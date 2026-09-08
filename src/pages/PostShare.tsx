@@ -18,6 +18,8 @@ const POST_SELECT = `
   created_at,
   updated_at,
   is_edited,
+  expires_at,
+  context_meta,
   user_id,
   profiles!inner (
     username,
@@ -58,6 +60,7 @@ export default function PostShare() {
         .select(POST_SELECT)
         .eq('id', postId)
         .eq('hidden', false)
+        .or('expires_at.is.null,expires_at.gt.now()')
         .maybeSingle();
 
       if (error || !data) {

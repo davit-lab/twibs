@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +16,13 @@ import {
   Collapsible,
   CollapsibleContent,
 } from '@/components/ui/collapsible';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import CommentSection from '@/components/comments/CommentSection';
 import MediaLightbox from '@/components/MediaLightbox';
@@ -45,9 +53,25 @@ import {
   VolumeX,
   Volume2,
   Megaphone,
+  Info,
+  MapPin,
+  Calendar,
+  Bot,
+  ExternalLink,
+  Heart,
+  ShieldCheck,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
+
+export interface PostContextMeta {
+  location?: string | null;
+  source_url?: string | null;
+  when?: string | null;
+  is_edited?: boolean;
+  is_ai_generated?: boolean;
+  references?: string | null;
+}
 
 interface PostProfile {
   username: string;
@@ -78,6 +102,7 @@ interface PostData {
   profiles: PostProfile;
   post_media: PostMedia[];
   user_has_starred?: boolean;
+  context_meta?: PostContextMeta | null;
 }
 
 export type { PostData };
@@ -88,6 +113,7 @@ interface PostCardProps {
   onStarChange?: () => void;
   reposter?: ReposterProfile | null;
   defaultCommentsOpen?: boolean;
+  showRecommendationInfo?: boolean;
 }
 
 interface ReposterProfile {
@@ -103,8 +129,9 @@ const visibilityIcons = {
   private: Lock,
 };
 
-export default function PostCard({ post, onPostDeleted, onStarChange, reposter, defaultCommentsOpen = false }: PostCardProps) {
+export default function PostCard({ post, onPostDeleted, onStarChange, reposter, defaultCommentsOpen = false, showRecommendationInfo = false }: PostCardProps) {
   const { user, profile: currentUserProfile } = useAuth();
+  const { preferences } = useUserPreferences();
   const { toast } = useToast();
   const navigate = useNavigate();
   
@@ -120,6 +147,12 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter, 
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [recommendationOpen, setRecommendationOpen] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
+  const [recommendationReasons, setRecommendationReasons] = useState<string[]>([]);
+  const [recommendationLoading, setRecommendationLoading] = useState(false);
+  const [addingSignal, setAddingSignal] = useState(false);
+  const [signalApplied, setSignalApplied] = useState<'less' | 'more' | null>(null);
 
   const { data: savedPostIds = [] } = useSavedPosts();
   const { data: repostedPostIds = [] } = useRepostedPosts();
@@ -333,6 +366,97 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter, 
     }
   };
 
+  const openRecommendation = async () => {
+    setRecommendationOpen(true);
+    if (recommendationReasons.length > 0) return;
+    setRecommendationLoading(true);
+    try {
+      const reasons: string[] = [];
+      if (!user) return;
+
+      const [{ data: follow }, { data: reposts }] = await Promise.all([
+        supabase
+          .from('follows')
+          .select('status')
+          .eq('follower_id', user.id)
+          .eq('following_id', post.user_id)
+          .maybeSingle(),
+        supabase
+          .from('reposts')
+          .select('user_id, profiles:user_id(username, display_name)')
+          .eq('post_id', post.id)
+          .limit(60),
+      ]);
+
+      const isFollowingAuthor = follow?.status === 'accepted';
+      if (isFollowingAuthor) {
+        reasons.push(`You follow @${post.profiles.username} — their posts show up in your feed.`);
+      } else if (post.star_count > 0) {
+        reasons.push(`@${post.profiles.username} is a creator this community engages with (${post.star_count} stars on this post).`);
+      } else {
+        reasons.push(`We think you might enjoy posts like this based on what you engage with.`);
+      }
+
+      if (reposts && reposts.length > 0) {
+        const followedReposters = await supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', user.id)
+          .eq('status', 'accepted');
+        const followedSet = new Set((followedReposters.data || []).map((f) => f.following_id));
+        const networkCount = reposts.filter((r) => followedSet.has(r.user_id)).length;
+        if (networkCount > 0) {
+          reasons.push(`People you follow reposted this post (${networkCount} of them).`);
+        }
+      }
+
+      setRecommendationReasons(reasons);
+    } catch (error) {
+      console.error('Recommendation reason error:', error);
+    } finally {
+      setRecommendationLoading(false);
+    }
+  };
+
+  const handleFeedSignal = async (signal: 'less' | 'more') => {
+    if (!user || addingSignal) return;
+    setAddingSignal(true);
+    try {
+      if (signal === 'less') {
+        await supabase
+          .from('feed_signals')
+          .upsert({ user_id: user.id, post_id: post.id, signal: 'less' }, { onConflict: 'user_id,post_id' });
+      } else {
+        const { data: existing } = await supabase
+          .from('feed_signals')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('post_id', post.id)
+          .maybeSingle();
+        if (existing) {
+          await supabase.from('feed_signals').update({ signal: 'more' }).eq('id', existing.id);
+        } else {
+          await supabase.from('feed_signals').insert({ user_id: user.id, post_id: post.id, signal: 'more' });
+        }
+      }
+      setSignalApplied(signal);
+      if (signal === 'less') {
+        toast({ title: 'Got it', description: 'We\u2019ll show fewer posts like this in your feed.' });
+      } else {
+        toast({ title: 'Got it', description: 'We\u2019ll try to show more content like this.' });
+      }
+    } catch (error) {
+      console.error('Feed signal error:', error);
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not save your preference.' });
+    } finally {
+      setAddingSignal(false);
+    }
+  };
+
+  const contextMeta = post.context_meta || null;
+  const isAiGenerated = contextMeta?.is_ai_generated === true;
+  const hideLikeCounts = !!preferences?.hide_like_counts && !isOwnPost;
+
   const VisibilityIcon = visibilityIcons[post.visibility];
 
   return (
@@ -390,9 +514,24 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter, 
                 edited
               </span>
             )}
+            {isAiGenerated && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded-full">
+                <Bot className="h-3 w-3" />
+                AI
+              </span>
+            )}
             <span className="p-0.5 rounded-full bg-muted/80">
               <VisibilityIcon className="h-3 w-3 text-muted-foreground/80" />
             </span>
+            {showRecommendationInfo && !isOwnPost && user && (
+              <button
+                onClick={openRecommendation}
+                title="Why am I seeing this?"
+                className="p-1 rounded-full text-muted-foreground/60 hover:bg-surface-3 hover:text-primary transition-colors"
+              >
+                <Info className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -571,6 +710,19 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter, 
         </div>
       )}
 
+      {/* Context row */}
+      {contextMeta && (contextMeta.location || contextMeta.source_url || contextMeta.when || contextMeta.is_edited || contextMeta.is_ai_generated || contextMeta.references) && (
+        <div className="px-4 mt-3">
+          <button
+            onClick={() => setContextOpen(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/70 border border-border/60 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
+          >
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Context
+          </button>
+        </div>
+      )}
+
       {/* Actions Bar */}
       <div className="flex items-center justify-between px-4 py-2.5 mt-3 border-t border-border/20">
         <div className="flex items-center gap-1">
@@ -594,24 +746,33 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter, 
           </button>
 
           {/* Star count -> who starred */}
-          {starCount > 0 && (
-            <LikesDialog
-              postId={post.id}
-              source="stars"
-              title="Starred by"
-              emptyLabel="No one has starred this post yet"
-              signInLabel="Sign in to see who starred this post"
-              trigger={
-                <button
-                  className={cn(
-                    "px-1.5 py-2 rounded-full text-xs tabular-nums font-semibold transition-colors hover:text-primary",
-                    isStarred ? "text-primary" : "text-muted-foreground"
-                  )}
-                >
-                  {starCount}
-                </button>
-              }
-            />
+          {hideLikeCounts ? (
+            starCount > 0 && (
+              <span className="px-1.5 py-2 text-xs font-semibold text-muted-foreground/80 inline-flex items-center gap-1 whitespace-nowrap">
+                <Heart className="h-3.5 w-3.5 text-primary/70 fill-primary/40" />
+                People enjoyed this
+              </span>
+            )
+          ) : (
+            starCount > 0 && (
+              <LikesDialog
+                postId={post.id}
+                source="stars"
+                title="Starred by"
+                emptyLabel="No one has starred this post yet"
+                signInLabel="Sign in to see who starred this post"
+                trigger={
+                  <button
+                    className={cn(
+                      "px-1.5 py-2 rounded-full text-xs tabular-nums font-semibold transition-colors hover:text-primary",
+                      isStarred ? "text-primary" : "text-muted-foreground"
+                    )}
+                  >
+                    {starCount}
+                  </button>
+                }
+              />
+            )
           )}
 
           {/* Comment Button */}
@@ -686,6 +847,133 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter, 
         targetId={post.id}
         targetLabel="post"
       />
+
+      {/* Why am I seeing this? */}
+      <Dialog open={recommendationOpen} onOpenChange={setRecommendationOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Info className="h-5 w-5 text-primary" />
+              Why am I seeing this?
+            </DialogTitle>
+            <DialogDescription>
+              A little transparency into why this post landed in your feed.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 mt-1">
+            {recommendationLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : recommendationReasons.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">We could not determine a specific reason for this post.</p>
+            ) : (
+              recommendationReasons.map((reason, i) => (
+                <div key={i} className="flex items-start gap-2.5 p-3 rounded-xl bg-muted/50 border border-border/60">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 flex-shrink-0" />
+                  <p className="text-sm leading-relaxed text-foreground/85">{reason}</p>
+                </div>
+              ))
+            )}
+
+            <div className="border-t border-border/70 pt-4 mt-2 space-y-2">
+              <button
+                onClick={() => handleFeedSignal('less')}
+                disabled={addingSignal || signalApplied === 'less'}
+                className={cn(
+                  "w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border transition-all",
+                  signalApplied === 'less'
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-border hover:border-primary/40 hover:bg-primary/5"
+                )}
+              >
+                {signalApplied === 'less' ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                {signalApplied === 'less' ? 'Noted — fewer posts like this' : 'Show fewer posts like this'}
+              </button>
+              <button
+                onClick={handleMute}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-border hover:border-destructive/40 hover:bg-destructive/5 transition-all"
+              >
+                <VolumeX className="h-4 w-4" />
+                Don't recommend posts from @{post.profiles.username}
+              </button>
+              <button
+                onClick={() => { setRecommendationOpen(false); setReportOpen(true); }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-destructive border border-destructive/20 hover:bg-destructive/5 transition-all"
+              >
+                <Flag className="h-4 w-4" />
+                Report this post
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Post context */}
+      <Dialog open={contextOpen} onOpenChange={setContextOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+              About this post
+            </DialogTitle>
+            <DialogDescription>
+              Additional information shared by the creator.
+            </DialogDescription>
+          </DialogHeader>
+
+          {contextMeta && (
+            <div className="space-y-2.5 mt-1">
+              {contextMeta.is_ai_generated && (
+                <div className="flex items-center gap-2.5 p-3 rounded-xl bg-primary/10 border border-primary/20">
+                  <Bot className="h-4 w-4 text-primary flex-shrink-0" />
+                  <p className="text-sm font-medium">This post was generated with AI</p>
+                </div>
+              )}
+              {contextMeta.is_edited && (
+                <div className="flex items-center gap-2.5 p-3 rounded-xl bg-muted/50 border border-border/60">
+                  <Pencil className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <p className="text-sm text-muted-foreground">The creator edited this post before publishing.</p>
+                </div>
+              )}
+              {contextMeta.when && (
+                <div className="flex items-center gap-2.5 p-3 rounded-xl bg-muted/50 border border-border/60">
+                  <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">When</p>
+                    <p className="text-sm font-medium">{new Date(contextMeta.when).toLocaleString()}</p>
+                  </div>
+                </div>
+              )}
+              {contextMeta.location && (
+                <div className="flex items-center gap-2.5 p-3 rounded-xl bg-muted/50 border border-border/60">
+                  <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Where</p>
+                    <p className="text-sm font-medium">{contextMeta.location}</p>
+                  </div>
+                </div>
+              )}
+              {contextMeta.source_url && (
+                <div className="flex items-center gap-2.5 p-3 rounded-xl bg-muted/50 border border-border/60">
+                  <ExternalLink className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <a href={contextMeta.source_url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:underline truncate">
+                    {contextMeta.source_url}
+                  </a>
+                </div>
+              )}
+              {contextMeta.references && (
+                <div className="p-3 rounded-xl bg-muted/50 border border-border/60">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">References</p>
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{contextMeta.references}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {lightboxIndex !== null && post.post_media[lightboxIndex] && (
         <MediaLightbox
           src={post.post_media[lightboxIndex].url}

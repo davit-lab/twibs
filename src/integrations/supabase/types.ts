@@ -2760,7 +2760,9 @@ export type Database = {
         Row: {
           comment_count: number | null
           content: string
+          context_meta: Json | null
           created_at: string
+          expires_at: string | null
           hidden: boolean
           id: string
           is_edited: boolean
@@ -2774,7 +2776,9 @@ export type Database = {
         Insert: {
           comment_count?: number | null
           content: string
+          context_meta?: Json | null
           created_at?: string
+          expires_at?: string | null
           hidden?: boolean
           id?: string
           is_edited?: boolean
@@ -2788,7 +2792,9 @@ export type Database = {
         Update: {
           comment_count?: number | null
           content?: string
+          context_meta?: Json | null
           created_at?: string
+          expires_at?: string | null
           hidden?: boolean
           id?: string
           is_edited?: boolean
@@ -3736,6 +3742,8 @@ export type Database = {
           display_density: string | null
           do_not_disturb: boolean | null
           font_size: string | null
+          ghost_mode: boolean | null
+          hide_like_counts: boolean | null
           high_contrast: boolean | null
           id: string
           language: string | null
@@ -3757,6 +3765,8 @@ export type Database = {
           display_density?: string | null
           do_not_disturb?: boolean | null
           font_size?: string | null
+          ghost_mode?: boolean | null
+          hide_like_counts?: boolean | null
           high_contrast?: boolean | null
           id?: string
           language?: string | null
@@ -3778,6 +3788,8 @@ export type Database = {
           display_density?: string | null
           do_not_disturb?: boolean | null
           font_size?: string | null
+          ghost_mode?: boolean | null
+          hide_like_counts?: boolean | null
           high_contrast?: boolean | null
           id?: string
           language?: string | null
@@ -3792,6 +3804,81 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      profile_views: {
+        Row: {
+          created_at: string
+          id: string
+          target_id: string
+          viewer_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          target_id: string
+          viewer_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          target_id?: string
+          viewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_views_viewer_id_fkey"
+            columns: ["viewer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "profile_views_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      feed_signals: {
+        Row: {
+          created_at: string
+          id: string
+          post_id: string
+          signal: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          post_id: string
+          signal: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          post_id?: string
+          signal?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feed_signals_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "feed_signals_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {

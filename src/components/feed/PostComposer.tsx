@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,10 +32,36 @@ import {
   Plus,
   Clock,
   Camera,
+  Timer,
+  Info,
+  MapPin,
+  Calendar,
+  Bot,
+  ExternalLink,
+  Pencil,
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
 type PostVisibility = 'public' | 'followers' | 'private';
+
+interface PostContextMeta {
+  location?: string | null;
+  source_url?: string | null;
+  when?: string | null;
+  is_edited?: boolean;
+  is_ai_generated?: boolean;
+  references?: string | null;
+}
 
 interface MediaPreview {
   id: string;
@@ -76,6 +103,10 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
   const [justPosted, setJustPosted] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [expiresIn24h, setExpiresIn24h] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
+  const [contextMeta, setContextMeta] = useState<PostContextMeta>({});
+  const [contextDraft, setContextDraft] = useState<PostContextMeta>({});
 
   const getInitials = (name: string) => {
     return name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
@@ -91,6 +122,12 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
         setContent(draft.content);
         if (['public', 'followers', 'private'].includes(draft.visibility)) {
           setVisibility(draft.visibility);
+        }
+        if (typeof draft.expiresIn24h === 'boolean') {
+          setExpiresIn24h(draft.expiresIn24h);
+        }
+        if (draft.contextMeta && typeof draft.contextMeta === 'object') {
+          setContextMeta(draft.contextMeta);
         }
         setDraftRestored(true);
       }
@@ -114,10 +151,10 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
     if (isSubmitting || justPosted) return;
     if (!content.trim() && mediaFiles.length === 0) return;
     const timer = setTimeout(() => {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify({ content, visibility, savedAt: Date.now() }));
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ content, visibility, expiresIn24h, contextMeta, savedAt: Date.now() }));
     }, 400);
     return () => clearTimeout(timer);
-  }, [content, visibility, mediaFiles, isSubmitting, justPosted]);
+  }, [content, visibility, expiresIn24h, contextMeta, mediaFiles, isSubmitting, justPosted]);
 
   // Auto-grow textarea
   useEffect(() => {
@@ -294,6 +331,8 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
           user_id: profile.user_id,
           content: content.trim(),
           visibility,
+          expires_at: expiresIn24h ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : null,
+          context_meta: (Object.keys(contextMeta).length > 0 ? contextMeta : null) as unknown as Json,
         })
         .select()
         .single();
@@ -326,6 +365,8 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
         return [];
       });
       setVisibility('public');
+      setExpiresIn24h(false);
+      setContextMeta({});
       setIsFocused(false);
       setDraftRestored(false);
       setJustPosted(true);
@@ -555,6 +596,36 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
                   )}
                 </div>
 
+                <button
+                  type="button"
+                  onClick={() => setExpiresIn24h(v => !v)}
+                  disabled={isSubmitting}
+                  title="Post expires from your profile in 24 hours"
+                  className={cn(
+                    "flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[13px] font-medium transition-colors",
+                    expiresIn24h
+                      ? "bg-primary/15 text-primary"
+                      : "text-muted-foreground hover:bg-accent/10 hover:text-accent"
+                  )}
+                >
+                  <Timer className={cn("h-4 w-4", expiresIn24h && "fill-primary/20")} />
+                  <span className="hidden sm:inline">{expiresIn24h ? 'Expires in 24h' : 'Temporary'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setContextDraft(contextMeta); setContextOpen(true); }}
+                  disabled={isSubmitting}
+                  title="Add context to your post"
+                  className={cn(
+                    "flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[13px] font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors",
+                    Object.keys(contextMeta).length > 0 && "text-primary bg-primary/10"
+                  )}
+                >
+                  <Info className="h-4 w-4" />
+                  <span className="hidden sm:inline">Context</span>
+                </button>
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm text-primary hover:bg-primary/10 transition-colors">
@@ -665,6 +736,123 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
         maxVideoDuration={30}
         onDone={handleCameraDone}
       />
+
+      {/* Add Context dialog */}
+      <Dialog open={contextOpen} onOpenChange={setContextOpen}>
+        <DialogContent className="sm:max-w-lg rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Info className="h-5 w-5 text-primary" />
+              Add Context
+            </DialogTitle>
+            <DialogDescription>
+              Help people understand this post — where it's from, when it happened, and whether it's AI-generated.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-1">
+            <div>
+              <Label className="text-xs font-semibold text-muted-foreground">Where</Label>
+              <div className="relative mt-1.5">
+                <MapPin className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  className="w-full rounded-xl border border-border/70 bg-muted/40 pl-9 pr-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/40"
+                  placeholder="Location, e.g. Tokyo, Japan"
+                  value={contextDraft.location || ''}
+                  onChange={(e) => setContextDraft(d => ({ ...d, location: e.target.value || null }))}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold text-muted-foreground">When</Label>
+              <div className="relative mt-1.5">
+                <Calendar className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="datetime-local"
+                  className="w-full rounded-xl border border-border/70 bg-muted/40 pl-9 pr-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/40 [color-scheme:dark]"
+                  value={contextDraft.when ? new Date(contextDraft.when).toISOString().slice(0, 16) : ''}
+                  onChange={(e) => setContextDraft(d => ({ ...d, when: e.target.value ? new Date(e.target.value).toISOString() : null }))}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold text-muted-foreground">Original source</Label>
+              <div className="relative mt-1.5">
+                <ExternalLink className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  className="w-full rounded-xl border border-border/70 bg-muted/40 pl-9 pr-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/40"
+                  placeholder="https://…"
+                  value={contextDraft.source_url || ''}
+                  onChange={(e) => setContextDraft(d => ({ ...d, source_url: e.target.value || null }))}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold text-muted-foreground">References</Label>
+              <textarea
+                rows={2}
+                className="mt-1.5 w-full rounded-xl border border-border/70 bg-muted/40 px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/40 resize-none"
+                placeholder="Links or sources that support this post"
+                value={contextDraft.references || ''}
+                onChange={(e) => setContextDraft(d => ({ ...d, references: e.target.value || null }))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-3 rounded-xl border border-border/70">
+                <div className="flex items-center gap-2.5">
+                  <Bot className="h-4 w-4 text-primary" />
+                  <div>
+                    <p className="text-sm font-medium">AI generated</p>
+                    <p className="text-xs text-muted-foreground">This post was created with AI</p>
+                  </div>
+                </div>
+                <Switch checked={contextDraft.is_ai_generated ?? false} onCheckedChange={(c: boolean) => setContextDraft(d => ({ ...d, is_ai_generated: c }))} />
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl border border-border/70">
+                <div className="flex items-center gap-2.5">
+                  <Pencil className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm font-medium">Edited</p>
+                    <p className="text-xs text-muted-foreground">This post was edited before publishing</p>
+                  </div>
+                </div>
+                <Switch checked={contextDraft.is_edited ?? false} onCheckedChange={(c: boolean) => setContextDraft(d => ({ ...d, is_edited: c }))} />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-2 gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => setContextOpen(false)}
+              className="rounded-full text-muted-foreground"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const cleaned: PostContextMeta = {};
+                if (contextDraft.location?.trim()) cleaned.location = contextDraft.location.trim();
+                if (contextDraft.when) cleaned.when = contextDraft.when;
+                if (contextDraft.source_url?.trim()) cleaned.source_url = contextDraft.source_url.trim();
+                if (contextDraft.references?.trim()) cleaned.references = contextDraft.references.trim();
+                if (contextDraft.is_ai_generated) cleaned.is_ai_generated = true;
+                if (contextDraft.is_edited) cleaned.is_edited = true;
+                setContextMeta(cleaned);
+                setContextOpen(false);
+              }}
+              className="rounded-full gap-1.5"
+            >
+              <Check className="h-4 w-4" />
+              Save context
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
