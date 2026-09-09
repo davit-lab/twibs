@@ -72,7 +72,7 @@ export default function GroupRequestsSheet({ open, onOpenChange, groupId, groupN
                   <Link to={`/profile/${request.profiles?.username}`} className="flex-shrink-0">
                     <Avatar className="h-11 w-11">
                       <AvatarImage src={request.profiles?.avatar_url || undefined} />
-                      <AvatarFallback className="bg-gradient-to-br from-primary/30 to-primary/10 text-primary font-bold text-sm">
+                      <AvatarFallback className="bg-surface-2 text-foreground font-bold text-sm">
                         {request.profiles?.display_name?.charAt(0) || 'U'}
                       </AvatarFallback>
                     </Avatar>

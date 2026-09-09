@@ -201,7 +201,7 @@ export default function GroupDetail() {
     <MainLayout>
       <div className="min-h-screen bg-background pb-24">
         {/* Cover */}
-        <div className="relative h-40 md:h-56 lg:h-64 bg-gradient-to-br from-primary/20 via-primary/5 to-accent/10">
+        <div className={cn('relative h-40 md:h-56 lg:h-64', group.cover_url ? '' : 'bg-surface-2')}>
           {group.cover_url && (
             <img src={group.cover_url} alt="" className="w-full h-full object-cover" />
           )}
@@ -223,7 +223,7 @@ export default function GroupDetail() {
             <div className="flex flex-col sm:flex-row items-start gap-4">
               <Avatar className="h-16 w-16 sm:h-20 sm:w-20 ring-4 ring-background bg-muted flex-shrink-0">
                 <AvatarImage src={group.avatar_url || undefined} />
-                <AvatarFallback className="bg-gradient-to-br from-primary/30 to-primary/10 text-primary font-bold text-2xl sm:text-3xl">
+                <AvatarFallback className="bg-surface-2 text-foreground font-bold text-2xl sm:text-3xl">
                   {group.name?.charAt(0)?.toUpperCase()}
                 </AvatarFallback>
               </Avatar>
@@ -261,6 +261,17 @@ export default function GroupDetail() {
                   <Users className="h-4 w-4 mr-2" />
                   Members
                   <span className="ml-1 text-xs opacity-70">{group.member_count}</span>
+                </Button>
+              )}
+
+              {isMember && group.chat_conversation_id && (
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(`/messages?conv=${group.chat_conversation_id}`)}
+                  className="rounded-xl font-bold"
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Message group
                 </Button>
               )}
 

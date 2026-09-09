@@ -1901,6 +1901,7 @@ export type Database = {
       groups: {
         Row: {
           avatar_url: string | null
+          chat_conversation_id: string | null
           cover_url: string | null
           created_at: string
           creator_id: string
@@ -1915,6 +1916,7 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          chat_conversation_id?: string | null
           cover_url?: string | null
           created_at?: string
           creator_id: string
@@ -1929,6 +1931,7 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          chat_conversation_id?: string | null
           cover_url?: string | null
           created_at?: string
           creator_id?: string
@@ -1942,6 +1945,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "groups_chat_conversation_id_fkey"
+            columns: ["chat_conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "groups_creator_id_fkey"
             columns: ["creator_id"]
@@ -3107,6 +3117,42 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "reels"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      reel_saves: {
+        Row: {
+          created_at: string
+          id: string
+          reel_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          reel_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          reel_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reel_saves_reel_id_fkey"
+            columns: ["reel_id"]
+            isOneToOne: false
+            referencedRelation: "reels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reel_saves_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -4419,6 +4465,7 @@ export type Database = {
         }
         Returns: {
           avatar_url: string | null
+          chat_conversation_id: string | null
           cover_url: string | null
           created_at: string
           creator_id: string
@@ -4655,6 +4702,10 @@ export type Database = {
       get_following_count: { Args: { _user_id: string }; Returns: number }
       get_or_create_dm_conversation: {
         Args: { other_user_id: string }
+        Returns: string
+      }
+      group_role_to_chat_role: {
+        Args: { group_role: string }
         Returns: string
       }
       handle_verification_request: {
@@ -5041,6 +5092,7 @@ export type Database = {
         }
         Returns: {
           avatar_url: string | null
+          chat_conversation_id: string | null
           cover_url: string | null
           created_at: string
           creator_id: string

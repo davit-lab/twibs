@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layout/MainLayout';
 import InterestPostCard from '@/components/feed/InterestPostCard';
-import InterestCard from '@/components/onboarding/InterestCard';
+import InterestCard, { getInterestIcon } from '@/components/onboarding/InterestCard';
 import {
   useUserInterests,
   useInterestCategories,
@@ -227,6 +227,7 @@ export default function Interests() {
       id: 'all',
       name: 'For you',
       color: undefined,
+      icon: undefined,
     },
     ...interestCategories,
   ];
@@ -258,6 +259,7 @@ export default function Interests() {
             <div className="flex items-center gap-2 py-3 overflow-x-auto scrollbar-hide pr-2">
               {categoryChips.map((chip) => {
                 const active = activeCategory === chip.id;
+                const Icon = chip.id !== 'all' ? getInterestIcon(chip.icon) : null;
                 return (
                   <button
                     key={chip.id}
@@ -269,21 +271,22 @@ export default function Interests() {
                           ? 'bg-foreground text-background shadow-sm'
                           : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
                         : active
-                          ? 'shadow-sm'
-                          : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
+                          ? 'border shadow-sm'
+                          : 'border border-border bg-transparent text-muted-foreground hover:bg-surface-2 hover:text-foreground'
                     )}
                     style={
-                      chip.id !== 'all' && active
+                      chip.id !== 'all' && active && chip.color
                         ? {
-                            backgroundColor: 'hsl(var(--primary) / 0.08)',
-                            color: 'hsl(var(--primary))',
-                            borderColor: 'hsl(var(--primary) / 0.15)',
+                            backgroundColor: `color-mix(in srgb, ${chip.color} 14%, hsl(var(--surface-2)))`,
+                            color: chip.color,
+                            borderColor: chip.color,
                           }
                         : chip.id !== 'all'
-                          ? { borderColor: 'hsl(var(--primary) / 0.18)' }
+                          ? { borderColor: 'hsl(var(--border))' }
                           : undefined
                     }
                   >
+                    {Icon && <Icon className="h-3.5 w-3.5" style={active && chip.color ? { color: chip.color } : undefined} strokeWidth={2.25} />}
                     {chip.name}
                   </button>
                 );

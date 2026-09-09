@@ -11,20 +11,11 @@ interface GroupCardProps {
   isJoining?: boolean;
 }
 
-function getHue(str: string) {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) {
-    h = (h * 31 + str.charCodeAt(i)) % 360;
-  }
-  return h;
-}
-
 export default function GroupCard({ group, onJoin, onLeave, isJoining }: GroupCardProps) {
   const isMember = !!group.membership;
   const isOwner = group.membership?.role === 'owner';
   const isPrivate = group.privacy === 'private';
   const isPending = !isMember && group.join_request?.status === 'pending';
-  const hue = getHue(group.name || 'group');
 
   return (
     <Link
@@ -34,33 +25,23 @@ export default function GroupCard({ group, onJoin, onLeave, isJoining }: GroupCa
       {/* Cover */}
       <div className="relative h-28 sm:h-32">
         {group.cover_url ? (
-          <img
-            src={group.cover_url}
-            alt=""
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-          />
+          <>
+            <img
+              src={group.cover_url}
+              alt=""
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+          </>
         ) : (
-          <div
-            className="w-full h-full flex items-end justify-end p-3"
-            style={{ background: `linear-gradient(135deg, hsl(${hue} 45% 14%), hsl(${hue} 45% 8%))` }}
-          >
-            <p className="font-black text-[64px] leading-none tracking-tighter text-white/10 select-none">
-              {group.name?.charAt(0)?.toUpperCase()}
-            </p>
-          </div>
+          <div className="w-full h-full bg-surface-2" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/5 to-transparent" />
-
-        {/* Privacy badge removed */}
 
         {/* Avatar */}
         <div className="absolute -bottom-5 left-4">
-          <Avatar className="h-14 w-14 ring-4 ring-background bg-muted shadow-md">
+          <Avatar className="h-14 w-14 ring-4 ring-background bg-surface-2 shadow-md">
             <AvatarImage src={group.avatar_url || undefined} />
-            <AvatarFallback
-              className="font-bold text-xl"
-              style={{ backgroundColor: `hsl(${hue} 45% 16%)`, color: `hsl(${hue} 85% 75%)` }}
-            >
+            <AvatarFallback className="font-bold text-xl bg-surface-2 text-foreground">
               {group.name?.charAt(0)?.toUpperCase()}
             </AvatarFallback>
           </Avatar>

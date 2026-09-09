@@ -64,13 +64,6 @@ export default function OnboardingInterests() {
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
-      {/* Aurora backdrop */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -left-32 w-[26rem] h-[26rem] rounded-full bg-primary/15 blur-3xl" />
-        <div className="absolute top-24 -right-40 w-[30rem] h-[30rem] rounded-full bg-[#EC4899]/10 blur-3xl" />
-        <div className="absolute bottom-0 left-1/4 w-[24rem] h-[24rem] rounded-full bg-[#06B6D4]/10 blur-3xl" />
-      </div>
-
       <div className="relative max-w-2xl mx-auto px-4 pt-12 md:pt-20 pb-44">
         {/* Header */}
         <motion.header

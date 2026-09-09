@@ -121,7 +121,7 @@ export default function GroupSettingsDialog({ open, onOpenChange, group }: Group
               {coverPreview ? (
                 <img src={coverPreview} alt="Group cover" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-gradient-to-br from-primary/10 to-accent/5">
+                <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-surface-2">
                   <ImagePlus className="h-6 w-6" />
                 </div>
               )}

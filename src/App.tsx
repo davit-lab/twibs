@@ -26,6 +26,7 @@ const Pricing = lazy(() => import('./pages/Pricing'));
 const Admin = lazy(() => import('./pages/Admin'));
 const AdminGate = lazy(() => import('./components/admin/AdminGate'));
 const Reels = lazy(() => import('./pages/Reels'));
+const ReelDetail = lazy(() => import('./pages/ReelDetailPage'));
 const OnboardingInterests = lazy(() => import('./pages/OnboardingInterests'));
 const Groups = lazy(() => import('./pages/Groups'));
 const GroupDetail = lazy(() => import('./pages/GroupDetail'));
@@ -223,6 +224,7 @@ const App = () => (
                     <Route path="/groups" element={<Groups />} />
                     <Route path="/groups/:slug" element={<GroupDetail />} />
                     <Route path="/reels" element={<Reels />} />
+                    <Route path="/reels/:reelId" element={<ReelDetail />} />
                     <Route path="/post/:postId" element={<PostShare />} />
                     <Route
                       path="/onboarding/interests"

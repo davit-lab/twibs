@@ -12,6 +12,7 @@ export interface Group {
   description: string | null;
   avatar_url: string | null;
   cover_url: string | null;
+  chat_conversation_id: string | null;
   privacy: 'public' | 'private';
   creator_id: string;
   member_count: number;

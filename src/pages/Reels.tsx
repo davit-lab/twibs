@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
-import { useReels, ReelsFeedType } from '@/hooks/useReels';
+import { useReels, useReelSaves, ReelsFeedType } from '@/hooks/useReels';
 import { useReelsNavigation } from '@/hooks/useReelsNavigation';
 import { useStories } from '@/hooks/useStories';
 import { useToast } from '@/hooks/use-toast';
@@ -17,17 +17,20 @@ import AudioDetailsSheet from '@/components/reels/AudioDetailsSheet';
 import FeedTabs from '@/components/reels/FeedTabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { BadgeCheck, ChevronDown, ChevronUp, MessageCircle, RefreshCw, Volume2, VolumeX } from 'lucide-react';
+import { BadgeCheck, ChevronDown, ChevronUp, MessageCircle, RefreshCw, Volume2, VolumeX, X } from 'lucide-react';
 import defaultAvatar from '@/assets/default-avatar.png';
 
 export default function Reels() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const userFilter = searchParams.get('user');
   const [feedType, setFeedType] = useState<ReelsFeedType>('foryou');
   const { uploadStory } = useStories();
 
-  const { reels, loading, refreshing, error, refetch, currentIndex, setCurrentIndex, likeReel, incrementView } = useReels(feedType);
+  const { reels, loading, refreshing, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage, currentIndex, setCurrentIndex, likeReel, incrementView } = useReels(feedType, userFilter);
+  const { savedIds, toggleSave } = useReelSaves();
 
   const { ads } = useFeedAds(2);
 
@@ -60,14 +63,23 @@ export default function Reels() {
   const [selectedReelId, setSelectedReelId] = useState<string | null>(null);
   const [showShareFor, setShowShareFor] = useState<string | null>(null);
   const [audioReel, setAudioReel] = useState<typeof reels[0] | null>(null);
-  const [savedReels, setSavedReels] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setCurrentIndex(0);
     setPaused(false);
   }, [feedType, setCurrentIndex]);
 
+  useEffect(() => {
+    if (userFilter) setCurrentIndex(0);
+  }, [userFilter, setCurrentIndex]);
+
   useEffect(() => { setPaused(false); }, [currentIndex]);
+
+  useEffect(() => {
+    if (currentIndex >= feedItems.length - 3 && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [currentIndex, feedItems.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -79,12 +91,9 @@ export default function Reels() {
   }, []);
 
   const handleSaveReel = (reelId: string) => {
-    setSavedReels(prev => {
-      const next = new Set(prev);
-      if (next.has(reelId)) { next.delete(reelId); toast({ title: 'Removed from saved' }); }
-      else { next.add(reelId); toast({ title: 'Saved to collection' }); }
-      return next;
-    });
+    toggleSave(reelId);
+    if (savedIds.has(reelId)) toast({ title: 'Removed from saved' });
+    else toast({ title: 'Saved to collection' });
   };
 
   const handleShareToStory = async (reel: typeof reels[0]) => {
@@ -131,7 +140,20 @@ export default function Reels() {
   if (reels.length === 0) {
     return (
       <div className="relative h-screen w-full overflow-hidden bg-black">
-        <FeedTabs feedType={feedType} onFeedTypeChange={setFeedType} onClose={() => navigate('/')} />
+        {userFilter ? (
+          <div className="absolute inset-x-0 top-0 z-[60] flex items-center px-4 pt-4 sm:pt-6 pb-4">
+            <Button
+              variant="ghost" size="icon"
+              onClick={() => navigate(-1)}
+              className="h-10 w-10 rounded-full border border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-black/55"
+              aria-label="Go back"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+        ) : (
+          <FeedTabs feedType={feedType} onFeedTypeChange={setFeedType} onClose={() => navigate('/')} />
+        )}
         <ReelEmptyState isRefreshing={refreshing} onRefresh={() => refetch()} isFollowingFeed={feedType === 'following'} />
       </div>
     );
@@ -147,7 +169,20 @@ export default function Reels() {
 
   return (
     <div ref={containerRef} className="relative h-screen w-full select-none overflow-hidden bg-neutral-950 text-white">
-      <FeedTabs feedType={feedType} onFeedTypeChange={setFeedType} onClose={() => navigate('/')} />
+      {userFilter ? (
+        <div className="absolute inset-x-0 top-0 z-[60] flex items-center px-4 pt-4 sm:pt-6 pb-4">
+          <Button
+            variant="ghost" size="icon"
+            onClick={() => navigate(-1)}
+            className="h-10 w-10 rounded-full border border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-black/55"
+            aria-label="Go back"
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+      ) : (
+        <FeedTabs feedType={feedType} onFeedTypeChange={setFeedType} onClose={() => navigate('/')} />
+      )}
 
       <div className="mx-auto flex h-full max-w-6xl items-center justify-center gap-6 px-0 sm:px-6">
         <div className="relative h-full w-full sm:max-w-[430px]">
@@ -177,7 +212,7 @@ export default function Reels() {
                   isActive={index === currentIndex}
                   isMuted={muted}
                   isPaused={paused}
-                  isSaved={savedReels.has(item.reel.id)}
+                  isSaved={savedIds.has(item.reel.id)}
                   preload={Math.abs(index - currentIndex) <= 2 ? 'auto' : 'none'}
                   onTogglePause={() => setPaused(p => !p)}
                   onToggleMute={() => setMuted(m => !m)}

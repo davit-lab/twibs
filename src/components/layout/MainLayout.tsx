@@ -59,6 +59,7 @@ const navItems = [
   { icon: PlusSquare, label: 'Create', href: '#create', id: 'create' },
   { icon: BookOpen, label: 'Library', href: '/library', id: 'library' },
   { icon: Users, label: 'Groups', href: '/groups', id: 'groups' },
+  { icon: Sparkles, label: 'Interests', href: '/interests', id: 'interests' },
   { icon: Megaphone, label: 'Advertise', href: '/ads', id: 'ads' },
 ];
 
@@ -267,7 +268,14 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
                     Groups
                   </Link>
                 </DropdownMenuItem>
-                {/* Interests removed */}
+                <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
+                  <Link to="/interests">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
+                      <Sparkles className="h-4 w-4" />
+                    </span>
+                    Interests
+                  </Link>
+                </DropdownMenuItem>
               </DropdownMenuGroup>
 
               <DropdownMenuSeparator className="my-1.5" />
