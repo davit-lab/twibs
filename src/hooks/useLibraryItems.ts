@@ -227,11 +227,19 @@ export function useLibraryItems(userId?: string) {
           .insert({ user_id: user.id, item_id: itemId });
       }
 
+      const nextLiked = !item.is_liked;
+      const nextCount = item.like_count + (nextLiked ? 1 : -1);
+
       setItems(prev => prev.map(i => 
         i.id === itemId 
-          ? { ...i, is_liked: !i.is_liked, like_count: i.like_count + (i.is_liked ? -1 : 1) }
+          ? { ...i, is_liked: nextLiked, like_count: nextCount }
           : i
       ));
+
+      await supabase
+        .from('library_items')
+        .update({ like_count: Math.max(0, nextCount) })
+        .eq('id', itemId);
     } catch (err: any) {
       toast.error('Failed to update like');
     }
@@ -364,12 +372,130 @@ export function useCollections(userId?: string) {
     }
   };
 
+  const removeFromCollection = async (collectionId: string, itemId: string) => {
+    try {
+      const { error } = await supabase
+        .from('collection_items')
+        .delete()
+        .eq('collection_id', collectionId)
+        .eq('item_id', itemId);
+
+      if (error) throw error;
+
+      toast.success('Removed from collection');
+      fetchCollections();
+      return true;
+    } catch (err: any) {
+      toast.error('Failed to remove from collection');
+      return false;
+    }
+  };
+
   return {
     collections,
     loading,
     createCollection,
     addToCollection,
+    removeFromCollection,
     deleteCollection,
     refetch: fetchCollections
+  };
+}
+
+export function useCollectionItems(collectionId: string | null) {
+  const { user } = useAuth();
+  const [collection, setCollection] = useState<Collection | null>(null);
+  const [items, setItems] = useState<LibraryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchCollectionItems = async () => {
+    if (!collectionId) {
+      setCollection(null);
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const { data: collectionData, error: collectionError } = await supabase
+        .from('collections')
+        .select('*')
+        .eq('id', collectionId)
+        .maybeSingle();
+
+      if (collectionError) throw collectionError;
+      setCollection((collectionData as Collection) || null);
+
+      const { data: entries, error: entriesError } = await supabase
+        .from('collection_items')
+        .select('item_id')
+        .eq('collection_id', collectionId)
+        .order('created_at', { ascending: false });
+
+      if (entriesError) throw entriesError;
+
+      const itemIds = entries?.map((e) => e.item_id) || [];
+      if (itemIds.length === 0) {
+        setItems([]);
+        setLoading(false);
+        return;
+      }
+
+      const { data: itemData, error: itemError } = await supabase
+        .from('library_items')
+        .select('*')
+        .in('id', itemIds);
+
+      if (itemError) throw itemError;
+
+      const itemMap = new Map((itemData || []).map((i) => [i.id, i]));
+      const orderedItems = (itemIds
+        .map((id) => itemMap.get(id))
+        .filter(Boolean) as (typeof itemData)[number][]);
+
+      const userIds = [...new Set(orderedItems.map((d) => d.user_id))];
+      let profileMap = new Map<string, { user_id: string; username: string; display_name: string | null; avatar_url: string | null; is_verified: boolean }>();
+      if (userIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('user_id, username, display_name, avatar_url, is_verified')
+          .in('user_id', userIds);
+        profileMap = new Map(profilesData?.map((p) => [p.user_id, p]) || []);
+      }
+
+      let likedIds = new Set<string>();
+      if (user && orderedItems.length > 0) {
+        const { data: likes } = await supabase
+          .from('library_likes')
+          .select('item_id')
+          .eq('user_id', user.id);
+        likedIds = new Set(likes?.map((l) => l.item_id) || []);
+      }
+
+      setItems(orderedItems.map((item) => ({
+        ...item,
+        type: item.type as LibraryItem['type'],
+        visibility: item.visibility as LibraryItem['visibility'],
+        profiles: profileMap.get(item.user_id) as LibraryItem['profiles'],
+        is_liked: likedIds.has(item.id),
+      })));
+    } catch (err: any) {
+      console.error('Error fetching collection items:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCollectionItems();
+  }, [collectionId, user?.id]);
+
+  return {
+    collection,
+    items,
+    loading,
+    refetch: fetchCollectionItems,
   };
 }

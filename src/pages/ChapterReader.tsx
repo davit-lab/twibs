@@ -31,9 +31,9 @@ export default function ChapterReader() {
   const { updateProgress } = useBookActions();
   const logReading = useLogReading();
   const [tocOpen, setTocOpen] = useState(false);
-  const hasLoggedReading = useRef(false);
   const [fontSize, setFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
   const startTimeRef = useRef<number>(Date.now());
+  const saveScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentChapter = chapters.find((c) => c.id === chapterId);
   const currentIndex = chapters.findIndex((c) => c.id === chapterId);
@@ -42,32 +42,50 @@ export default function ChapterReader() {
 
   const completedChapters = progress?.completed_chapters || [];
   const isCompleted = chapterId ? completedChapters.includes(chapterId) : false;
-  const progressPercent = chapters.length > 0 
-    ? ((currentIndex + 1) / chapters.length) * 100 
+  const progressPercent = chapters.length > 0
+    ? ((currentIndex + 1) / chapters.length) * 100
     : 0;
 
+  // Track one reading session per visit; log today's minutes once on leave.
   useEffect(() => {
-    if (user && bookId && chapterId) {
-      updateProgress(bookId, chapterId);
-      startTimeRef.current = Date.now();
-      
-      if (!hasLoggedReading.current) {
-        hasLoggedReading.current = true;
-        logReading.mutate({ minutesRead: 1, chaptersRead: 0 });
-      }
-    }
-
+    startTimeRef.current = Date.now();
     return () => {
-      if (user && startTimeRef.current) {
-        const minutesRead = Math.max(1, Math.round((Date.now() - startTimeRef.current) / 60000));
+      const minutesRead = Math.max(1, Math.round((Date.now() - startTimeRef.current) / 60000));
+      if (user && minutesRead > 0) {
         logReading.mutate({ minutesRead, chaptersRead: 0 });
       }
     };
-  }, [user, bookId, chapterId, updateProgress]);
-  
+  }, [user, logReading]);
+
+  // Keep reading progress pointing at the open chapter, restore saved scroll.
   useEffect(() => {
-    hasLoggedReading.current = false;
-  }, [chapterId]);
+    if (user && bookId && chapterId) {
+      updateProgress(bookId, chapterId);
+    }
+  }, [user, bookId, chapterId, updateProgress]);
+
+  useEffect(() => {
+    const savedScroll = progress?.scroll_position;
+    if (!savedScroll) return;
+    const id = requestAnimationFrame(() => window.scrollTo(0, savedScroll));
+    return () => cancelAnimationFrame(id);
+  }, [progress?.scroll_position, chapterId]);
+
+  // Persist reading scroll position so we can resume where the reader left off.
+  useEffect(() => {
+    if (!user || !bookId || !chapterId) return;
+    const onScroll = () => {
+      if (saveScrollTimerRef.current) clearTimeout(saveScrollTimerRef.current);
+      saveScrollTimerRef.current = setTimeout(() => {
+        updateProgress(bookId, chapterId, window.scrollY);
+      }, 600);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (saveScrollTimerRef.current) clearTimeout(saveScrollTimerRef.current);
+    };
+  }, [user, bookId, chapterId, updateProgress]);
 
   const handleMarkComplete = useCallback(async () => {
     if (!bookId || !chapterId) return;
@@ -197,9 +215,7 @@ export default function ChapterReader() {
             ))}
           </div>
         </div>
-        <Progress value={progressPercent} className="h-1 bg-muted/50">
-          <div className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-500" style={{ width: `${progressPercent}%` }} />
-        </Progress>
+        <Progress value={progressPercent} className="h-1 bg-muted/50" indicatorClassName="bg-gradient-to-r from-primary to-accent" />
       </header>
 
       {/* Content */}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,15 +17,16 @@ import AudioDetailsSheet from '@/components/reels/AudioDetailsSheet';
 import FeedTabs from '@/components/reels/FeedTabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { BadgeCheck, ChevronDown, ChevronUp, MessageCircle, RefreshCw, Volume2, VolumeX, X } from 'lucide-react';
+import { BadgeCheck, ChevronDown, ChevronUp, Eye, Heart, MessageCircle, RefreshCw, Volume2, VolumeX, X } from 'lucide-react';
 import defaultAvatar from '@/assets/default-avatar.png';
 
 export default function Reels() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const userFilter = searchParams.get('user');
+  const reelToOpen = searchParams.get('reel');
   const [feedType, setFeedType] = useState<ReelsFeedType>('foryou');
   const { uploadStory } = useStories();
 
@@ -81,6 +82,29 @@ export default function Reels() {
     }
   }, [currentIndex, feedItems.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  const jumpToReelDoneRef = useRef(false);
+  useEffect(() => {
+    if (!reelToOpen) {
+      jumpToReelDoneRef.current = false;
+      return;
+    }
+    if (loading || feedItems.length === 0 || jumpToReelDoneRef.current) return;
+
+    const target = feedItems.findIndex((item) => item.type === 'reel' && item.reel.id === reelToOpen);
+    if (target === -1) {
+      if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+      return;
+    }
+
+    jumpToReelDoneRef.current = true;
+    setCurrentIndex(target);
+    setPaused(false);
+
+    const params = new URLSearchParams(searchParams);
+    params.delete('reel');
+    setSearchParams(params, { replace: true });
+  }, [reelToOpen, loading, feedItems, hasNextPage, isFetchingNextPage, fetchNextPage, searchParams, setSearchParams, setCurrentIndex]);
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === ' ') { e.preventDefault(); setPaused(p => !p); }
@@ -115,9 +139,9 @@ export default function Reels() {
   if (loading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-black">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-          <p className="text-sm text-white/40">Loading reels...</p>
+        <div className="flex flex-col items-center gap-5">
+          <div className="h-9 w-9 animate-spin rounded-full border-[1.5px] border-white/15 border-t-white/80" />
+          <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-white/35">Reels</p>
         </div>
       </div>
     );
@@ -127,9 +151,14 @@ export default function Reels() {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-black px-6 text-center text-white">
         <div className="max-w-sm">
-          <h2 className="mb-2 text-lg font-semibold">Something went wrong</h2>
-          <p className="mb-4 text-sm text-white/50">{error}</p>
-          <button onClick={() => refetch()} disabled={refreshing} className="rounded-lg bg-white px-5 py-2 text-sm font-medium text-black transition-colors hover:bg-white/90">
+          <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/35">Reels</p>
+          <h2 className="mb-1.5 text-lg font-semibold">Something went wrong</h2>
+          <p className="mb-5 text-sm text-white/50">{error}</p>
+          <button
+            onClick={() => refetch()}
+            disabled={refreshing}
+            className="rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
             {refreshing ? 'Retrying...' : 'Try again'}
           </button>
         </div>
@@ -228,11 +257,11 @@ export default function Reels() {
           </motion.div>
         </div>
 
-        <div className="hidden w-80 shrink-0 space-y-4 lg:block">
+        <div className="hidden w-80 shrink-0 flex-col gap-3 lg:flex">
           {currentAd && (
-            <aside className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+            <aside className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <div className="flex items-center gap-3">
-                <Avatar className="h-11 w-11">
+                <Avatar className="h-10 w-10">
                   <AvatarImage src={currentAd.advertiser_avatar_url || undefined} />
                   <AvatarFallback>
                     {(currentAd.advertiser_name || '?').slice(0, 1).toUpperCase()}
@@ -241,30 +270,33 @@ export default function Reels() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <p className="truncate text-sm font-semibold">{currentAd.advertiser_name}</p>
-                    {currentAd.advertiser_is_verified && <BadgeCheck className="h-4 w-4 text-white/80" />}
+                    {currentAd.advertiser_is_verified && <BadgeCheck className="h-4 w-4 text-primary" />}
                   </div>
-                  <p className="truncate text-xs text-white/50">@{currentAd.advertiser_username}</p>
+                  <p className="truncate text-xs text-white/45">@{currentAd.advertiser_username}</p>
                 </div>
+                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Sponsored</span>
               </div>
 
               {currentAd.headline && (
-                <p className="mt-4 text-sm font-semibold leading-relaxed text-white">{currentAd.headline}</p>
+                <p className="mt-3.5 text-sm font-semibold leading-relaxed text-white">{currentAd.headline}</p>
               )}
               {currentAd.description && (
-                <p className="mt-1 text-sm leading-relaxed text-white/70">{currentAd.description}</p>
+                <p className="mt-1 text-[13px] leading-relaxed text-white/60">{currentAd.description}</p>
               )}
 
-              <div className="mt-4 rounded-xl bg-white/[0.06] px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Sponsored</p>
-                <p className="mt-0.5 text-sm font-medium text-white">{currentAd.cta || 'Learn More'}</p>
+              <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-3">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Partnered content</span>
+                <span className="text-sm font-medium text-white/80">{currentAd.cta || 'Learn More'}</span>
               </div>
             </aside>
           )}
 
           {currentReel && (
-            <aside className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-11 w-11">
+            <aside className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">Now playing</p>
+
+              <div className="mt-3 flex items-center gap-3">
+                <Avatar className="h-10 w-10">
                   <AvatarImage src={currentReel.profile?.avatar_url || defaultAvatar} />
                   <AvatarFallback>
                     {(currentReel.profile?.display_name || currentReel.profile?.username || '?').slice(0, 1).toUpperCase()}
@@ -273,46 +305,60 @@ export default function Reels() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <p className="truncate text-sm font-semibold">{currentReel.profile?.display_name || 'Unknown user'}</p>
-                    {currentReel.profile?.is_verified && <BadgeCheck className="h-4 w-4 text-white/80" />}
+                    {currentReel.profile?.is_verified && <BadgeCheck className="h-4 w-4 text-primary" />}
                   </div>
-                  <p className="truncate text-xs text-white/50">@{currentReel.profile?.username || 'unknown'}</p>
+                  <p className="truncate text-xs text-white/45">@{currentReel.profile?.username || 'unknown'}</p>
                 </div>
               </div>
 
               {currentReel.caption && (
-                <p className="mt-4 text-sm leading-relaxed text-white/80">{currentReel.caption}</p>
+                <p className="mt-3.5 line-clamp-4 text-sm leading-relaxed text-white/75">{currentReel.caption}</p>
               )}
 
-              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-xl bg-white/[0.06] px-2 py-2">
-                  <p className="text-sm font-semibold">{currentReel.like_count.toLocaleString()}</p>
-                  <p className="text-[11px] text-white/45">Likes</p>
-                </div>
-                <div className="rounded-xl bg-white/[0.06] px-2 py-2">
-                  <p className="text-sm font-semibold">{currentReel.comment_count.toLocaleString()}</p>
-                  <p className="text-[11px] text-white/45">Comments</p>
-                </div>
-                <div className="rounded-xl bg-white/[0.06] px-2 py-2">
-                  <p className="text-sm font-semibold">{currentReel.view_count.toLocaleString()}</p>
-                  <p className="text-[11px] text-white/45">Views</p>
-                </div>
+              <div className="mt-4 flex items-center gap-4 border-t border-white/10 pt-3 text-xs text-white/50">
+                <span className="flex items-center gap-1.5">
+                  <Heart className="h-3.5 w-3.5 text-white/40" />
+                  {currentReel.like_count.toLocaleString()}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <MessageCircle className="h-3.5 w-3.5 text-white/40" />
+                  {currentReel.comment_count.toLocaleString()}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Eye className="h-3.5 w-3.5 text-white/40" />
+                  {currentReel.view_count.toLocaleString()}
+                </span>
               </div>
             </aside>
           )}
 
-          <aside className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-            <p className="text-sm font-semibold">Controls</p>
-            <div className="mt-3 grid gap-2 text-sm text-white/60">
-              <p>Scroll or press ↓ / ↑ to move between reels.</p>
-              <p>Press Space to pause or play.</p>
-              <p>Press M to mute or unmute.</p>
+          <aside className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">Controls</p>
+            <div className="mt-3 space-y-2.5 text-sm text-white/60">
+              <p className="leading-relaxed">
+                Scroll or press{' '}
+                <kbd className="inline-flex h-5 items-center rounded-md border border-white/15 bg-white/[0.06] px-1.5 font-mono text-[11px] text-white/70">↓</kbd>
+                <span className="mx-1 text-white/30">/</span>
+                <kbd className="inline-flex h-5 items-center rounded-md border border-white/15 bg-white/[0.06] px-1.5 font-mono text-[11px] text-white/70">↑</kbd>{' '}
+                to move between reels.
+              </p>
+              <p className="leading-relaxed">
+                Press{' '}
+                <kbd className="inline-flex h-5 items-center rounded-md border border-white/15 bg-white/[0.06] px-1.5 font-mono text-[11px] text-white/70">Space</kbd>{' '}
+                to pause or play.
+              </p>
+              <p className="leading-relaxed">
+                Press{' '}
+                <kbd className="inline-flex h-5 items-center rounded-md border border-white/15 bg-white/[0.06] px-1.5 font-mono text-[11px] text-white/70">M</kbd>{' '}
+                to mute or unmute.
+              </p>
             </div>
             <div className="mt-4 flex gap-2">
-              <Button variant="secondary" size="sm" className="gap-2" onClick={() => setMuted((m) => !m)}>
+              <Button variant="secondary" size="sm" className="gap-1.5 rounded-full" onClick={() => setMuted((m) => !m)}>
                 {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
                 {muted ? 'Unmute' : 'Mute'}
               </Button>
-              <Button variant="secondary" size="sm" className="gap-2" onClick={() => { setSelectedReelId(currentReel?.id ?? null); setShowComments(true); }} disabled={!currentReel}>
+              <Button variant="secondary" size="sm" className="gap-1.5 rounded-full" onClick={() => { setSelectedReelId(currentReel?.id ?? null); setShowComments(true); }} disabled={!currentReel}>
                 <MessageCircle className="h-4 w-4" />
                 Comments
               </Button>
@@ -340,9 +386,13 @@ export default function Reels() {
         </button>
       </div>
 
-      <div className="absolute bottom-4 left-1/2 z-50 hidden -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-black/35 px-3 py-1.5 text-xs text-white/60 backdrop-blur-md sm:flex">
-        <span>{currentIndex + 1} / {feedItems.length}</span>
-        {refreshing && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+      <div className="absolute bottom-4 left-1/2 z-50 hidden -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-black/35 px-3 py-1.5 text-xs backdrop-blur-md sm:flex">
+        <span className="font-medium text-white/85">
+          <span className="tabular-nums">{currentIndex + 1}</span>
+          <span className="mx-1 text-white/40">/</span>
+          <span className="tabular-nums text-white/55">{feedItems.length}</span>
+        </span>
+        {refreshing && <RefreshCw className="h-3.5 w-3.5 animate-spin text-white/40" />}
       </div>
 
       <ReelCommentsSheet reelId={selectedReelId} open={showComments} onOpenChange={setShowComments} />

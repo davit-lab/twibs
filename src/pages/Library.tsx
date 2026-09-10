@@ -1,18 +1,36 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
-import { useBooksByAuthor } from '@/hooks/useBooksByAuthor';
+import { useBooks } from '@/hooks/useBooks';
 import { useMyBooks, useUserLibrary, useBookActions } from '@/hooks/useBooks';
+import { useLibraryItems } from '@/hooks/useLibraryItems';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePremiumStatus } from '@/hooks/usePremiumStatus';
-import AuthorBooksSection from '@/components/library/AuthorBooksSection';
 import LibraryBookCard from '@/components/library/LibraryBookCard';
 import ContinueReadingCard from '@/components/library/ContinueReadingCard';
 import CreateBookDialog from '@/components/library/CreateBookDialog';
 import ImportBookDialog from '@/components/library/ImportBookDialog';
+import UploadItemModal from '@/components/library/UploadItemModal';
 import ReadingStreakCard from '@/components/library/ReadingStreakCard';
 import BookCard from '@/components/library/BookCard';
 import ReadingOverview from '@/components/library/ReadingOverview';
+import LearningProgress from '@/components/library/LearningProgress';
+import LeaderboardCard from '@/components/library/LeaderboardCard';
+import CollectionsSection from '@/components/library/CollectionsSection';
+import ContentCard, { ContentCardGrid } from '@/components/library/content/ContentCard';
+import type { ContentKind, LibraryContent } from '@/lib/library-content';
+import {
+  bookToContent,
+  libraryItemToContent,
+  matchSearch,
+  CONTENT_KINDS,
+  kindLabel,
+} from '@/lib/library-content';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -28,122 +46,93 @@ import {
   Heart,
   Flame,
   PenTool,
-  Library as LibraryIcon,
+  Upload,
+  Download,
+  SlidersHorizontal,
   LayoutGrid,
   List,
-  ArrowUpDown,
-  Download,
+  Compass,
+  Home,
+  FolderOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-type TabValue = 'my-library' | 'browse' | 'streak' | 'my-books';
+type TabValue = 'home' | 'explore' | 'my-library' | 'collections' | 'streak';
 type SortOption = 'recent' | 'popular';
-type LibrarySort = 'recent' | 'title';
 type ViewMode = 'grid' | 'list';
 
 export default function Library() {
   const { user, profile } = useAuth();
-  const { authorGroups, isLoading: loadingBrowse } = useBooksByAuthor();
+  const { books: publishedBooks, isLoading: loadingExploreBooks, refetch: refetchBooks } = useBooks({ status: 'published' });
+  const libraryItemsHook = useLibraryItems();
   const { books: myBooks, isLoading: loadingMyBooks, refetch: refetchMyBooks } = useMyBooks();
   const { books: libraryBooks, isLoading: loadingLibrary, refetch: refetchLibrary } = useUserLibrary();
   const { removeFromLibrary, toggleBookLike } = useBookActions();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<TabValue>(user ? 'my-library' : 'browse');
-  const [sortBy, setSortBy] = useState<SortOption>('recent');
-  const [librarySort, setLibrarySort] = useState<LibrarySort>('recent');
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [activeGenre, setActiveGenre] = useState('all');
-  const [libraryGenre, setLibraryGenre] = useState('all');
   const { data: isPremium } = usePremiumStatus(user?.id);
+
+  const [activeTab, setActiveTab] = useState<TabValue>(user ? 'home' : 'explore');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | ContentKind>('all');
+  const [sortBy, setSortBy] = useState<SortOption>('recent');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [likedOverrides, setLikedOverrides] = useState<Record<string, boolean>>({});
 
   const isVerified = profile?.is_verified;
   const canCreateBooks = isVerified || isPremium;
 
-  // All genres across published books
-  const genres = useMemo(() => {
-    const set = new Set<string>();
-    authorGroups.forEach((group) =>
-      group.books.forEach((book) => {
-        if (book.genre) set.add(book.genre);
-      })
-    );
-    return ['all', ...Array.from(set).sort()];
-  }, [authorGroups]);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-  const filteredGroups = useMemo(() => {
-    const filtered = authorGroups.filter((group) => {
-      if (!searchQuery) return true;
-      const query = searchQuery.toLowerCase();
-      return (
-        group.author.display_name.toLowerCase().includes(query) ||
-        group.author.username.toLowerCase().includes(query) ||
-        group.books.some((book) => book.title.toLowerCase().includes(query))
-      );
-    });
-
+  const exploreItems: LibraryContent[] = useMemo(() => {
+    const books = publishedBooks.map(bookToContent);
+    const media = libraryItemsHook.items.map(libraryItemToContent);
+    let all = [...books, ...media];
+    if (typeFilter !== 'all') all = all.filter((c) => c.kind === typeFilter);
+    all = all.filter((c) => matchSearch(c, debouncedQuery));
     if (sortBy === 'popular') {
-      return [...filtered].sort((a, b) => {
-        const aViews = a.books.reduce((sum, b) => sum + (b.view_count || 0), 0);
-        const bViews = b.books.reduce((sum, b) => sum + (b.view_count || 0), 0);
-        return bViews - aViews;
-      });
+      all = [...all].sort((a, b) => b.viewCount - a.viewCount);
+    } else {
+      all = [...all].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
     }
-    return filtered;
-  }, [authorGroups, searchQuery, sortBy]);
+    return all.map((c) => (likedOverrides[c.key] !== undefined ? { ...c, liked: likedOverrides[c.key] } : c));
+  }, [publishedBooks, libraryItemsHook.items, debouncedQuery, typeFilter, sortBy, likedOverrides]);
 
-  const genreFilteredGroups = useMemo(() => {
-    if (activeGenre === 'all') return filteredGroups;
-    return filteredGroups
-      .map((group) => ({
-        ...group,
-        books: group.books.filter((book) => book.genre === activeGenre),
-      }))
-      .filter((group) => group.books.length > 0);
-  }, [filteredGroups, activeGenre]);
-
-  const filteredMyBooks = useMemo(() => {
-    return myBooks.filter((book) =>
-      book.title.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [myBooks, searchQuery]);
+  const typeCounts = useMemo(() => {
+    const counts: Partial<Record<'all' | ContentKind, number>> = { all: exploreItems.length };
+    CONTENT_KINDS.forEach((kind) => {
+      counts[kind] = exploreItems.filter((c) => c.kind === kind).length;
+    });
+    return counts;
+  }, [exploreItems]);
 
   const filteredLibrary = useMemo(() => {
-    const filtered = libraryBooks.filter((book) =>
-      book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      book.author?.display_name.toLowerCase().includes(searchQuery.toLowerCase())
+    const filtered = libraryBooks.filter(
+      (book) =>
+        !debouncedQuery ||
+        book.title.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
+        (book.author?.display_name.toLowerCase().includes(debouncedQuery.toLowerCase()) ?? false)
     );
-    if (librarySort === 'title') {
-      return [...filtered].sort((a, b) => a.title.localeCompare(b.title));
-    }
     return filtered;
-  }, [libraryBooks, searchQuery, librarySort]);
+  }, [libraryBooks, debouncedQuery]);
 
-  const libraryGenres = useMemo(() => {
-    const set = new Set<string>();
-    libraryBooks.forEach((book) => {
-      if (book.genre) set.add(book.genre);
-    });
-    return ['all', ...Array.from(set).sort()];
-  }, [libraryBooks]);
-
-  const genreFilteredLibrary = useMemo(() => {
-    if (libraryGenre === 'all') return filteredLibrary;
-    return filteredLibrary.filter((book) => book.genre === libraryGenre);
-  }, [filteredLibrary, libraryGenre]);
-
-  const currentlyReading = genreFilteredLibrary.filter(
+  const currentlyReading = filteredLibrary.filter(
     (book) => book.progress && book.completed_count < book.total_chapters
   );
-  const notStarted = genreFilteredLibrary.filter(
-    (book) => !book.progress || book.completed_count === 0
+  const notStarted = filteredLibrary.filter(
+    (book) => book.progress === undefined && book.completed_count === 0
   );
-  const completedBooks = genreFilteredLibrary.filter(
+  const completedBooks = filteredLibrary.filter(
     (book) => book.completed_count === book.total_chapters && book.total_chapters > 0
   );
-
-  const heartedBooks = genreFilteredLibrary.filter((book) => book.is_liked);
+  const heartedBooks = filteredLibrary.filter((book) => book.is_liked);
 
   const heroBook = currentlyReading[0];
+  const firstName = profile?.display_name?.split(' ')[0] || 'Reader';
 
   const handleRemoveFromLibrary = async (bookId: string) => {
     const removed = await removeFromLibrary(bookId);
@@ -152,15 +141,25 @@ export default function Library() {
 
   const handleToggleLike = async (bookId: string, isCurrentlyLiked: boolean) => {
     const success = await toggleBookLike(bookId, isCurrentlyLiked);
-    if (success) refetchLibrary();
+    if (success) {
+      refetchLibrary();
+      refetchBooks();
+    }
   };
 
-  const tabs = [
-    { value: 'my-library' as const, label: 'My Library', icon: Heart, requiresAuth: true, count: libraryBooks.length },
-    { value: 'browse' as const, label: 'Browse', icon: BookOpen, requiresAuth: false, count: undefined },
-    { value: 'streak' as const, label: 'Streak', icon: Flame, requiresAuth: true, count: undefined },
-    { value: 'my-books' as const, label: 'My Books', icon: PenTool, requiresAuth: true, requiresCreate: true, count: undefined },
-  ];
+  const handleExploreLike = useCallback((content: LibraryContent) => {
+    const next = !(content.liked ?? false);
+    setLikedOverrides((prev) => ({ ...prev, [content.key]: next }));
+    if (content.kind === 'book') {
+      void toggleBookLike(content.id, content.liked ?? false);
+    } else {
+      void libraryItemsHook.likeItem(content.id);
+    }
+  }, [toggleBookLike, libraryItemsHook]);
+
+  const handleMyItemsLike = useCallback((content: LibraryContent) => {
+    void libraryItemsHook.likeItem(content.id);
+  }, [libraryItemsHook]);
 
   const renderSectionHeader = (title: string, icon?: React.ReactNode, action?: React.ReactNode, count?: number) => (
     <div className="mb-4 flex items-end justify-between gap-4">
@@ -177,75 +176,91 @@ export default function Library() {
     </div>
   );
 
+  const tabs = [
+    { value: 'home' as const, label: 'Home', icon: Home, requiresAuth: false },
+    { value: 'explore' as const, label: 'Explore', icon: Compass, requiresAuth: false },
+    { value: 'my-library' as const, label: 'My Library', icon: BookOpen, requiresAuth: true, count: libraryBooks.length },
+    { value: 'collections' as const, label: 'Collections', icon: FolderOpen, requiresAuth: true },
+    { value: 'streak' as const, label: 'Streak', icon: Flame, requiresAuth: true },
+  ];
+
   return (
     <MainLayout>
-      <div className="min-h-screen bg-background pb-24 lg:pb-8">
-        <div className="mx-auto max-w-6xl px-4 md:px-6">
-          {/* Page header */}
-          <div className="flex flex-col gap-5 pt-8 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
-                Reading space
-              </p>
-              <h1 className="mt-1 text-3xl font-bold tracking-tight md:text-4xl">Library</h1>
-              <p className="mt-1.5 text-sm text-muted-foreground">
-                Discover books from the community and track your reading.
-              </p>
-            </div>
+      <div className="mx-auto max-w-6xl px-4 pb-24 md:px-6 lg:pb-8">
+        <div className="flex flex-col gap-5 pt-8 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
+              Reading space
+            </p>
+            <h1 className="mt-1 text-3xl font-bold tracking-tight md:text-4xl">Library</h1>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              Discover, read and curate books, audio, PDFs, images and videos — all in one place.
+            </p>
+          </div>
 
+          <div className="flex flex-wrap items-center gap-2.5">
+            <ImportBookDialog onBookImported={refetchMyBooks}>
+              <Button variant="outline" className="h-11 rounded-xl px-4 font-semibold border-border/60">
+                <Download className="h-4 w-4" />
+                Import book
+              </Button>
+            </ImportBookDialog>
+            <UploadItemModal onSuccess={libraryItemsHook.refetch}>
+              <Button variant="outline" className="h-11 rounded-xl px-4 font-semibold border-border/60">
+                <Upload className="h-4 w-4" />
+                Upload
+              </Button>
+            </UploadItemModal>
             {canCreateBooks && (
-              <div className="flex items-center gap-3">
-                <CreateBookDialog onBookCreated={refetchMyBooks}>
-                  <Button className="h-11 rounded-xl px-5 font-semibold shadow-md shadow-primary/20">
-                    <Plus className="h-4 w-4" />
-                    Create book
-                  </Button>
-                </CreateBookDialog>
-              </div>
+              <CreateBookDialog onBookCreated={refetchMyBooks}>
+                <Button className="h-11 rounded-xl px-5 font-semibold shadow-md shadow-primary/20">
+                  <Plus className="h-4 w-4" />
+                  Create book
+                </Button>
+              </CreateBookDialog>
             )}
           </div>
+        </div>
 
-          {/* Tabs */}
-          <div className="mt-8 flex gap-1 overflow-x-auto border-b border-border/60">
-            {tabs.map((tab) => {
-              if (tab.requiresAuth && !user) return null;
-              if (tab.requiresCreate && !canCreateBooks) return null;
-              const isActive = activeTab === tab.value;
-              return (
-                <button
-                  key={tab.value}
-                  onClick={() => setActiveTab(tab.value)}
+        <div className="mt-8 flex gap-1 overflow-x-auto border-b border-border/60">
+          {tabs.map((tab) => {
+            if (tab.requiresAuth && !user) return null;
+            const isActive = activeTab === tab.value;
+            return (
+              <button
+                key={tab.value}
+                onClick={() => setActiveTab(tab.value)}
+                className={cn(
+                  'relative flex items-center gap-2 whitespace-nowrap px-3.5 py-3 text-sm transition-colors',
+                  isActive ? 'font-semibold text-foreground' : 'font-medium text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <tab.icon className={cn('h-4 w-4', isActive && 'text-primary')} />
+                {tab.label}
+                {tab.count !== undefined && tab.count > 0 && (
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                    {tab.count}
+                  </span>
+                )}
+                <span
                   className={cn(
-                    'relative flex items-center gap-2 whitespace-nowrap px-3.5 py-3 text-sm transition-colors',
-                    isActive ? 'font-semibold text-foreground' : 'font-medium text-muted-foreground hover:text-foreground'
+                    'absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary transition-opacity',
+                    isActive ? 'opacity-100' : 'opacity-0'
                   )}
-                >
-                  <tab.icon className={cn('h-4 w-4', isActive && 'text-primary')} />
-                  {tab.label}
-                  {tab.count !== undefined && tab.count > 0 && (
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
-                      {tab.count}
-                    </span>
-                  )}
-                  <span
-                    className={cn(
-                      'absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary transition-opacity',
-                      isActive ? 'opacity-100' : 'opacity-0'
-                    )}
-                  />
-                </button>
-              );
-            })}
-          </div>
+                />
+              </button>
+            );
+          })}
+        </div>
 
-          {/* Search + controls */}
+        {(activeTab === 'explore' || activeTab === 'my-library') && (
           <div className="mt-6 flex flex-col gap-3 md:flex-row md:items-center">
             <div className="relative flex-1 md:max-w-md">
               <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search books, authors..."
+                placeholder={activeTab === 'explore' ? 'Search books and media...' : 'Search your library...'}
                 className="h-11 rounded-xl border-border/60 bg-card pl-10 pr-10 focus-visible:ring-primary/30"
               />
               {searchQuery && (
@@ -259,15 +274,28 @@ export default function Library() {
             </div>
 
             <div className="flex items-center gap-2">
-              {activeTab === 'browse' && (
+              {activeTab === 'explore' && (
                 <>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="h-11 gap-2 rounded-xl border-border/60 bg-card px-3 text-xs font-semibold"
+                      >
+                        <SlidersHorizontal className="h-3.5 w-3.5" />
+                        {typeFilter === 'all' ? 'All types' : kindLabel(typeFilter)}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-52 rounded-2xl p-2">
+                      <TypeFilterList typeFilter={typeFilter} typeCounts={typeCounts} onChange={setTypeFilter} />
+                    </PopoverContent>
+                  </Popover>
+
                   <div className="flex items-center rounded-xl border border-border/60 bg-card p-1">
-                    {(
-                      [
-                        { value: 'recent', label: 'Recent', icon: Clock },
-                        { value: 'popular', label: 'Popular', icon: TrendingUp },
-                      ] as { value: SortOption; label: string; icon: React.ElementType }[]
-                    ).map((option) => (
+                    {([
+                      { value: 'recent', label: 'Recent', icon: Clock },
+                      { value: 'popular', label: 'Popular', icon: TrendingUp },
+                    ] as { value: SortOption; label: string; icon: React.ElementType }[]).map((option) => (
                       <button
                         key={option.value}
                         onClick={() => setSortBy(option.value)}
@@ -286,317 +314,455 @@ export default function Library() {
                 </>
               )}
 
-              {activeTab === 'my-library' && (
+              <div className="flex items-center rounded-xl border border-border/60 bg-card p-1">
                 <button
-                  onClick={() => setLibrarySort(librarySort === 'recent' ? 'title' : 'recent')}
-                  className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-card px-3 py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => setViewMode('grid')}
+                  className={cn(
+                    'rounded-lg p-1.5 transition-colors',
+                    viewMode === 'grid' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
+                  )}
                 >
-                  <ArrowUpDown className="h-3.5 w-3.5" />
-                  {librarySort === 'recent' ? 'Recently read' : 'Title A–Z'}
+                  <LayoutGrid className="h-4 w-4" />
                 </button>
-              )}
-
-              {(activeTab === 'my-library' || activeTab === 'my-books') && (
-                <div className="flex items-center rounded-xl border border-border/60 bg-card p-1">
-                  <button
-                    onClick={() => setViewMode('grid')}
-                    className={cn(
-                      'rounded-lg p-1.5 transition-colors',
-                      viewMode === 'grid' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    <LayoutGrid className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => setViewMode('list')}
-                    className={cn(
-                      'rounded-lg p-1.5 transition-colors',
-                      viewMode === 'list' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    <List className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={cn(
+                    'rounded-lg p-1.5 transition-colors',
+                    viewMode === 'list' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <List className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
+        )}
 
-          {/* Content */}
-          <div className="mt-8 min-h-[400px]">
-            {/* ===== My Library ===== */}
-            {activeTab === 'my-library' && user && (
-              <>
-                {loadingLibrary ? (
-                  <div className="space-y-6">
-                    <Skeleton className="h-64 w-full rounded-3xl" />
-                    <div className="grid gap-4 md:grid-cols-2">
-                      {[1, 2].map((i) => (
-                        <Skeleton key={i} className="h-40 w-full rounded-2xl" />
-                      ))}
-                    </div>
-                  </div>
-                ) : filteredLibrary.length === 0 ? (
-                  <div className="rounded-3xl border border-dashed border-border/80 bg-card/50 px-8 py-20 text-center">
-                    <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-                      <Heart className="h-8 w-8 text-primary" />
-                    </div>
-                    <h3 className="text-xl font-bold tracking-tight">Your library is empty</h3>
-                    <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-                      Browse books and add them to your library to track your reading progress.
-                    </p>
-                    <Button onClick={() => setActiveTab('browse')} className="mt-6 rounded-xl px-6 font-semibold">
-                      <Sparkles className="h-4 w-4" />
-                      Browse books
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-10">
-                    <ReadingOverview books={libraryBooks} />
-
-                    {libraryGenres.length > 1 && (
-                      <div className="flex flex-wrap gap-2">
-                        {libraryGenres.map((genre) => (
-                          <button
-                            key={genre}
-                            onClick={() => setLibraryGenre(genre)}
-                            className={cn(
-                              'rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors',
-                              libraryGenre === genre
-                                ? 'border-primary bg-primary text-primary-foreground'
-                                : 'border-border/60 bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                            )}
-                          >
-                            {genre === 'all' ? 'All books' : genre}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {heroBook && <ContinueReadingCard book={heroBook} />}
-
-                    {currentlyReading.length > 0 && (
-                      <section>
-                        {renderSectionHeader('Continue reading', (
-                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                            <BookOpen className="h-4 w-4 text-primary" />
-                          </span>
-                        ), undefined, currentlyReading.length)}
-                        {viewMode === 'grid' ? (
-                          <div className="grid gap-4 md:grid-cols-2">
-                            {currentlyReading.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} onToggleLike={handleToggleLike} />
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            {currentlyReading.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} onToggleLike={handleToggleLike} />
-                            ))}
-                          </div>
-                        )}
-                      </section>
-                    )}
-
-                    {notStarted.length > 0 && (
-                      <section>
-                        {renderSectionHeader('Pick up later', (
-                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
-                            <Clock className="h-4 w-4 text-muted-foreground" />
-                          </span>
-                        ), undefined, notStarted.length)}
-                        {viewMode === 'grid' ? (
-                          <div className="grid gap-4 md:grid-cols-2">
-                            {notStarted.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} onToggleLike={handleToggleLike} />
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            {notStarted.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} onToggleLike={handleToggleLike} />
-                            ))}
-                          </div>
-                        )}
-                      </section>
-                    )}
-
-                    {completedBooks.length > 0 && (
-                      <section>
-                        {renderSectionHeader('Finished', (
-                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
-                            <BookCheck className="h-4 w-4 text-emerald-500" />
-                          </span>
-                        ), undefined, completedBooks.length)}
-                        {viewMode === 'grid' ? (
-                          <div className="grid gap-4 md:grid-cols-2">
-                            {completedBooks.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} onToggleLike={handleToggleLike} />
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            {completedBooks.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} onToggleLike={handleToggleLike} />
-                            ))}
-                          </div>
-                        )}
-                      </section>
-                    )}
-
-                    {heartedBooks.length > 0 && (
-                      <section>
-                        {renderSectionHeader('Hearted', (
-                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10">
-                            <Heart className="h-4 w-4 text-red-500" />
-                          </span>
-                        ), undefined, heartedBooks.length)}
-                        {viewMode === 'grid' ? (
-                          <div className="grid gap-4 md:grid-cols-2">
-                            {heartedBooks.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} onToggleLike={handleToggleLike} />
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            {heartedBooks.map((book) => (
-                              <LibraryBookCard key={book.id} book={book} onRemove={() => handleRemoveFromLibrary(book.id)} onToggleLike={handleToggleLike} />
-                            ))}
-                          </div>
-                        )}
-                      </section>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* ===== Browse ===== */}
-            {activeTab === 'browse' && (
-              <>
-                {/* Genre chips */}
-                {genres.length > 1 && (
-                  <div className="mb-6 flex flex-wrap gap-2">
-                    {genres.map((genre) => (
-                      <button
-                        key={genre}
-                        onClick={() => setActiveGenre(genre)}
-                        className={cn(
-                          'rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors',
-                          activeGenre === genre
-                            ? 'border-primary bg-primary text-primary-foreground'
-                            : 'border-border/60 bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                        )}
-                      >
-                        {genre === 'all' ? 'All genres' : genre}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {loadingBrowse ? (
-                  <div className="space-y-10">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="space-y-4">
-                        <Skeleton className="h-8 w-52" />
-                        <div className="flex gap-5 overflow-hidden">
-                          {[1, 2, 3, 4, 5].map((j) => (
-                            <Skeleton key={j} className="h-56 w-40 flex-shrink-0 rounded-2xl" />
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : genreFilteredGroups.length === 0 ? (
-                  <div className="rounded-3xl border border-dashed border-border/80 bg-card/50 px-8 py-20 text-center">
-                    <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-                      <LibraryIcon className="h-8 w-8 text-primary" />
-                    </div>
-                    <h3 className="text-xl font-bold tracking-tight">No books found</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      {searchQuery || activeGenre !== 'all'
-                        ? 'Try a different search or filter'
-                        : 'Be the first to publish a book!'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-12">
-                    {genreFilteredGroups.map((group) => (
-                      <AuthorBooksSection key={group.author.user_id} authorGroup={group} />
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* ===== Streak ===== */}
-            {activeTab === 'streak' && user && (
-              <div className="mx-auto max-w-xl">
-                <ReadingStreakCard />
+        <div className="mt-8 min-h-[400px]">
+          {/* ===== Home ===== */}
+          {activeTab === 'home' && (
+            <div className="space-y-10">
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight">
+                  {user ? `Welcome back, ${firstName}` : 'Welcome to the library'}
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {user
+                    ? 'Pick up where you left off or discover something new.'
+                    : 'Browse books and media from the community. Sign in to track your reading.'}
+                </p>
               </div>
-            )}
 
-            {/* ===== My Books ===== */}
-            {activeTab === 'my-books' && canCreateBooks && (
-              <>
-                {loadingMyBooks ? (
-                  <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <Skeleton key={i} className="aspect-[3/4] rounded-2xl" />
-                    ))}
-                  </div>
-                ) : filteredMyBooks.length === 0 ? (
-                  <div className="rounded-3xl border border-dashed border-border/80 bg-card/50 px-8 py-20 text-center">
-                    <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-                      <PenTool className="h-8 w-8 text-primary" />
-                    </div>
-                    <h3 className="text-xl font-bold tracking-tight">No books yet</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">Start writing your first book today.</p>
-                    <CreateBookDialog onBookCreated={refetchMyBooks}>
-                      <Button className="mt-6 rounded-xl px-6 font-semibold">
-                        <Plus className="h-4 w-4" />
-                        Create book
-                      </Button>
-                    </CreateBookDialog>
-                  </div>
-                ) : (
+              {user && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <LearningProgress />
+                  <ReadingStreakCard compact />
+                </div>
+              )}
+
+              {heroBook && <ContinueReadingCard book={heroBook} />}
+
+              {currentlyReading.length > 0 && (
+                <section>
+                  {renderSectionHeader(
+                    'Continue reading',
+                    (
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                        <BookOpen className="h-4 w-4 text-primary" />
+                      </span>
+                    ),
+                    undefined,
+                    currentlyReading.length
+                  )}
+                  <ContentCardGrid
+                    items={currentlyReading.slice(0, 4).map(bookToContent)}
+                    onRemove={(c) => handleRemoveFromLibrary(c.id)}
+                  />
+                </section>
+              )}
+
+              {canCreateBooks && myBooks.length > 0 && (
+                <section>
+                  {renderSectionHeader(
+                    'Your published work',
+                    (
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                        <PenTool className="h-4 w-4 text-primary" />
+                      </span>
+                    ),
+                    <Link
+                      to={`/library/book/${myBooks[0].id}`}
+                      className="text-sm font-semibold text-primary hover:underline"
+                    >
+                      View writing
+                    </Link>,
+                    myBooks.length
+                  )}
                   <div
                     className={cn(
                       'grid gap-4',
                       viewMode === 'grid'
-                        ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
+                        ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4'
                         : 'grid-cols-1'
                     )}
                   >
-                    {filteredMyBooks.map((book) => (
+                    {myBooks.slice(0, 4).map((book) => (
                       <BookCard key={book.id} book={book} showStatus />
                     ))}
                   </div>
-                )}
-              </>
-            )}
-          </div>
+                </section>
+              )}
 
-          {/* Info for non-verified users */}
-          {!canCreateBooks && user && (
-            <div className="mt-12 overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-card to-card/60">
-              <div className="grid gap-6 p-6 md:grid-cols-[auto_1fr_auto] md:items-center md:p-8">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
-                  <PenTool className="h-7 w-7 text-primary" />
+              {!canCreateBooks && user && (
+                <section className="rounded-3xl border border-border/60 bg-card/50 p-6 md:p-8">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+                      <PenTool className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-bold tracking-tight">Want to publish your own books?</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Get verified or upgrade to premium to create and publish books, or import classics from Open Library.
+                      </p>
+                    </div>
+                    <ImportBookDialog onBookImported={refetchMyBooks}>
+                      <Button variant="outline" className="h-11 rounded-xl border-primary/30 font-semibold hover:bg-primary/10">
+                        <Download className="h-4 w-4" />
+                        Import a book
+                      </Button>
+                    </ImportBookDialog>
+                  </div>
+                </section>
+              )}
+            </div>
+          )}
+
+          {/* ===== Explore ===== */}
+          {activeTab === 'explore' && (
+            <>
+              {loadingExploreBooks ? (
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <Skeleton key={i} className="aspect-[3/4] rounded-2xl" />
+                  ))}
                 </div>
-                <div>
-                  <h3 className="text-lg font-bold tracking-tight">Want to publish your own books?</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Get verified or upgrade to premium to create and publish books in the library.
+              ) : (
+                <>
+                  {debouncedQuery && (
+                    <div className="mb-5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                      <span>
+                        <strong className="text-foreground">{exploreItems.length}</strong> results for &ldquo;{debouncedQuery}&rdquo;
+                      </span>
+                      <div className="ml-auto flex gap-1.5 text-xs">
+                        {CONTENT_KINDS.map((kind) => {
+                          const count = exploreItems.filter((c) => c.kind === kind).length;
+                          if (!count) return null;
+                          return (
+                            <button
+                              key={kind}
+                              onClick={() => setTypeFilter(typeFilter === kind ? 'all' : kind)}
+                              className={cn(
+                                'rounded-full border px-3 py-1 font-semibold transition-colors',
+                                typeFilter === kind
+                                  ? 'border-primary bg-primary text-primary-foreground'
+                                  : 'border-border/60 bg-card text-muted-foreground hover:text-foreground'
+                              )}
+                            >
+                              {kindLabel(kind)} · {count}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {exploreItems.length === 0 ? (
+                    <div className="rounded-3xl border border-dashed border-border/80 bg-card/50 px-8 py-20 text-center">
+                      <Compass className="mx-auto mb-5 h-12 w-12 text-muted-foreground/40" />
+                      <h3 className="text-xl font-bold tracking-tight">Nothing found</h3>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {debouncedQuery || typeFilter !== 'all'
+                          ? 'Try a different search or clear the type filter.'
+                          : 'Be the first to publish a book or upload media!'}
+                      </p>
+                      {!debouncedQuery && typeFilter === 'all' && user && (
+                        <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
+                          <UploadItemModal onSuccess={libraryItemsHook.refetch}>
+                            <Button className="rounded-xl font-semibold">
+                              <Upload className="h-4 w-4" />
+                              Upload something
+                            </Button>
+                          </UploadItemModal>
+                          {canCreateBooks && (
+                            <CreateBookDialog onBookCreated={refetchMyBooks}>
+                              <Button variant="outline" className="rounded-xl font-semibold border-border/60">
+                                <PenTool className="h-4 w-4" />
+                                Create a book
+                              </Button>
+                            </CreateBookDialog>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : viewMode === 'grid' ? (
+                    <ContentCardGrid items={exploreItems} onLike={handleExploreLike} />
+                  ) : (
+                    <div className="space-y-3">
+                      {exploreItems.map((content) => (
+                        <ContentCard
+                          key={content.key}
+                          content={content}
+                          variant="list"
+                          onLike={handleExploreLike}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+
+          {/* ===== My Library ===== */}
+          {activeTab === 'my-library' && user && (
+            <div className="space-y-10">
+              <div className="flex items-center gap-2">
+                <UploadItemModal onSuccess={libraryItemsHook.refetch}>
+                  <Button size="sm" className="rounded-xl gap-1.5 font-semibold">
+                    <Upload className="h-4 w-4" />
+                    Upload
+                  </Button>
+                </UploadItemModal>
+              </div>
+
+              {loadingLibrary ? (
+                <div className="space-y-6">
+                  <Skeleton className="h-64 w-full rounded-3xl" />
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {[1, 2].map((i) => (
+                      <Skeleton key={i} className="h-40 w-full rounded-2xl" />
+                    ))}
+                  </div>
+                </div>
+              ) : debouncedQuery &&
+                filteredLibrary.length === 0 &&
+                !libraryItemsHook.items.some((i) =>
+                  i.title.toLowerCase().includes(debouncedQuery.toLowerCase())
+                ) ? (
+                <div className="rounded-3xl border border-dashed border-border/80 bg-card/50 px-8 py-20 text-center">
+                  <Search className="mx-auto mb-5 h-10 w-10 text-muted-foreground/40" />
+                  <h3 className="text-xl font-bold tracking-tight">No matches in your library</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Nothing matching &ldquo;{debouncedQuery}&rdquo; was found.
                   </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => setSearchQuery('')}
+                    className="mt-6 rounded-xl font-semibold border-border/60"
+                  >
+                    Clear search
+                  </Button>
                 </div>
-                <Button variant="outline" className="h-11 rounded-xl border-primary/30 font-semibold hover:bg-primary/10" disabled>
-                  View plans
-                </Button>
+              ) : filteredLibrary.length === 0 && libraryItemsHook.items.length === 0 ? (
+                <div className="rounded-3xl border border-dashed border-border/80 bg-card/50 px-8 py-20 text-center">
+                  <Heart className="mx-auto mb-5 h-10 w-10 text-primary/50" />
+                  <h3 className="text-xl font-bold tracking-tight">Your library is empty</h3>
+                  <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+                    Save books to track your reading, or upload your own audio, PDFs, images and videos.
+                  </p>
+                  <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
+                    <Button onClick={() => setActiveTab('explore')} className="rounded-xl px-6 font-semibold">
+                      <Sparkles className="h-4 w-4" />
+                      Browse the library
+                    </Button>
+                    <UploadItemModal onSuccess={libraryItemsHook.refetch}>
+                      <Button variant="outline" className="rounded-xl font-semibold border-border/60">
+                        <Upload className="h-4 w-4" />
+                        Upload media
+                      </Button>
+                    </UploadItemModal>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-10">
+                  {filteredLibrary.length > 0 && (
+                    <>
+                      <ReadingOverview books={libraryBooks} />
+                      {heroBook && <ContinueReadingCard book={heroBook} />}
+
+                      {currentlyReading.length > 0 && (
+                        <section>
+                          {renderSectionHeader(
+                            'Continue reading',
+                            (
+                              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                                <BookOpen className="h-4 w-4 text-primary" />
+                              </span>
+                            ),
+                            undefined,
+                            currentlyReading.length
+                          )}
+                          <div className={cn('grid gap-4 md:grid-cols-2', viewMode === 'list' && 'grid-cols-1')}>
+                            {currentlyReading.map((book) => (
+                              <LibraryBookCard
+                                key={book.id}
+                                book={book}
+                                onRemove={() => handleRemoveFromLibrary(book.id)}
+                                onToggleLike={handleToggleLike}
+                              />
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
+                      {notStarted.length > 0 && (
+                        <section>
+                          {renderSectionHeader(
+                            'Pick up later',
+                            (
+                              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                                <Clock className="h-4 w-4 text-muted-foreground" />
+                              </span>
+                            ),
+                            undefined,
+                            notStarted.length
+                          )}
+                          <div className={cn('grid gap-4 md:grid-cols-2', viewMode === 'list' && 'grid-cols-1')}>
+                            {notStarted.map((book) => (
+                              <LibraryBookCard
+                                key={book.id}
+                                book={book}
+                                onRemove={() => handleRemoveFromLibrary(book.id)}
+                                onToggleLike={handleToggleLike}
+                              />
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
+                      {(completedBooks.length > 0 || heartedBooks.length > 0) && (
+                        <section>
+                          {renderSectionHeader(
+                            'Finished & hearted',
+                            (
+                              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
+                                <BookCheck className="h-4 w-4 text-emerald-500" />
+                              </span>
+                            ),
+                            undefined,
+                            completedBooks.length + heartedBooks.length
+                          )}
+                          <div className={cn('grid gap-4 md:grid-cols-2', viewMode === 'list' && 'grid-cols-1')}>
+                            {[...completedBooks, ...heartedBooks].map((book) => (
+                              <LibraryBookCard
+                                key={book.id}
+                                book={book}
+                                onRemove={() => handleRemoveFromLibrary(book.id)}
+                                onToggleLike={handleToggleLike}
+                              />
+                            ))}
+                          </div>
+                        </section>
+                      )}
+                    </>
+                  )}
+
+                  {libraryItemsHook.items.length > 0 && (
+                    <section>
+                      {renderSectionHeader(
+                        'My uploads',
+                        (
+                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                            <Upload className="h-4 w-4 text-primary" />
+                          </span>
+                        ),
+                        <UploadItemModal onSuccess={libraryItemsHook.refetch}>
+                          <Button variant="ghost" size="sm" className="gap-1 font-semibold text-primary">
+                            <Plus className="h-4 w-4" />
+                            Upload
+                          </Button>
+                        </UploadItemModal>,
+                        libraryItemsHook.items.length
+                      )}
+                      {viewMode === 'grid' ? (
+                        <ContentCardGrid
+                          items={libraryItemsHook.items
+                            .filter((i) => !debouncedQuery || i.title.toLowerCase().includes(debouncedQuery.toLowerCase()))
+                            .map(libraryItemToContent)}
+                          onLike={handleMyItemsLike}
+                        />
+                      ) : (
+                        <div className="space-y-3">
+                          {libraryItemsHook.items
+                            .filter((i) => !debouncedQuery || i.title.toLowerCase().includes(debouncedQuery.toLowerCase()))
+                            .map((item) => (
+                              <ContentCard
+                                key={item.id}
+                                content={libraryItemToContent(item)}
+                                variant="list"
+                                onLike={handleMyItemsLike}
+                              />
+                            ))}
+                        </div>
+                      )}
+                    </section>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ===== Collections ===== */}
+          {activeTab === 'collections' && user && <CollectionsSection />}
+
+          {/* ===== Streak ===== */}
+          {activeTab === 'streak' && user && (
+            <div className="space-y-6">
+              <div className="mx-auto max-w-xl">
+                <ReadingStreakCard />
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <LearningProgress />
+                <LeaderboardCard />
               </div>
             </div>
           )}
         </div>
       </div>
     </MainLayout>
+  );
+}
+
+function TypeFilterList({
+  typeFilter,
+  typeCounts,
+  onChange,
+}: {
+  typeFilter: 'all' | ContentKind;
+  typeCounts: Partial<Record<'all' | ContentKind, number>>;
+  onChange: (value: 'all' | ContentKind) => void;
+}) {
+  const options: { value: 'all' | ContentKind; label: string }[] = [
+    { value: 'all', label: 'All types' },
+    ...CONTENT_KINDS.map((kind) => ({ value: kind, label: kindLabel(kind) })),
+  ];
+  return (
+    <div className="space-y-0.5">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          onClick={() => onChange(opt.value)}
+          className={cn(
+            'flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition-colors',
+            typeFilter === opt.value
+              ? 'bg-primary/10 text-primary'
+              : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+          )}
+        >
+          {opt.label}
+          <span className="text-xs text-muted-foreground">{typeCounts[opt.value] ?? 0}</span>
+        </button>
+      ))}
+    </div>
   );
 }

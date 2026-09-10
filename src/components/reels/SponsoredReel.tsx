@@ -113,7 +113,7 @@ export default function SponsoredReel({ ad, isActive }: SponsoredReelProps) {
               <span className="truncate text-sm font-semibold text-white group-hover:underline">
                 {ad.advertiser_name}
               </span>
-              {ad.advertiser_is_verified && <BadgeCheck className="h-4 w-4 flex-shrink-0 text-blue-400" />}
+              {ad.advertiser_is_verified && <BadgeCheck className="h-4 w-4 flex-shrink-0 text-primary" />}
             </button>
             <p className="truncate text-xs text-white/55">@{ad.advertiser_username}</p>
           </div>
@@ -133,7 +133,7 @@ export default function SponsoredReel({ ad, isActive }: SponsoredReelProps) {
         <Button
           size="sm"
           onClick={handleCta}
-          className="h-9 rounded-lg bg-white px-5 text-xs font-bold text-black hover:bg-white/90"
+          className="h-9 rounded-full bg-white px-5 text-xs font-bold text-black hover:bg-white/90"
         >
           {ctaIsFollow ? 'Follow' : cta}
           {!ctaIsFollow && cta !== 'View Post' && cta !== 'Visit Profile' && (

@@ -44,9 +44,12 @@ import {
   Megaphone,
   Repeat,
   Eye,
+  Clapperboard,
+  Play,
 } from 'lucide-react';
 import LibraryModal from '@/components/library/LibraryModal';
 import CoverUploadDialog from '@/components/profile/CoverUploadDialog';
+import { useUserReels, type Reel } from '@/hooks/useReels';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -94,6 +97,84 @@ function Badge({ children, className }: { children: React.ReactNode; className?:
   );
 }
 
+function formatReelDuration(seconds: number) {
+  if (!Number.isFinite(seconds)) return '0:00';
+  const total = Math.max(0, Math.floor(seconds));
+  const mins = Math.floor(total / 60);
+  const secs = String(total % 60).padStart(2, '0');
+  return `${mins}:${secs}`;
+}
+
+function ReelGridCard({ reel, userId }: { reel: Reel; userId: string }) {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      onClick={() => navigate(`/reels?user=${userId}&reel=${reel.id}`)}
+      className="group relative aspect-[9/16] overflow-hidden rounded-2xl border border-border bg-surface-2 text-left"
+      aria-label={reel.caption ? `Reel: ${reel.caption}` : 'View reel'}
+    >
+      {reel.thumbnail_url ? (
+        <img src={reel.thumbnail_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center">
+          <Clapperboard className="h-6 w-6 text-muted-foreground/60" />
+        </div>
+      )}
+
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-70" />
+
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 motion-safe:group-hover:opacity-100">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black/45">
+          <Play className="h-5 w-5 text-white" fill="white" />
+        </div>
+      </div>
+
+      <span className="absolute bottom-2 left-2 flex items-center gap-1 text-[10px] font-semibold text-white">
+        <Eye className="h-3 w-3" />
+        {reel.view_count.toLocaleString()}
+      </span>
+      {reel.duration > 0 && (
+        <span className="absolute bottom-2 right-2 rounded bg-black/65 px-1.5 py-0.5 font-mono text-[10px] text-white">
+          {formatReelDuration(reel.duration)}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function ProfileReels({ userId }: { userId: string }) {
+  const { data: reels = [], isLoading } = useUserReels(userId);
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="aspect-[9/16] rounded-2xl" />
+        ))}
+      </div>
+    );
+  }
+
+  if (reels.length === 0) {
+    return (
+      <div className="py-10 text-center">
+        <Clapperboard className="mx-auto h-8 w-8 text-muted-foreground/70" />
+        <p className="mt-3 text-sm font-semibold">No reels yet</p>
+        <p className="mt-1 text-xs text-muted-foreground">Reels this user posts will appear here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      {reels.map((reel) => (
+        <ReelGridCard key={reel.id} reel={reel} userId={userId} />
+      ))}
+    </div>
+  );
+}
+
 export default function Profile() {
   const { username } = useParams<{ username: string }>();
   const navigate = useNavigate();
@@ -111,6 +192,8 @@ export default function Profile() {
   const [viewersOpen, setViewersOpen] = useState(false);
   const recordedViewFor = useRef<string | null>(null);
   const fetchTokenRef = useRef(0);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab] = useState('activity');
 
   // Story states
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -554,7 +637,9 @@ export default function Profile() {
                     label="Reels"
                     onClick={() => {
                       if (!profileData) return;
-                      navigate(`/reels?user=${profileData.user_id}`);
+                      setActiveTab('reels');
+                      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                      tabsRef.current?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
                     }}
                   />
               </div>
@@ -628,22 +713,26 @@ export default function Profile() {
           />
 
           {/* Tabs */}
-          <div className="px-4 mt-4">
+          <div className="px-4 mt-4" ref={tabsRef}>
             <div className="bg-card border border-border rounded-2xl">
-              <Tabs defaultValue="activity" className="w-full">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <div className="border-b border-border px-4">
-                  <TabsList className="grid w-full grid-cols-3 max-w-[300px] bg-muted/50 p-0.5 rounded-lg h-9">
+                  <TabsList className="grid w-full grid-cols-4 max-w-[440px] bg-muted/50 p-0.5 rounded-lg h-9">
                     <TabsTrigger value="activity" className="flex items-center gap-1.5 rounded-md text-xs font-semibold">
                       <FileText className="h-3.5 w-3.5" />
                       Activity
                     </TabsTrigger>
-                    <TabsTrigger value="reposts" className="flex items-center gap-1.5 rounded-md text-xs font-semibold">
-                      <Repeat className="h-3.5 w-3.5" />
-                      Reposts
-                    </TabsTrigger>
                     <TabsTrigger value="interests" className="flex items-center gap-1.5 rounded-md text-xs font-semibold">
                       <BadgeCheck className="h-3.5 w-3.5" />
                       Interests
+                    </TabsTrigger>
+                    <TabsTrigger value="reels" className="flex items-center gap-1.5 rounded-md text-xs font-semibold">
+                      <Clapperboard className="h-3.5 w-3.5" />
+                      Reels
+                    </TabsTrigger>
+                    <TabsTrigger value="reposts" className="flex items-center gap-1.5 rounded-md text-xs font-semibold">
+                      <Repeat className="h-3.5 w-3.5" />
+                      Reposts
                     </TabsTrigger>
                   </TabsList>
                 </div>
@@ -652,12 +741,16 @@ export default function Profile() {
                   <Feed userId={profileData.user_id} refreshTrigger={refreshKey} />
                 </TabsContent>
 
-                <TabsContent value="reposts" className="p-4 mt-0">
-                  <RepostsFeed userId={profileData.user_id} refreshTrigger={refreshKey} />
-                </TabsContent>
-
                 <TabsContent value="interests" className="p-4 mt-0">
                   <InterestsFeed userId={profileData.user_id} isOwnProfile={isOwnProfile} />
+                </TabsContent>
+
+                <TabsContent value="reels" className="p-4 mt-0">
+                  <ProfileReels userId={profileData.user_id} />
+                </TabsContent>
+
+                <TabsContent value="reposts" className="p-4 mt-0">
+                  <RepostsFeed userId={profileData.user_id} refreshTrigger={refreshKey} />
                 </TabsContent>
               </Tabs>
             </div>
@@ -716,6 +809,7 @@ export default function Profile() {
           displayName={profileData.display_name}
           username={profileData.username}
           avatarUrl={profileData.avatar_url}
+          bio={profileData.bio}
         />
       )}
     </MainLayout>

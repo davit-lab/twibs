@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import { useBook, useBookActions, useChapterActions, type Chapter } from '@/hooks/useBooks';
@@ -41,10 +41,12 @@ import {
   Upload,
   Plus,
   Trash2,
-  GripVertical,
   ArrowLeft,
   Send,
   Eye,
+  ChevronUp,
+  ChevronDown,
+  Loader2,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -71,7 +73,7 @@ export default function BookEditor() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { book, chapters, isLoading, refetch } = useBook(bookId);
-  const { updateBook, publishBook, deleteBook } = useBookActions();
+  const { publishBook, deleteBook } = useBookActions();
   const { createChapter, updateChapter, deleteChapter } = useChapterActions();
 
   const [title, setTitle] = useState('');
@@ -92,6 +94,10 @@ export default function BookEditor() {
   const [showNewChapterDialog, setShowNewChapterDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [chapterToDelete, setChapterToDelete] = useState<string | null>(null);
+  const [showDeleteBookDialog, setShowDeleteBookDialog] = useState(false);
+  const [isDeletingBook, setIsDeletingBook] = useState(false);
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved');
+  const savingSnapshotRef = useRef(false);
 
   // Initialize form with book data
   useEffect(() => {
@@ -140,7 +146,7 @@ export default function BookEditor() {
         .getPublicUrl(filePath);
 
       setCoverUrl(publicUrl);
-      await updateBook(bookId, { cover_url: publicUrl });
+      await supabase.from('books').update({ cover_url: publicUrl }).eq('id', bookId);
     } catch (error: any) {
       console.error('Upload error:', error);
       toast({
@@ -153,45 +159,92 @@ export default function BookEditor() {
     }
   };
 
-  const saveBookDetails = async () => {
+  const saveBookDetails = async (silent = false) => {
     if (!bookId) return;
-    
-    setIsSaving(true);
-    await updateBook(bookId, {
-      title,
-      description,
-      genre: genre || null,
-    });
-    setIsSaving(false);
+
+    setSaveState('saving');
+    try {
+      const { error } = await supabase
+        .from('books')
+        .update({
+          title,
+          description: description || null,
+          genre: genre || null,
+        })
+        .eq('id', bookId);
+
+      if (error) throw error;
+      setSaveState('saved');
+    } catch (error: any) {
+      setSaveState('dirty');
+      if (!silent) {
+        toast({
+          variant: 'destructive',
+          title: 'Save failed',
+          description: error?.message || 'Could not save book details.',
+        });
+      }
+    }
   };
 
-  const saveChapter = async () => {
+  const saveChapter = useCallback(async (snapshot?: { title?: string; content?: string }) => {
     if (!selectedChapter) return;
 
-    setIsSavingChapter(true);
-    await updateChapter(selectedChapter.id, {
-      title: chapterTitle,
-      content: chapterContent,
-    });
-    setIsSavingChapter(false);
-    refetch();
-  };
+    const titleToSave = snapshot?.title ?? chapterTitle;
+    const contentToSave = snapshot?.content ?? chapterContent;
 
-  // Auto-save chapter content
+    if (titleToSave === selectedChapter.title && contentToSave === selectedChapter.content) {
+      setSaveState('saved');
+      return;
+    }
+
+    if (savingSnapshotRef.current) return;
+    savingSnapshotRef.current = true;
+    setIsSavingChapter(true);
+    setSaveState('saving');
+
+    const ok = await updateChapter(selectedChapter.id, {
+      title: titleToSave,
+      content: contentToSave,
+    });
+
+    savingSnapshotRef.current = false;
+    setIsSavingChapter(false);
+    setSaveState(ok ? 'saved' : 'dirty');
+
+    if (ok) {
+      setSelectedChapter((prev) =>
+        prev ? { ...prev, title: titleToSave, content: contentToSave } : prev
+      );
+      refetch();
+    }
+  }, [selectedChapter, chapterTitle, chapterContent, updateChapter, refetch]);
+
+  // Auto-save chapter content with a debounce; pending snapshot is captured at save time.
   useEffect(() => {
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
 
-    if (selectedChapter && chapterContent !== selectedChapter.content) {
-      const timer = setTimeout(() => {
-        saveChapter();
-      }, 2000);
-      setAutoSaveTimer(timer);
+    if (!selectedChapter) {
+      setSaveState('saved');
+      return;
     }
 
+    if (chapterContent === selectedChapter.content && chapterTitle === selectedChapter.title) {
+      setSaveState('saved');
+      return;
+    }
+
+    setSaveState('dirty');
+    const snapshot = { title: chapterTitle, content: chapterContent };
+    const timer = setTimeout(() => {
+      saveChapter(snapshot);
+    }, 2000);
+    setAutoSaveTimer(timer);
+
     return () => {
-      if (autoSaveTimer) clearTimeout(autoSaveTimer);
+      if (timer) clearTimeout(timer);
     };
-  }, [chapterContent]);
+  }, [chapterContent, chapterTitle, selectedChapter]);
 
   const handleCreateChapter = async () => {
     if (!bookId || !newChapterTitle.trim()) return;
@@ -219,6 +272,37 @@ export default function BookEditor() {
       }
       refetch();
     }
+  };
+
+  const handleMoveChapter = async (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= chapters.length) return;
+
+    const a = chapters[index];
+    const b = chapters[target];
+
+    const { error } = await supabase.from('chapters').upsert([
+      { id: a.id, position: b.position },
+      { id: b.id, position: a.position },
+    ] as never);
+
+    if (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Reorder failed',
+        description: error.message,
+      });
+      return;
+    }
+    refetch();
+  };
+
+  const handleDeleteBook = async () => {
+    if (!bookId) return;
+    setIsDeletingBook(true);
+    const success = await deleteBook(bookId);
+    setIsDeletingBook(false);
+    if (success) navigate('/library');
   };
 
   const handlePublish = async () => {
@@ -304,6 +388,15 @@ export default function BookEditor() {
                 {isPublishing ? 'Publishing...' : 'Publish'}
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowDeleteBookDialog(true)}
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              title="Delete book"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
         </div>
 
@@ -345,13 +438,24 @@ export default function BookEditor() {
                   id="title"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  onBlur={saveBookDetails}
+                  onBlur={() => void saveBookDetails(true)}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="genre">Genre</Label>
-                <Select value={genre} onValueChange={(v) => { setGenre(v); }}>
+                <Select
+                  value={genre}
+                  onValueChange={(v) => {
+                    setGenre(v);
+                    setSaveState('saving');
+                    void supabase
+                      .from('books')
+                      .update({ genre: v || null })
+                      .eq('id', bookId!)
+                      .then(() => setSaveState('saved'));
+                  }}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select genre" />
                   </SelectTrigger>
@@ -369,7 +473,7 @@ export default function BookEditor() {
                   id="description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  onBlur={saveBookDetails}
+                  onBlur={() => void saveBookDetails(true)}
                   rows={4}
                 />
               </div>
@@ -377,12 +481,23 @@ export default function BookEditor() {
               <Button 
                 variant="outline" 
                 className="w-full" 
-                onClick={saveBookDetails}
+                onClick={() => void saveBookDetails(false)}
                 disabled={isSaving}
               >
                 <Save className="h-4 w-4 mr-2" />
                 {isSaving ? 'Saving...' : 'Save Details'}
               </Button>
+
+              <p className={cn(
+                'text-xs font-medium text-center',
+                saveState === 'saving' && 'text-muted-foreground animate-pulse',
+                saveState === 'saved' && 'text-emerald-500',
+                saveState === 'dirty' && 'text-amber-500'
+              )}>
+                {saveState === 'saving' && 'Saving…'}
+                {saveState === 'saved' && 'All changes saved'}
+                {saveState === 'dirty' && 'Unsaved changes'}
+              </p>
             </div>
           </div>
 
@@ -399,22 +514,45 @@ export default function BookEditor() {
 
             <div className="flex gap-4 overflow-x-auto pb-2">
               {chapters.map((chapter, index) => (
-                <button
+                <div
                   key={chapter.id}
-                  onClick={() => selectChapter(chapter)}
                   className={cn(
-                    "flex-shrink-0 p-3 rounded-lg border text-left transition-colors min-w-[150px]",
+                    "flex-shrink-0 rounded-lg border text-left transition-colors min-w-[150px] overflow-hidden",
                     selectedChapter?.id === chapter.id
                       ? "border-primary bg-primary/5"
                       : "border-border hover:border-primary/50"
                   )}
                 >
-                  <span className="text-xs text-muted-foreground">Chapter {index + 1}</span>
-                  <p className="font-medium truncate text-sm">{chapter.title}</p>
-                  <span className="text-xs text-muted-foreground">
-                    {chapter.word_count} words
-                  </span>
-                </button>
+                  <button
+                    onClick={() => selectChapter(chapter)}
+                    className="w-full p-3 text-left"
+                  >
+                    <span className="text-xs text-muted-foreground">Chapter {index + 1}</span>
+                    <p className="font-medium truncate text-sm">{chapter.title}</p>
+                    <span className="text-xs text-muted-foreground">
+                      {chapter.word_count} words
+                    </span>
+                  </button>
+                  <div className="flex border-t border-border/60">
+                    <button
+                      onClick={() => handleMoveChapter(index, -1)}
+                      disabled={index === 0}
+                      className="flex-1 flex items-center justify-center py-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
+                      title="Move up"
+                    >
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </button>
+                    <div className="w-px bg-border/60" />
+                    <button
+                      onClick={() => handleMoveChapter(index, 1)}
+                      disabled={index === chapters.length - 1}
+                      className="flex-1 flex items-center justify-center py-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
+                      title="Move down"
+                    >
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
               ))}
               {chapters.length === 0 && (
                 <p className="text-muted-foreground text-sm py-4">
@@ -430,13 +568,18 @@ export default function BookEditor() {
                   <Input
                     value={chapterTitle}
                     onChange={(e) => setChapterTitle(e.target.value)}
-                    onBlur={saveChapter}
+                    onBlur={() => saveChapter()}
                     placeholder="Chapter title"
                     className="text-lg font-medium"
                   />
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      {isSavingChapter ? 'Saving...' : 'Auto-saved'}
+                    <span className={cn(
+                      'text-xs font-medium',
+                      saveState === 'saving' && 'text-muted-foreground animate-pulse',
+                      saveState === 'saved' && 'text-emerald-500',
+                      saveState === 'dirty' && 'text-amber-500'
+                    )}>
+                      {saveState === 'saving' ? 'Saving…' : saveState === 'dirty' ? 'Unsaved changes' : 'All changes saved'}
                     </span>
                     <Button
                       variant="ghost"
@@ -462,8 +605,8 @@ export default function BookEditor() {
                   <span>
                     {chapterContent.split(/\s+/).filter(Boolean).length} words
                   </span>
-                  <Button onClick={saveChapter} disabled={isSavingChapter}>
-                    <Save className="h-4 w-4 mr-2" />
+                  <Button onClick={() => void saveChapter()} disabled={isSavingChapter}>
+                    {isSavingChapter ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
                     Save Chapter
                   </Button>
                 </div>
@@ -511,6 +654,29 @@ export default function BookEditor() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteChapter} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Book Dialog */}
+      <AlertDialog open={showDeleteBookDialog} onOpenChange={setShowDeleteBookDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this book?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{book.title}" and all of its chapters. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingBook}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteBook}
+              disabled={isDeletingBook}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeletingBook ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Delete book
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

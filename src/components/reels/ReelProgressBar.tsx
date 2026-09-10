@@ -14,7 +14,7 @@ export default function ReelProgressBar({ progress, onSeek }: ReelProgressBarPro
 
   return (
     <div
-      className="absolute inset-x-0 top-0 z-20 h-1 cursor-pointer bg-white/20"
+      className="absolute inset-x-0 top-0 z-20 h-1 cursor-pointer bg-white/15"
       onPointerDown={handlePointer}
       onPointerMove={(event) => {
         if (event.buttons === 1) handlePointer(event);
@@ -26,7 +26,7 @@ export default function ReelProgressBar({ progress, onSeek }: ReelProgressBarPro
       aria-valuenow={Math.round(progress)}
     >
       <div
-        className="h-full rounded-r-full bg-white transition-[width] duration-100 ease-linear"
+        className="h-full bg-white"
         style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
       />
     </div>

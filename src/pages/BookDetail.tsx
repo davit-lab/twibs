@@ -41,7 +41,7 @@ export default function BookDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, profile: currentProfile } = useAuth();
+  const { user } = useAuth();
   const { book, chapters, progress, isInLibrary, isLoading, refetch, setIsInLibrary } = useBook(bookId);
   const { addToLibrary, removeFromLibrary } = useBookActions();
   const { data: purchaseStatus } = useBookPurchaseStatus(bookId);
@@ -458,23 +458,31 @@ export default function BookDetail() {
         )}
 
         {/* More books */}
-        {relatedBooks.length > 0 && (
-          <div className="mt-14">
-            <div className="mb-4 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
-                  <BookOpen className="h-4 w-4 text-muted-foreground" />
-                </span>
-                <h2 className="text-lg font-bold tracking-tight">More from the library</h2>
-              </div>
-              <Button variant="ghost" size="sm" className="-mr-2 gap-1 text-muted-foreground" asChild>
-                <Link to="/library">
-                  View all
-                  <ArrowUpRight className="h-3.5 w-3.5" />
-                </Link>
-              </Button>
+        <div className="mt-14">
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                <BookOpen className="h-4 w-4 text-muted-foreground" />
+              </span>
+              <h2 className="text-lg font-bold tracking-tight">More from the library</h2>
             </div>
+            <Button variant="ghost" size="sm" className="-mr-2 gap-1 text-muted-foreground" asChild>
+              <Link to="/library">
+                View all
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </div>
 
+          {loadingMoreBooks ? (
+            <ScrollArea className="w-full whitespace-nowrap">
+              <div className="flex gap-4 pb-4">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Skeleton key={i} className="aspect-[3/4] w-[140px] flex-shrink-0 rounded-2xl" />
+                ))}
+              </div>
+            </ScrollArea>
+          ) : relatedBooks.length > 0 ? (
             <ScrollArea className="w-full whitespace-nowrap">
               <div className="flex gap-4 pb-4">
                 {relatedBooks.map((relatedBook) => (
@@ -485,8 +493,12 @@ export default function BookDetail() {
               </div>
               <ScrollBar orientation="horizontal" className="h-1.5" />
             </ScrollArea>
-          </div>
-        )}
+          ) : (
+            <p className="rounded-2xl border border-dashed border-border/80 bg-card/50 px-8 py-12 text-center text-sm text-muted-foreground">
+              No similar books in the library yet.
+            </p>
+          )}
+        </div>
       </div>
     </MainLayout>
   );

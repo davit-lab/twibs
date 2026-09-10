@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
-  BadgeCheck, Music2, Play, Pause, UserPlus, UserCheck, Loader2, Volume2, VolumeX, Eye,
+  BadgeCheck, Music2, Play, Pause, UserPlus, UserCheck, Loader2, Volume2, VolumeX,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Reel } from '@/hooks/useReels';
@@ -69,7 +69,6 @@ export default function ReelCard({
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [captionExpanded, setCaptionExpanded] = useState(false);
-  const [durationLabel, setDurationLabel] = useState('0:00');
 
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -150,7 +149,6 @@ export default function ReelCard({
     const onTime = () => {
       if (video.duration) {
         setProgress((video.currentTime / video.duration) * 100);
-        setDurationLabel(formatTime(video.currentTime));
       }
     };
     video.addEventListener('timeupdate', onTime);
@@ -348,13 +346,6 @@ export default function ReelCard({
         {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
       </button>
 
-      <div className="absolute left-4 top-16 z-30 flex items-center gap-2 rounded-full border border-white/15 bg-black/35 px-3 py-1.5 text-xs font-medium text-white/85 backdrop-blur-md">
-        <Eye className="h-3.5 w-3.5" />
-        {reel.view_count.toLocaleString()} views
-        <span className="text-white/40">·</span>
-        {durationLabel}
-      </div>
-
       <OverlayStickers overlay={reel.overlay} />
 
       <div className="absolute bottom-0 left-0 right-16 z-10 p-4 pb-10">
@@ -371,7 +362,7 @@ export default function ReelCard({
           <div className="min-w-0 flex-1">
             <Link to={`/profile/${reel.profile?.username}`} className="group flex items-center gap-1.5">
               <span className="text-sm font-semibold text-white group-hover:underline">{reel.profile?.display_name}</span>
-              {reel.profile?.is_verified && <BadgeCheck className="h-4 w-4 text-blue-400" />}
+              {reel.profile?.is_verified && <BadgeCheck className="h-4 w-4 text-primary" />}
             </Link>
             <p className="text-xs text-white/55">@{reel.profile?.username}</p>
           </div>
@@ -383,7 +374,7 @@ export default function ReelCard({
               onClick={handleFollow}
               disabled={followLoading}
               className={cn(
-                'h-8 flex-shrink-0 px-4 text-xs font-semibold rounded-lg transition-all',
+                'h-8 flex-shrink-0 px-4 text-xs font-semibold rounded-full transition-all',
                 isFollowing && 'border-white/25 bg-white/10 text-white/80 hover:bg-white/20',
                 !isFollowing && 'bg-white text-black hover:bg-white/90',
               )}
@@ -403,7 +394,7 @@ export default function ReelCard({
               event.stopPropagation();
               setCaptionExpanded((value) => !value);
             }}
-            className="mb-2 block w-full text-left text-sm leading-relaxed text-white/90"
+            className="mb-2 block w-full text-left text-[15px] leading-relaxed text-white/90"
           >
             <span className={captionExpanded ? '' : 'line-clamp-2'}>{reel.caption}</span>
             {reel.caption.length > 90 && (
@@ -468,12 +459,4 @@ export default function ReelCard({
       <ReelLikersModal reelId={reel.id} open={showLikersModal} onOpenChange={setShowLikersModal} />
     </div>
   );
-}
-
-function formatTime(seconds: number) {
-  if (!Number.isFinite(seconds)) return '0:00';
-  const total = Math.max(0, Math.floor(seconds));
-  const mins = Math.floor(total / 60);
-  const secs = String(total % 60).padStart(2, '0');
-  return `${mins}:${secs}`;
 }

@@ -51,13 +51,14 @@ const loadPdfJs = (): Promise<PDFJSStatic> => {
 };
 
 interface PdfViewerProps {
-  bookId: string;
+  bookId?: string;
   bookTitle: string;
   onClose?: () => void;
+  url?: string;
 }
 
-export default function PdfViewer({ bookId, bookTitle, onClose }: PdfViewerProps) {
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+export default function PdfViewer({ bookId, bookTitle, onClose, url }: PdfViewerProps) {
+  const [pdfUrl, setPdfUrl] = useState<string | null>(url || null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
@@ -86,17 +87,22 @@ export default function PdfViewer({ bookId, bookTitle, onClose }: PdfViewerProps
   }, []);
 
   const loadPdf = useCallback(async () => {
+    if (url) {
+      setPdfUrl(url);
+      return;
+    }
+    if (!bookId) return;
     try {
       const result = await getPdfAccess.mutateAsync({ bookId });
       setPdfUrl(result.url);
     } catch (error) {
       console.error('Failed to load PDF:', error);
     }
-  }, [bookId, getPdfAccess]);
+  }, [bookId, getPdfAccess, url]);
 
   useEffect(() => {
     loadPdf();
-  }, [bookId]);
+  }, [bookId, loadPdf]);
 
   // Load PDF document when URL and library are available
   useEffect(() => {

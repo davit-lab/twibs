@@ -171,35 +171,41 @@ export default function Interests() {
             </Button>
           </header>
 
-          {/* Category filter + create entry */}
-          <div className="sticky top-0 z-30 bg-background border-b border-border/70">
-            <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide px-4 py-2.5">
-              {categoryChips.map((chip) => {
-                const active = activeCategory === chip.id;
-                return (
-                  <button
-                    key={chip.id}
-                    onClick={() => setActiveCategory(chip.id)}
-                    className={cn(
-                      'inline-flex items-center rounded-full px-3.5 py-2 text-[13px] font-semibold whitespace-nowrap transition-colors',
-                      chip.id === 'all'
-                        ? active
-                          ? 'bg-foreground text-background'
-                          : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
-                        : active
-                          ? 'bg-primary/10 text-primary ring-1 ring-inset ring-primary/25'
-                          : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
-                    )}
-                  >
-                    {chip.name}
-                  </button>
-                );
-              })}
+{/* Category filter (scrolls away) */}
+          <div className="border-b border-border/70">
+              <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide px-4 py-2.5">
+                {categoryChips.map((chip) => {
+                  const active = activeCategory === chip.id;
+                  return (
+                    <button
+                      key={chip.id}
+                      onClick={() => setActiveCategory(chip.id)}
+                      className={cn(
+                        'inline-flex items-center rounded-full px-3.5 py-2 text-[13px] font-semibold whitespace-nowrap transition-colors',
+                        chip.id === 'all'
+                          ? active
+                            ? 'bg-foreground text-background'
+                            : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
+                          : active
+                            ? 'bg-primary/10 text-primary ring-1 ring-inset ring-primary/25'
+                            : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
+                      )}
+                    >
+                      {chip.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <div className="px-4 pb-3 pt-1">
-              <CreatePostTrigger onClick={handleCreateClick} />
+
+            {/* Composer — stays visible while scrolling */}
+            <div className="sticky top-0 z-30 bg-background border-b border-border/70 px-4 py-2.5">
+              <CreatePostTrigger
+                onClick={handleCreateClick}
+                avatarUrl={profile?.avatar_url}
+                displayName={profile?.display_name}
+              />
             </div>
-          </div>
 
           {/* Feed */}
           {postsLoading || interestsLoading ? (

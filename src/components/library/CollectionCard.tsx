@@ -3,10 +3,13 @@ import type { Collection } from '@/hooks/useLibraryItems';
 
 interface CollectionCardProps {
   collection: Collection;
+  cover?: string | null;
   onClick?: () => void;
 }
 
-export default function CollectionCard({ collection, onClick }: CollectionCardProps) {
+export default function CollectionCard({ collection, cover, onClick }: CollectionCardProps) {
+  const displayCover = cover ?? collection.cover_image;
+  
   return (
     <div
       onClick={onClick}
@@ -14,9 +17,9 @@ export default function CollectionCard({ collection, onClick }: CollectionCardPr
     >
       <div className="rounded-xl border border-border overflow-hidden transition-all hover:border-primary/30 hover:-translate-y-0.5">
         <div className="aspect-[4/3] bg-muted flex items-center justify-center relative overflow-hidden">
-          {collection.cover_image ? (
+          {displayCover ? (
             <img
-              src={collection.cover_image}
+              src={displayCover}
               alt={collection.name}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             />

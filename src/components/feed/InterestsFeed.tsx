@@ -245,6 +245,8 @@ export default function InterestsFeed({ userId, isOwnProfile = false }: Interest
           onClick={() =>
             availableCategories.length > 0 ? setCreateOpen(true) : setAddInterestsOpen(true)
           }
+          avatarUrl={profile?.avatar_url}
+          displayName={profile?.display_name}
         />
       )}
 
