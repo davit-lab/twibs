@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { useInterestPostActions, InterestPost } from '@/hooks/useInterestPosts';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -22,7 +23,7 @@ import {
   Facebook,
   MessageSquare,
   Link as LinkIcon,
-  Sparkles,
+  Bookmark,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -35,10 +36,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import {
-  Collapsible,
-  CollapsibleContent,
-} from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 
 function formatCount(n: number) {
@@ -105,71 +102,69 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
   };
 
   return (
-    <div className="p-4 sm:p-5 rounded-2xl border border-border/60 bg-card transition-colors hover:border-border">
+    <article className="px-4 sm:px-5 py-4">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <Link to={`/profile/${username}`}>
-            <Avatar className="h-10 w-10 flex-shrink-0">
-              <AvatarImage src={post.profiles?.avatar_url || undefined} />
-              <AvatarFallback className="bg-surface-2 text-foreground font-bold">
-                {post.profiles?.display_name?.charAt(0) || 'U'}
-              </AvatarFallback>
-            </Avatar>
-          </Link>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <Link to={`/profile/${username}`} className="font-bold text-[15px] hover:underline truncate">
-                {post.profiles?.display_name}
-              </Link>
-              {post.profiles?.is_verified && (
-                <BadgeCheck className="h-4 w-4 text-primary fill-primary/20 flex-shrink-0" />
-              )}
-            </div>
-            <p className="text-[13px] text-muted-foreground font-medium truncate">
-              @{username} · {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
-            </p>
-          </div>
-        </div>
+      <div className="flex items-center gap-3 mb-2.5">
+        <Link to={`/profile/${username}`} className="flex-shrink-0">
+          <Avatar className="h-10 w-10">
+            <AvatarImage src={post.profiles?.avatar_url || undefined} />
+            <AvatarFallback className="bg-surface-2 text-foreground font-bold">
+              {post.profiles?.display_name?.charAt(0) || 'U'}
+            </AvatarFallback>
+          </Avatar>
+        </Link>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {category && (
-            <span
-              className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap border border-primary/30 bg-primary/10 text-primary"
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <Link
+              to={`/profile/${username}`}
+              className="text-[15px] font-semibold leading-tight truncate hover:underline"
             >
-              {category.name}
-            </span>
-          )}
-
-          {user?.id === post.user_id && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  className="text-destructive"
-                  onClick={() => deletePost.mutate(post.id)}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+              {post.profiles?.display_name}
+            </Link>
+            {post.profiles?.is_verified && (
+              <BadgeCheck className="h-4 w-4 text-primary fill-primary/20 flex-shrink-0" />
+            )}
+          </div>
+          <p className="text-[13px] text-muted-foreground truncate leading-snug">
+            @{username}
+            {category && (
+              <>
+                {' '}· <span className="font-medium text-primary">{category.name}</span>
+              </>
+            )}
+            {' '}· {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
+          </p>
         </div>
+
+        {user?.id === post.user_id && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0 text-muted-foreground">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-36 bg-background border-border/60 p-1">
+              <DropdownMenuItem
+                className="gap-2 text-xs text-destructive focus:text-destructive"
+                onClick={() => deletePost.mutate(post.id)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {/* Content */}
-      <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+      <p className="text-[15px] leading-[1.55] whitespace-pre-wrap break-words">
         <RichText text={post.content} />
       </p>
 
       {/* Media */}
       {post.media_url && (
-        <div className="mt-3 rounded-xl overflow-hidden border border-border/60 bg-muted">
+        <div className="mt-3 rounded-xl overflow-hidden border border-border/50 bg-surface">
           {post.media_type?.startsWith('video') ? (
             <video src={post.media_url} controls className="w-full max-h-[440px] object-cover" />
           ) : (
@@ -190,15 +185,16 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-1 mt-3 pt-3 border-t border-border/60 -mx-2">
+      <div className="flex items-center mt-3 pt-2.5 border-t border-border/60">
         <button
           onClick={handleLikeToggle}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-bold transition-colors',
+            'flex items-center py-1.5 pr-1.5 pl-2 rounded-full transition-colors',
             post.user_has_liked
               ? 'text-red-500'
               : 'text-muted-foreground hover:bg-red-500/10 hover:text-red-500'
           )}
+          aria-label={post.user_has_liked ? 'Unlike' : 'Like'}
         >
           <Heart className={cn('h-[18px] w-[18px]', post.user_has_liked && 'fill-current')} />
         </button>
@@ -211,7 +207,7 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
             emptyLabel="No one has liked this post yet"
             signInLabel="Sign in to see who liked this post"
             trigger={
-              <button className="px-1.5 py-1.5 rounded-full text-[13px] tabular-nums font-bold text-muted-foreground transition-colors hover:text-red-500">
+              <button className="py-1.5 px-1.5 rounded-full text-[13px] tabular-nums font-semibold text-muted-foreground transition-colors hover:text-red-500">
                 {formatCount(post.like_count)}
               </button>
             }
@@ -221,7 +217,7 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
         <button
           onClick={() => setCommentsOpen((prev) => !prev)}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
+            'flex items-center gap-1.5 py-1.5 px-2.5 ml-1 rounded-full text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
             commentsOpen
               ? 'text-primary bg-primary/10'
               : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
@@ -229,11 +225,11 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
           aria-label={commentsOpen ? 'Close discussion' : 'Open discussion'}
         >
           <MessageCircle className={cn('h-[18px] w-[18px]', commentsOpen && 'fill-current')} />
-          <span>
-            {post.comment_count > 0
-              ? `${formatCount(post.comment_count)} · Discuss`
-              : 'Discuss'}
-          </span>
+          {post.comment_count > 0 ? (
+            <span className="tabular-nums">{formatCount(post.comment_count)}</span>
+          ) : (
+            <span>Discuss</span>
+          )}
         </button>
 
         <div className="flex-1" />
@@ -241,25 +237,24 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
         <button
           onClick={handleSaveToggle}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-bold transition-colors',
+            'py-1.5 px-2.5 rounded-full transition-colors',
             post.user_has_saved
               ? 'text-primary bg-primary/10'
               : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
           )}
-          aria-label={post.user_has_saved ? 'Remove from interests' : 'Add to interests'}
-          title={post.user_has_saved ? 'Remove from interests' : 'Add to interests'}
+          aria-label={post.user_has_saved ? 'Added to interests' : 'Add to interests'}
+          title={post.user_has_saved ? 'Added to interests' : 'Add to interests'}
         >
-          <Sparkles className={cn('h-[18px] w-[18px]', post.user_has_saved && 'fill-current')} />
-          <span className="hidden sm:inline">
-            {post.user_has_saved ? 'Added' : 'Add to interests'}
-          </span>
+          <Bookmark className={cn('h-[18px] w-[18px]', post.user_has_saved && 'fill-current')} />
         </button>
 
         <Popover>
           <PopoverTrigger asChild>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary">
+            <button
+              aria-label="Share"
+              className="py-1.5 px-2.5 rounded-full text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+            >
               <Share2 className="h-[18px] w-[18px]" />
-              <span className="hidden sm:inline">Share</span>
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-48 p-2 bg-popover border border-border" align="end">
@@ -301,14 +296,22 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
         </Popover>
       </div>
 
-      {/* Comments Section */}
-      <Collapsible open={commentsOpen} onOpenChange={setCommentsOpen}>
-        <CollapsibleContent>
-          <div className="mt-3 pt-4 border-t border-border/60">
-            <InterestPostComments postId={post.id} />
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+      {/* Discussion */}
+      <AnimatePresence initial={false}>
+        {commentsOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.22, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 pt-4 border-t border-border/60">
+              <InterestPostComments postId={post.id} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {lightboxOpen && (
         <MediaLightbox
@@ -317,6 +320,6 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
           onClose={() => setLightboxOpen(false)}
         />
       )}
-    </div>
+    </article>
   );
 }

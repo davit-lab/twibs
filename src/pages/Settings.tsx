@@ -1219,7 +1219,7 @@ function InterestsSection() {
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {categories?.map((category) => (
               <InterestCard
                 key={category.id}

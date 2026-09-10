@@ -3426,6 +3426,7 @@ export type Database = {
           duration: number | null
           expires_at: string
           id: string
+          like_count: number | null
           media_type: string
           media_url: string
           music_name: string | null
@@ -3439,6 +3440,7 @@ export type Database = {
           duration?: number | null
           expires_at?: string
           id?: string
+          like_count?: number | null
           media_type?: string
           media_url: string
           music_name?: string | null
@@ -3452,6 +3454,7 @@ export type Database = {
           duration?: number | null
           expires_at?: string
           id?: string
+          like_count?: number | null
           media_type?: string
           media_url?: string
           music_name?: string | null
@@ -3460,6 +3463,35 @@ export type Database = {
           view_count?: number | null
         }
         Relationships: []
+      }
+      story_likes: {
+        Row: {
+          created_at: string
+          id: string
+          story_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          story_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          story_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_likes_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       story_views: {
         Row: {

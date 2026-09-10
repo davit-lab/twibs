@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  X, ChevronLeft, ChevronRight, Pause, Play, Volume2, VolumeX, Trash2, Music, Eye, Users, Loader2, Megaphone, ExternalLink,
+  X, ChevronLeft, ChevronRight, Volume2, VolumeX, Trash2, Music, Eye, Users, Loader2,
+  Megaphone, ExternalLink, Heart, Send,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow, formatDistanceToNowStrict } from 'date-fns';
 import { recordAdEvent, useAdImpression } from '@/hooks/useAdTracking';
@@ -23,6 +28,8 @@ interface StoryViewerProps {
   onView: (storyId: string) => void;
   onDelete: (storyId: string) => void;
   onFetchViewers: (storyId: string) => Promise<StoryViewerProfile[]>;
+  onToggleLike: (storyId: string) => void;
+  onSendReply: (storyOwnerId: string, content: string) => Promise<unknown>;
 }
 
 function getInitials(name: string) {
@@ -38,6 +45,8 @@ export default function StoryViewer({
   onView,
   onDelete,
   onFetchViewers,
+  onToggleLike,
+  onSendReply,
 }: StoryViewerProps) {
   const [groupIndex, setGroupIndex] = useState(initialGroupIndex);
   const [storyIndex, setStoryIndex] = useState(0);
@@ -45,11 +54,16 @@ export default function StoryViewer({
   const [muted, setMuted] = useState(false);
   const [musicMuted, setMusicMuted] = useState(false);
   const [videoProgress, setVideoProgress] = useState(0);
+  const [mediaLoading, setMediaLoading] = useState(true);
   const [viewersOpen, setViewersOpen] = useState(false);
   const [viewers, setViewers] = useState<StoryViewerProfile[]>([]);
   const [viewersLoading, setViewersLoading] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const touchStartX = useRef<number | null>(null);
+  const pressStart = useRef<{ x: number; t: number; rect: DOMRect } | null>(null);
   const adMediaRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -59,6 +73,8 @@ export default function StoryViewer({
   const currentStoryId = currentStory?.id;
   const isOwnStory = currentGroup?.user_id === currentUserId;
   const currentAd = currentGroup?.ad ?? null;
+  const isLiked = !!currentStory?.is_liked;
+  const likeCount = currentStory?.like_count ?? 0;
 
   useAdImpression(adMediaRef, open ? currentAd : null, !!currentAd, 'stories');
 
@@ -92,6 +108,7 @@ export default function StoryViewer({
     setStoryIndex(sIndex);
     setPaused(false);
     setVideoProgress(0);
+    setMediaLoading(true);
   }, []);
 
   useEffect(() => {
@@ -110,6 +127,7 @@ export default function StoryViewer({
       const nextIdx = storyIndex + 1;
       setStoryIndex(nextIdx);
       setVideoProgress(0);
+      setMediaLoading(true);
       const story = group.stories[nextIdx];
       if (story && !story.is_viewed) markViewed(story.id);
     } else if (groupIndex < groups.length - 1) {
@@ -117,9 +135,11 @@ export default function StoryViewer({
       setGroupIndex(nextGroupIdx);
       setStoryIndex(0);
       setVideoProgress(0);
+      setMediaLoading(true);
       const story = groups[nextGroupIdx]?.stories[0];
       if (story && !story.is_viewed) markViewed(story.id);
     } else {
+      setPaused(false);
       onOpenChange(false);
     }
   }, [groups, groupIndex, storyIndex, markViewed, onOpenChange]);
@@ -130,37 +150,46 @@ export default function StoryViewer({
     if (storyIndex > 0) {
       setStoryIndex(storyIndex - 1);
       setVideoProgress(0);
+      setMediaLoading(true);
     } else if (groupIndex > 0) {
       const prevGroupIdx = groupIndex - 1;
       setGroupIndex(prevGroupIdx);
       setStoryIndex(groups[prevGroupIdx].stories.length - 1);
       setVideoProgress(0);
+      setMediaLoading(true);
     }
   }, [groups, groupIndex, storyIndex]);
-
-  const jumpToGroup = useCallback((target: number) => {
-    if (target === groupIndex) return;
-    setGroupIndex(target);
-    setStoryIndex(0);
-    setPaused(false);
-    setVideoProgress(0);
-    const story = groups[target]?.stories[0];
-    if (story && !story.is_viewed) markViewed(story.id);
-  }, [groups, groupIndex, markViewed]);
 
   useEffect(() => {
     if (!open) return;
     const story = groups[groupIndex]?.stories[storyIndex];
     if (story && !story.is_viewed) markViewed(story.id);
-  }, [open, groupIndex, storyIndex, groups, markViewed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, groupIndex, storyIndex]);
 
   // Pause / play video when toggled or when the story changes
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (paused) v.pause();
+    if (paused || deleteConfirmOpen) v.pause();
     else v.play().catch(() => { /* autoplay blocked until interaction */ });
-  }, [paused, currentStory?.id, open]);
+  }, [paused, deleteConfirmOpen, currentStory?.id, open]);
+
+  // Auto-pause when the tab/window loses focus, resume when it returns
+  useEffect(() => {
+    if (!open) return;
+    const onVisibility = () => {
+      if (document.hidden) setPaused(true);
+      else setPaused(false);
+    };
+    const onBlur = () => setPaused(true);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, [open]);
 
   // Keyboard controls
   useEffect(() => {
@@ -198,21 +227,96 @@ export default function StoryViewer({
 
   const handleDelete = useCallback(() => {
     if (!currentStory) return;
+    setDeleteConfirmOpen(false);
     onDelete(currentStory.id);
     handleNext();
   }, [currentStory, onDelete, handleNext]);
+
+  const handleConfirmDelete = useCallback(() => {
+    setPaused(true);
+    setDeleteConfirmOpen(true);
+  }, []);
+
+  // Media interactions: hold to pause, tap / swipe to navigate
+  const handleMediaPointerDown = useCallback((e: React.PointerEvent) => {
+    pressStart.current = {
+      x: e.clientX,
+      t: performance.now(),
+      rect: e.currentTarget.getBoundingClientRect(),
+    };
+    setPaused(true);
+  }, []);
+
+  const handleMediaPointerUp = useCallback((e: React.PointerEvent) => {
+    const start = pressStart.current;
+    pressStart.current = null;
+    setPaused(false);
+    if (!start) return;
+    const dt = performance.now() - start.t;
+    const dx = e.clientX - start.x;
+    if (Math.abs(dx) > 45) {
+      if (dx < 0) handleNext(); else handlePrev();
+      return;
+    }
+    if (dt < 260) {
+      const rect = start.rect;
+      const x = e.clientX - rect.left;
+      if (x < rect.width / 3) handlePrev();
+      else if (x > (rect.width * 2) / 3) handleNext();
+    }
+  }, [handleNext, handlePrev]);
+
+  const handleMediaPointerCancel = useCallback(() => {
+    pressStart.current = null;
+    setPaused(false);
+  }, []);
+
+  const sendReply = async () => {
+    const text = replyText.trim();
+    if (!text || !currentGroup || sendingReply) return;
+    setSendingReply(true);
+    setReplyText('');
+    try {
+      await onSendReply(currentGroup.user_id, text);
+      toast({
+        title: 'Reply sent',
+        description: `Your reply was sent as a message to ${currentGroup.user_id === currentUserId ? 'your story' : currentGroup.display_name}.`,
+      });
+    } catch (err) {
+      setReplyText(text);
+      toast({
+        variant: 'destructive',
+        title: "Couldn't send reply",
+        description: err instanceof Error ? err.message : 'Please try again.',
+      });
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
+  const handleToggleLike = () => {
+    if (!currentStoryId || isOwnStory) return;
+    onToggleLike(currentStoryId);
+  };
+
+  const handleToggleLikeTab = (e: { key: string; preventDefault: () => void }) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleToggleLike();
+    }
+  };
 
   const activeSegment = (story: typeof currentGroup.stories[number], i: number) => {
     if (i > storyIndex) {
       return <div className="h-full w-0 rounded-full" />;
     }
     if (i < storyIndex) {
-      return <div className="h-full w-full rounded-full bg-white/90" />;
+      return <div className="h-full w-full rounded-full bg-white/80" />;
     }
     if (story.media_type === 'video') {
       return (
         <div
-          className="h-full rounded-full bg-white transition-[width] duration-150 ease-linear"
+          className="h-full rounded-full bg-white/90 transition-[width] duration-100 ease-linear"
           style={{ width: `${videoProgress}%` }}
         />
       );
@@ -220,7 +324,7 @@ export default function StoryViewer({
     return (
       <div
         key={`${story.id}-${storyIndex}`}
-        className="h-full rounded-full bg-gradient-to-r from-white via-white to-white/70 story-progress-anim"
+        className="h-full rounded-full bg-white/90 story-progress-anim"
         style={{ animationDuration: `${story.duration || 5}s`, animationPlayState: paused ? 'paused' : 'running' }}
         onAnimationEnd={() => {
           if (groups[groupIndex]?.stories[storyIndex]?.media_type === 'image') handleNext();
@@ -229,248 +333,286 @@ export default function StoryViewer({
     );
   };
 
+  const groupName = currentAd
+    ? currentGroup?.display_name ?? 'Sponsored'
+    : currentGroup?.user_id === currentUserId
+      ? 'Your story'
+      : currentGroup?.display_name ?? '';
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           hideCloseButton
-          className="w-full h-[100dvh] sm:h-[92vh] sm:max-h-[860px] max-w-[430px] p-0 border-none overflow-hidden sm:rounded-[2rem] bg-transparent sm:ring-1 sm:ring-white/10 sm:shadow-[0_50px_140px_rgba(0,0,0,0.85)]"
+          className="w-full h-[100dvh] p-0 border-none overflow-hidden bg-black"
         >
-          <div className="relative h-full w-full bg-[radial-gradient(130%_130%_at_50%_0%,#241e38_0%,#0e0c17_55%,#05050a_100%)] overflow-hidden">
-            <div className="absolute inset-0 z-0 pointer-events-none bg-[radial-gradient(90%_70%_at_50%_50%,transparent_35%,rgba(0,0,0,0.65)_100%)]" />
-
+          <div className="relative h-full w-full bg-black overflow-hidden">
             {currentStory && currentGroup && (
               <>
-                {/* ─── Top: progress + header ─── */}
+                {/* ─── Progress ─── */}
                 <div className="absolute inset-x-0 top-0 z-30 px-3 pt-[max(env(safe-area-inset-top,0px),12px)]">
                   <div className="flex gap-1.5">
                     {currentGroup.stories.map((story, i) => (
-                      <div key={story.id} className="flex-1 h-[3px] rounded-full bg-white/20 overflow-hidden">
+                      <div key={story.id} className="flex-1 h-[3px] rounded-full bg-white/15 overflow-hidden">
                         {activeSegment(story, i)}
                       </div>
                     ))}
                   </div>
+                </div>
 
-                  <div className="mt-3 flex items-center justify-between gap-2">
-                    <Link to={`/profile/${currentGroup.username}`} className="flex items-center gap-2.5 min-w-0 group">
-                      <div className="p-[2px] rounded-full bg-gradient-to-br from-primary via-fuchsia-500 to-primary/50 flex-shrink-0 group-hover:brightness-110 transition">
-                        <div className="p-[1.5px] rounded-full bg-black/50">
-                          <Avatar className="w-9 h-9">
-                            <AvatarImage src={currentGroup.avatar_url || undefined} />
-                            <AvatarFallback className="bg-neutral-800 text-white text-sm">
-                              {getInitials(currentGroup.display_name)}
-                            </AvatarFallback>
-                          </Avatar>
-                        </div>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-white font-bold text-sm leading-tight truncate">
-                          {currentAd ? currentGroup.display_name : currentGroup.user_id === currentUserId ? 'Your story' : currentGroup.display_name}
-                        </p>
-                        {currentAd ? (
-                          <p className="flex items-center gap-1 text-white/60 text-[11px] font-medium leading-tight">
-                            <Megaphone className="h-3 w-3" /> Sponsored
-                          </p>
-                        ) : (
-                          <p className="text-white/60 text-[11px] font-medium leading-tight">
-                            {formatDistanceToNow(new Date(currentStory.created_at), { addSuffix: true })}
-                          </p>
-                        )}
-                      </div>
-                    </Link>
-
-                    <div className="flex items-center gap-1 bg-black/45 backdrop-blur-md rounded-full p-1 flex-shrink-0">
-                      {isOwnStory && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setViewersOpen(true)}
-                          title="View story views"
-                          className="h-8 w-8 rounded-full text-white hover:bg-white/20 gap-1 !px-2"
-                        >
-                          <Eye className="h-4 w-4" />
-                          <span className="text-xs font-semibold tabular-nums">
-                            {currentStory.view_count ?? 0}
-                          </span>
-                        </Button>
-                      )}
-                      <Button variant="ghost" size="icon" onClick={() => setPaused(!paused)} className="h-8 w-8 rounded-full text-white hover:bg-white/20" title={paused ? 'Play' : 'Pause'}>
-                        {paused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-                      </Button>
-                      {currentStory.media_type === 'video' && (
-                        <Button variant="ghost" size="icon" onClick={() => setMuted(!muted)} className="h-8 w-8 rounded-full text-white hover:bg-white/20" title={muted ? 'Unmute' : 'Mute'}>
-                          {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                        </Button>
-                      )}
-                      {isOwnStory && (
-                        <Button variant="ghost" size="icon" onClick={handleDelete} className="h-8 w-8 rounded-full text-white hover:bg-destructive/80" title="Delete story">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                      <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="h-8 w-8 rounded-full text-white hover:bg-white/20" title="Close">
-                        <X className="h-4 w-4" />
-                      </Button>
+                {/* ─── Header ─── */}
+                <div className="absolute inset-x-0 top-[max(env(safe-area-inset-top,0px),20px)] z-30 flex items-center justify-between gap-2 px-3 pt-[10px]">
+                  <Link to={currentAd ? '#' : `/profile/${currentGroup.username}`} className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex-shrink-0 rounded-full">
+                      <Avatar className="w-9 h-9 border border-black/30">
+                        <AvatarImage src={currentGroup.avatar_url || undefined} />
+                        <AvatarFallback className="bg-neutral-800 text-white text-sm">
+                          {getInitials(currentGroup.display_name)}
+                        </AvatarFallback>
+                      </Avatar>
                     </div>
+                    <div className="min-w-0">
+                      <p className="text-white font-semibold text-sm leading-tight truncate">{groupName}</p>
+                      {currentAd ? (
+                        <p className="flex items-center gap-1 text-white/60 text-[11px] font-medium leading-tight">
+                          <Megaphone className="h-3 w-3" /> Sponsored
+                        </p>
+                      ) : (
+                        <p className="text-white/60 text-[11px] font-medium leading-tight">
+                          {formatDistanceToNow(new Date(currentStory.created_at), { addSuffix: true })}
+                        </p>
+                      )}
+                    </div>
+                  </Link>
+
+                  <div className="flex items-center gap-0.5 flex-shrink-0">
+                    {isOwnStory && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setViewersOpen(true)}
+                        title="View story views"
+                        className="h-8 w-8 rounded-full text-white hover:bg-white/15 gap-1 !px-2"
+                      >
+                        <Eye className="h-[18px] w-[18px]" />
+                        <span className="text-xs font-semibold tabular-nums">{currentStory.view_count ?? 0}</span>
+                      </Button>
+                    )}
+                    {currentStory.media_type === 'video' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setMuted(!muted)}
+                        className="h-8 w-8 rounded-full text-white hover:bg-white/15"
+                        title={muted ? 'Unmute' : 'Mute'}
+                      >
+                        {muted ? <VolumeX className="h-[18px] w-[18px]" /> : <Volume2 className="h-[18px] w-[18px]" />}
+                      </Button>
+                    )}
+                    {isOwnStory && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={handleConfirmDelete}
+                        className="h-8 w-8 rounded-full text-white hover:bg-white/15"
+                        title="Delete story"
+                      >
+                        <Trash2 className="h-[18px] w-[18px]" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onOpenChange(false)}
+                      className="h-8 w-8 rounded-full text-white hover:bg-white/15"
+                      title="Close"
+                    >
+                      <X className="h-5 w-5" />
+                    </Button>
                   </div>
                 </div>
 
-                {/* ─── Media ─── */}
+                {/* ─── Media (interactive) ─── */}
                 <div
+                  ref={adMediaRef}
                   className="absolute inset-0 z-10"
+                  style={{ touchAction: 'pan-y' }}
                   onTouchStart={e => { touchStartX.current = e.touches[0].clientX; }}
                   onTouchEnd={e => {
                     if (touchStartX.current == null) return;
                     const dx = e.changedTouches[0].clientX - touchStartX.current;
                     touchStartX.current = null;
-                    if (Math.abs(dx) > 50) {
+                    if (Math.abs(dx) > 45) {
                       if (dx < 0) handleNext(); else handlePrev();
                     }
                   }}
+                  onPointerDown={handleMediaPointerDown}
+                  onPointerUp={handleMediaPointerUp}
+                  onPointerCancel={handleMediaPointerCancel}
                 >
-                  <div ref={adMediaRef} className="relative w-full h-full overflow-hidden bg-black">
-                    <div className="absolute -inset-6 z-0 bg-primary/20 blur-3xl opacity-20 pointer-events-none" />
-
+                  <div className="relative w-full h-full">
                     {currentStory.media_type === 'video' ? (
                       <video
                         key={currentStory.id}
                         ref={videoRef}
                         src={currentStory.media_url}
-                        className="absolute inset-0 w-full h-full object-cover story-enter"
+                        className="absolute inset-0 w-full h-full object-contain story-enter"
                         autoPlay
                         loop={false}
                         muted={muted || !!currentStory.music_url}
                         playsInline
+                        onLoadedMetadata={e => { e.currentTarget.currentTime = 0; setMediaLoading(false); }}
+                        onWaiting={() => setMediaLoading(true)}
+                        onCanPlay={() => setMediaLoading(false)}
                         onEnded={handleNext}
                         onTimeUpdate={e => {
                           const v = e.currentTarget;
                           if (v.duration) setVideoProgress((v.currentTime / v.duration) * 100);
                         }}
-                        onLoadedMetadata={e => e.currentTarget.currentTime = 0}
                       />
                     ) : (
                       <img
                         key={currentStory.id}
                         src={currentStory.media_url}
                         alt=""
-                        className="absolute inset-0 w-full h-full object-cover story-kenburns story-enter"
+                        className="absolute inset-0 w-full h-full object-contain story-enter"
+                        onLoad={() => setMediaLoading(false)}
                         draggable={false}
                       />
                     )}
 
-                    {/* Scrims */}
-                    <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/70 via-black/10 to-transparent z-10" />
-                    <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/85 via-black/35 to-transparent z-10" />
+                    {/* Scrims for legibility only */}
+                    <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/60 via-transparent to-transparent z-10 pointer-events-none" />
+                    <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black/70 via-transparent to-transparent z-10 pointer-events-none" />
 
-                    {/* Caption + music */}
-                    {(currentStory.caption || currentStory.music_url) && (
-                      <div className="absolute inset-x-4 bottom-28 z-20 flex flex-col items-center gap-2 pointer-events-none">
-                        {currentStory.music_url && (
-                          <>
-                            <audio
-                              key={`music-${currentStory.id}`}
-                              src={currentStory.music_url}
-                              autoPlay
-                              loop
-                              muted={musicMuted}
-                              className="hidden"
-                            />
-                            <div className="pointer-events-auto flex items-center gap-2 bg-black/50 backdrop-blur-md rounded-full pl-3 pr-1.5 py-1.5">
-                              {!musicMuted && (
-                                <span className="flex items-end gap-[2px] h-4 w-4 story-eq">
-                                  <span /><span /><span />
-                                </span>
-                              )}
-                              <Music className={cn('h-4 w-4 flex-shrink-0', musicMuted ? 'text-white/40' : 'text-white')} />
-                              <span className="text-white text-xs font-medium max-w-[130px] truncate">
-                                {currentStory.music_name || 'Audio'}
+                    {mediaLoading && (
+                      <div className="absolute inset-0 z-20 flex items-center justify-center">
+                        <Loader2 className="h-7 w-7 animate-spin text-white/70" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ─── Caption / music ─── */}
+                {(currentStory.caption || currentStory.music_url) && (
+                  <div className="absolute inset-x-4 bottom-28 z-20 flex flex-col items-center gap-2 pointer-events-none">
+                    {currentStory.music_url && (
+                      <>
+                        <audio
+                          key={`music-${currentStory.id}`}
+                          src={currentStory.music_url}
+                          autoPlay
+                          loop
+                          muted={musicMuted}
+                          className="hidden"
+                        />
+                        {!mediaLoading && (
+                          <div className="pointer-events-auto flex items-center gap-2 bg-black/50 border border-white/10 rounded-full pl-3 pr-1.5 py-1.5">
+                            {!musicMuted && (
+                              <span className="flex items-end gap-[2px] h-4 w-4 story-eq">
+                                <span /><span /><span />
                               </span>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setMusicMuted(!musicMuted)}
-                                className="h-7 w-7 rounded-full text-white hover:bg-white/20"
-                              >
-                                {musicMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                              </Button>
-                            </div>
-                          </>
-                        )}
-
-                        {currentStory.caption && (
-                          <p className="text-white text-center text-sm font-medium bg-black/45 backdrop-blur-sm rounded-full px-4 py-1.5 max-w-full">
-                            {currentStory.caption}
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {currentAd && (
-                      <div className="absolute inset-x-4 bottom-24 z-20 flex flex-col items-center gap-2.5 pointer-events-none">
-                        <div className="pointer-events-auto w-full rounded-2xl border border-white/15 bg-black/55 backdrop-blur-xl p-4">
-                          {currentAd.headline && (
-                            <p className="text-white text-base font-bold leading-snug">{currentAd.headline}</p>
-                          )}
-                          {(currentAd.description || currentAd.post_content) && (
-                            <p className="mt-1 text-sm leading-relaxed text-white/85 line-clamp-3">{currentAd.description || currentAd.post_content}</p>
-                          )}
-                          {currentAd.cta && (
+                            )}
+                            <Music className={cn('h-4 w-4 flex-shrink-0', musicMuted ? 'text-white/40' : 'text-white')} />
+                            <span className="text-white text-xs font-medium max-w-[130px] truncate">
+                              {currentStory.music_name || 'Audio'}
+                            </span>
                             <Button
-                              onClick={handleAdCta}
-                              className="mt-3 h-9 w-full rounded-full bg-white text-sm font-bold text-black hover:bg-white/90"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setMusicMuted(!musicMuted)}
+                              className="h-7 w-7 rounded-full text-white hover:bg-white/20"
                             >
-                              {currentAd.cta}
-                              <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                              {musicMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
                             </Button>
-                          )}
-                        </div>
-                      </div>
+                          </div>
+                        )}
+                      </>
                     )}
 
-                    {/* Tap zones */}
-                    <button onClick={handlePrev} className="absolute left-0 top-1/3 bottom-1/3 w-1/4 z-10 cursor-pointer" aria-label="Previous story" />
-                    <button onClick={handleNext} className="absolute right-0 top-1/3 bottom-1/3 w-1/4 z-10 cursor-pointer" aria-label="Next story" />
+                    {currentStory.caption && !mediaLoading && (
+                      <p className="text-white text-center text-sm font-medium max-w-full [text-shadow:0_1px_8px_rgba(0,0,0,0.65)]">
+                        {currentStory.caption}
+                      </p>
+                    )}
                   </div>
-                </div>
+                )}
 
-                {/* ─── Story dock ─── */}
-                <div className="absolute bottom-0 left-0 right-0 z-30 flex justify-center px-4 pt-10 pb-[calc(env(safe-area-inset-bottom,0px)+14px)] bg-gradient-to-t from-black/75 via-black/25 to-transparent pointer-events-none">
-                  <div className="pointer-events-auto flex items-center gap-2.5 bg-white/10 backdrop-blur-xl border border-white/10 rounded-full px-3 py-2 overflow-x-auto scrollbar-hide max-w-full shadow-lg shadow-black/30">
-                    {groups.map((group, i) => {
-                      const active = i === groupIndex;
-                      return (
-                        <button
-                          key={group.user_id}
-                          onClick={() => jumpToGroup(i)}
-                          className={cn(
-                            'relative rounded-full flex-shrink-0 transition-all duration-200',
-                            active ? 'scale-110' : 'opacity-80 hover:opacity-100'
-                          )}
-                          title={group.ad ? 'Sponsored' : group.display_name}
+                {currentAd && !mediaLoading && (
+                  <div className="absolute inset-x-4 bottom-6 z-20 flex flex-col items-center gap-2.5 pointer-events-none">
+                    <div className="pointer-events-auto w-full max-w-md rounded-2xl border border-white/15 bg-black/60 p-4">
+                      {currentAd.headline && (
+                        <p className="text-white text-base font-bold leading-snug">{currentAd.headline}</p>
+                      )}
+                      {(currentAd.description || currentAd.post_content) && (
+                        <p className="mt-1 text-sm leading-relaxed text-white/85 line-clamp-3">{currentAd.description || currentAd.post_content}</p>
+                      )}
+                      {currentAd.cta && (
+                        <Button
+                          onClick={handleAdCta}
+                          className="mt-3 h-9 w-full rounded-full bg-white text-sm font-bold text-black hover:bg-white/90"
                         >
-                          <div className={cn(
-                            'p-[2px] rounded-full',
-                            active ? 'bg-white' : group.ad ? 'bg-gradient-to-br from-amber-400 to-fuchsia-500' : group.has_unviewed ? 'bg-gradient-to-br from-primary to-primary/50' : 'bg-white/20'
-                          )}>
-                            <div className="p-[1.5px] rounded-full bg-black/40">
-                              {group.ad ? (
-                                <div className={cn('rounded-full bg-neutral-900 flex items-center justify-center', active ? 'w-8 h-8' : 'w-7 h-7')}>
-                                  <Megaphone className="h-3.5 w-3.5 text-amber-400" />
-                                </div>
-                              ) : (
-                                <Avatar className={cn('rounded-full', active ? 'w-8 h-8' : 'w-7 h-7')}>
-                                  <AvatarImage src={group.avatar_url || undefined} />
-                                  <AvatarFallback className="bg-neutral-800 text-white text-[10px]">
-                                    {getInitials(group.display_name)}
-                                  </AvatarFallback>
-                                </Avatar>
-                              )}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
+                          {currentAd.cta}
+                          <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {/* ─── Bottom: like + reply ─── */}
+                {!currentAd && !mediaLoading && (
+                  <div className="absolute bottom-0 left-0 right-0 z-30 px-4 pb-[calc(env(safe-area-inset-bottom,0px)+12px)]">
+                    <div className="mx-auto flex w-full items-center gap-3 max-w-md">
+                      <button
+                        type="button"
+                        onClick={handleToggleLike}
+                        onKeyDown={handleToggleLikeTab}
+                        className="flex items-center gap-1.5 rounded-full bg-black/45 border border-white/15 px-2.5 py-1.5 transition-colors hover:bg-black/60"
+                        aria-label={isLiked ? 'Unlike this story' : 'Like this story'}
+                        aria-pressed={isLiked}
+                      >
+                        <Heart
+                          key={`${currentStory.id}-${isLiked}`}
+                          className={cn(
+                            'h-5 w-5 transition-colors',
+                            isLiked ? 'fill-red-500 text-red-500 story-like-pop' : 'text-white'
+                          )}
+                        />
+                        {likeCount > 0 && (
+                          <span className="text-xs font-semibold tabular-nums text-white">{likeCount}</span>
+                        )}
+                      </button>
+
+                      <div className="flex-1 flex items-center gap-1.5 bg-black/45 border border-white/15 rounded-full pl-4 pr-1.5 py-1.5">
+                        <input
+                          value={replyText}
+                          onChange={e => setReplyText(e.target.value)}
+                          onFocus={() => setPaused(true)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); }
+                          }}
+                          placeholder={`Reply to ${currentGroup.display_name}…`}
+                          className="flex-1 min-w-0 bg-transparent text-white text-sm placeholder:text-white/50 focus:outline-none"
+                          aria-label="Reply to this story as a message"
+                        />
+                        <button
+                          type="button"
+                          onClick={sendReply}
+                          disabled={!replyText.trim() || sendingReply}
+                          className="flex-shrink-0 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center transition-opacity disabled:opacity-40"
+                          aria-label="Send reply"
+                        >
+                          {sendingReply ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* ─── Nav arrows (desktop) ─── */}
                 {(groupIndex > 0 || storyIndex > 0) && (
@@ -478,7 +620,7 @@ export default function StoryViewer({
                     variant="ghost"
                     size="icon"
                     onClick={handlePrev}
-                    className="hidden sm:inline-flex absolute left-2 top-1/2 -translate-y-1/2 z-20 rounded-full bg-black/40 backdrop-blur-md text-white hover:bg-black/60"
+                    className="hidden sm:inline-flex absolute left-2 top-1/2 -translate-y-1/2 z-20 rounded-full bg-black/40 text-white hover:bg-black/60"
                     aria-label="Previous"
                   >
                     <ChevronLeft className="h-6 w-6" />
@@ -489,7 +631,7 @@ export default function StoryViewer({
                     variant="ghost"
                     size="icon"
                     onClick={handleNext}
-                    className="hidden sm:inline-flex absolute right-2 top-1/2 -translate-y-1/2 z-20 rounded-full bg-black/40 backdrop-blur-md text-white hover:bg-black/60"
+                    className="hidden sm:inline-flex absolute right-2 top-1/2 -translate-y-1/2 z-20 rounded-full bg-black/40 text-white hover:bg-black/60"
                     aria-label="Next"
                   >
                     <ChevronRight className="h-6 w-6" />
@@ -544,7 +686,7 @@ export default function StoryViewer({
               </div>
             ) : (
               <div className="py-1">
-                {viewers.map((v) => (
+                {viewers.map(v => (
                   <Link
                     key={v.viewer_id}
                     to={`/profile/${v.username}`}
@@ -572,6 +714,27 @@ export default function StoryViewer({
         </SheetContent>
       </Sheet>
 
+      {/* ─── Delete confirmation ─── */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent className="max-w-sm rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this story?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your story will be removed for everyone immediately. This can’t be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full" onClick={() => setPaused(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <style>{`
         @keyframes story-progress {
           from { width: 0%; }
@@ -582,19 +745,20 @@ export default function StoryViewer({
           animation-timing-function: linear;
           animation-fill-mode: forwards;
         }
-        @keyframes story-kenburns {
-          from { transform: scale(1.02); }
-          to { transform: scale(1.14); }
-        }
-        .story-kenburns {
-          animation: story-kenburns 8s ease-out forwards;
-        }
         @keyframes story-enter {
-          from { opacity: 0; transform: scale(1.03); }
-          to { opacity: 1; transform: scale(1); }
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
         .story-enter {
-          animation: story-enter 0.35s ease-out;
+          animation: story-enter 0.3s ease-out;
+        }
+        @keyframes story-like-pop {
+          0% { transform: scale(1); }
+          40% { transform: scale(1.35); }
+          100% { transform: scale(1); }
+        }
+        .story-like-pop {
+          animation: story-like-pop 0.2s ease-out;
         }
         @keyframes eq-a { 0%, 100% { height: 30%; } 50% { height: 95%; } }
         @keyframes eq-b { 0%, 100% { height: 80%; } 50% { height: 25%; } }

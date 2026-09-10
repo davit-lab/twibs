@@ -30,7 +30,7 @@ export type AdEventType =
   | 'website_click'
   | 'conversion';
 
-export type AdPlacement = 'feed' | 'explore';
+export type AdPlacement = 'feed' | 'explore' | 'stories' | 'reels';
 
 export interface AdvertiserAccount {
   id: string;

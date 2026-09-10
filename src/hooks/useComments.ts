@@ -65,10 +65,12 @@ export function useComments(postId: string) {
 
       // Fetch profiles for comment authors
       const userIds = [...new Set(commentsData?.map((c: any) => c.user_id) || [])];
-      const { data: profilesData } = await supabase
-        .from('profiles')
-        .select('user_id, username, display_name, avatar_url, is_verified')
-        .in('user_id', userIds);
+      const { data: profilesData } = userIds.length > 0
+        ? await supabase
+            .from('profiles')
+            .select('user_id, username, display_name, avatar_url, is_verified')
+            .in('user_id', userIds)
+        : { data: null };
 
       const profilesMap = new Map(
         profilesData?.map((p) => [p.user_id, p]) || []
@@ -255,39 +257,43 @@ export function useComments(postId: string) {
 
     try {
       // Check existing vote
-      const { data: existingVote } = await supabase
+      const { data: existingVote, error: existingError } = await supabase
         .from('comment_votes')
         .select('id, vote_type')
         .eq('comment_id', commentId)
         .eq('user_id', user.id)
         .maybeSingle();
+      if (existingError) throw existingError;
 
       if (existingVote) {
         if (existingVote.vote_type === voteType) {
           // Remove vote
-          await supabase
+          const { error } = await supabase
             .from('comment_votes')
             .delete()
             .eq('id', existingVote.id);
+          if (error) throw error;
         } else {
           // Change vote
-          await supabase
+          const { error } = await supabase
             .from('comment_votes')
             .update({ vote_type: voteType })
             .eq('id', existingVote.id);
+          if (error) throw error;
         }
       } else {
         // Add new vote
-        await supabase
+        const { error } = await supabase
           .from('comment_votes')
           .insert({
             comment_id: commentId,
             user_id: user.id,
             vote_type: voteType,
           });
+        if (error) throw error;
       }
 
-      fetchComments();
+      await fetchComments();
     } catch (error: any) {
       console.error('Error voting:', error);
       toast({

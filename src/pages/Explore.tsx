@@ -5,6 +5,7 @@ import FollowButton from '@/components/social/FollowButton';
 import FollowRequests from '@/components/social/FollowRequests';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BadgeCheck, Search, Users, X, Crown, Star, Eye, Play, FileText, ArrowRight, Clapperboard, Heart, MessageCircle, MapPin, Navigation } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -139,20 +140,26 @@ function UserCard({ userProfile, onFollowChange }: { userProfile: ExploreUser; o
 
 function PostCard({ post }: { post: ExplorePost }) {
   const [image, ...rest] = post.post_media?.filter(m => m.type === 'image') || [];
+  const profiles = post.profiles || {
+    username: 'unknown',
+    display_name: 'Unknown User',
+    avatar_url: null,
+    is_verified: false,
+  };
 
   return (
-    <a href={`/profile/${post.profiles.username}`} className="block p-4 rounded-xl bg-card border border-border/60 transition-colors hover:border-border group">
+    <a href={`/profile/${profiles.username}`} className="block p-4 rounded-xl bg-card border border-border/60 transition-colors hover:border-border group">
       <div className="flex items-center gap-3 mb-3">
         <Avatar className="h-9 w-9">
-          <AvatarImage src={post.profiles.avatar_url || undefined} />
-          <AvatarFallback className="bg-surface-2 text-foreground font-bold text-xs">{post.profiles.display_name?.slice(0, 2).toUpperCase() || 'U'}</AvatarFallback>
+          <AvatarImage src={profiles.avatar_url || undefined} />
+          <AvatarFallback className="bg-surface-2 text-foreground font-bold text-xs">{profiles.display_name?.slice(0, 2).toUpperCase() || 'U'}</AvatarFallback>
         </Avatar>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="text-sm font-bold truncate">{post.profiles.display_name}</span>
-            {post.profiles.is_verified && <BadgeCheck className="h-3 w-3 text-primary flex-shrink-0" />}
+            <span className="text-sm font-bold truncate">{profiles.display_name}</span>
+            {profiles.is_verified && <BadgeCheck className="h-3 w-3 text-primary flex-shrink-0" />}
           </div>
-          <p className="text-xs text-muted-foreground font-medium">@{post.profiles.username} · {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}</p>
+          <p className="text-xs text-muted-foreground font-medium">@{profiles.username} · {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}</p>
         </div>
       </div>
       <p className="text-sm leading-relaxed mb-3 line-clamp-4">{post.content}</p>
@@ -280,7 +287,7 @@ function ReelCard({ reel, grid }: { reel: ExploreReel; grid?: boolean }) {
 
 export default function Explore() {
   const { profile: currentUserProfile, user } = useAuth();
-  const { users, posts, reels, loading, searchQuery, setSearchQuery, activeTab, setActiveTab, handleFollowChange, hasAny, viewerLocationKnown, distancesReady, distancesLoading } = useExplore();
+  const { users, posts, reels, loading, error, refetch, searchQuery, setSearchQuery, activeTab, setActiveTab, handleFollowChange, hasAny, viewerLocationKnown, distancesReady, distancesLoading } = useExplore();
   const { data: mutedIds = [] } = useMutedUsers();
   const [ads, setAds] = useState<FeedAd[]>([]);
   const visiblePosts = posts.filter(p => !mutedIds.includes(p.user_id));
@@ -392,6 +399,17 @@ export default function Explore() {
       if (activeTab === 'reels') return skeletons.reels;
       if (activeTab === 'posts') return skeletons.posts;
       return skeletons.users;
+    }
+
+    if (error && !hasAny) {
+      return (
+        <div className="text-center py-16">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground mb-3">Couldn’t load</p>
+          <h3 className="font-black text-2xl tracking-tight mb-2">Something went wrong</h3>
+          <p className="text-sm text-muted-foreground font-medium mb-6">We couldn’t fetch results right now.</p>
+          <Button onClick={refetch} variant="outline" className="rounded-full">Try again</Button>
+        </div>
+      );
     }
 
     if (activeTab === 'all') {

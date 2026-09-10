@@ -131,6 +131,14 @@ export function useInterestActions() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-interests'] });
     },
+    onError: (error: any) => {
+      console.error('Error adding interest:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Failed to add interest',
+        description: error?.message || 'Something went wrong. Please try again.',
+      });
+    },
   });
 
   const removeInterest = useMutation({
@@ -147,6 +155,14 @@ export function useInterestActions() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-interests'] });
+    },
+    onError: (error: any) => {
+      console.error('Error removing interest:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Failed to remove interest',
+        description: error?.message || 'Something went wrong. Please try again.',
+      });
     },
   });
 

@@ -62,7 +62,7 @@ export default function InterestCard({
       onClick={onToggle}
       aria-pressed={selected}
       className={cn(
-        'group relative flex items-center gap-3 w-full p-3 rounded-2xl border transition-all duration-200 ease-out text-left',
+        'group relative flex items-center gap-3 w-full p-3 rounded-xl border transition-all duration-200 ease-out text-left',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
         selected
           ? 'border-primary/50 bg-primary/5'

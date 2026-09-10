@@ -112,14 +112,24 @@ export function useMessages(conversationId: string | null) {
   const [hasMore, setHasMore] = useState(false);
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Monotonic token so a stale fetch (from a previously-open conversation) can
+  // never overwrite the messages of the currently-open conversation.
+  const fetchTokenRef = useRef(0);
 
   const fetchMessages = useCallback(async () => {
     if (!conversationId || !user) {
+      // Bump the token so any in-flight fetch is invalidated.
+      fetchTokenRef.current++;
       setMessages([]);
       setHasMore(false);
       setLoading(false);
       return;
     }
+
+    const token = ++fetchTokenRef.current;
+    setMessages([]);
+    setHasMore(false);
+    setLoading(true);
 
     try {
       const { data, error } = await supabase
@@ -143,6 +153,7 @@ export function useMessages(conversationId: string | null) {
         .order('created_at', { ascending: false })
         .range(0, MESSAGE_PAGE_SIZE - 1);
 
+      if (fetchTokenRef.current !== token) return;
       if (error) throw error;
 
       const rows = ((data || []) as RawMessage[]).reverse();
@@ -156,6 +167,7 @@ export function useMessages(conversationId: string | null) {
           .from('message_attachments')
           .select('*')
           .in('message_id', messageIds);
+        if (fetchTokenRef.current !== token) return;
         if (attError) throw attError;
         attachments = (attData || []) as MessageAttachment[];
       }
@@ -166,6 +178,7 @@ export function useMessages(conversationId: string | null) {
         .from('profiles')
         .select('user_id, username, display_name, avatar_url')
         .in('user_id', senderIds);
+      if (fetchTokenRef.current !== token) return;
 
       const profileMap = new Map(
         (profiles || []).map(p => [p.user_id, { username: p.username, display_name: p.display_name, avatar_url: p.avatar_url }] as const)
@@ -177,12 +190,13 @@ export function useMessages(conversationId: string | null) {
           profiles: profileMap.get(m.sender_id),
         }))
       );
+      if (fetchTokenRef.current !== token) return;
 
       setMessages(messagesWithProfiles);
     } catch (error) {
       console.error('Error fetching messages:', error);
     } finally {
-      setLoading(false);
+      if (fetchTokenRef.current === token) setLoading(false);
     }
   }, [conversationId, user]);
 
@@ -229,6 +243,8 @@ export function useMessages(conversationId: string | null) {
   const loadOlder = useCallback(async () => {
     if (!conversationId || !user || loadingMore || messages.length === 0) return;
 
+    const token = fetchTokenRef.current;
+
     setLoadingMore(true);
     try {
       const oldest = messages[0].created_at;
@@ -254,6 +270,7 @@ export function useMessages(conversationId: string | null) {
         .order('created_at', { ascending: false })
         .range(0, MESSAGE_PAGE_SIZE - 1);
 
+      if (fetchTokenRef.current !== token) return;
       if (error) throw error;
 
       const rows = ((data || []) as RawMessage[]).reverse();
@@ -266,6 +283,7 @@ export function useMessages(conversationId: string | null) {
           .from('message_attachments')
           .select('*')
           .in('message_id', messageIds);
+        if (fetchTokenRef.current !== token) return;
         attachments = (attData || []) as MessageAttachment[];
       }
 
@@ -274,6 +292,7 @@ export function useMessages(conversationId: string | null) {
         .from('profiles')
         .select('user_id, username, display_name, avatar_url')
         .in('user_id', senderIds);
+      if (fetchTokenRef.current !== token) return;
 
       const profileMap = new Map(
         (profiles || []).map(p => [p.user_id, { username: p.username, display_name: p.display_name, avatar_url: p.avatar_url }] as const)
@@ -285,12 +304,13 @@ export function useMessages(conversationId: string | null) {
           profiles: profileMap.get(m.sender_id),
         }))
       );
+      if (fetchTokenRef.current !== token) return;
 
       setMessages(prev => [...messagesWithProfiles, ...prev]);
     } catch (error) {
       console.error('Error loading older messages:', error);
     } finally {
-      setLoadingMore(false);
+      if (fetchTokenRef.current === token) setLoadingMore(false);
     }
   }, [conversationId, user, loadingMore, messages, attachForwardedMessages]);
 
@@ -560,8 +580,11 @@ export function useMessages(conversationId: string | null) {
       // Clear typing indicator
       await setTyping(false);
     } catch (error) {
-      // Remove the optimistic message on failure
-      setMessages(prev => prev.filter(m => m.client_id !== clientId));
+      // Remove the optimistic placeholder on failure. Only remove it if it's still
+      // an optimistic placeholder — if realtime already reconciled it into the real
+      // server row (same client_id, optimistic=false), the message is persisted and
+      // must NOT be removed (otherwise it stays invisible to the sender forever).
+      setMessages(prev => prev.filter(m => !(m.client_id === clientId && m.optimistic)));
       console.error('Error sending message:', error);
       throw error;
     }

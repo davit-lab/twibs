@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import StoryViewer from '@/components/stories/StoryViewer';
+import StoryCreator from '@/components/stories/StoryCreator';
 import {
   BadgeCheck,
   MapPin,
@@ -31,7 +32,6 @@ import {
   MessageCircle,
   Hammer,
   ArrowLeft,
-  Loader2,
   Camera,
   Share2,
   MoreHorizontal,
@@ -110,17 +110,17 @@ export default function Profile() {
   const [shareOpen, setShareOpen] = useState(false);
   const [viewersOpen, setViewersOpen] = useState(false);
   const recordedViewFor = useRef<string | null>(null);
+  const fetchTokenRef = useRef(0);
 
   // Story states
-  const [uploading, setUploading] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [creatorOpen, setCreatorOpen] = useState(false);
 
   const isOwnProfile = currentUserProfile?.username === username;
   const { stats, loading: statsLoading } = useFollowStats(profileData?.user_id);
   const { mutuals, count: mutualCount, loading: mutualsLoading } = useMutualConnections(profileData?.user_id);
   const { data: isPremium } = usePremiumStatus(profileData?.user_id);
-  const { groupedStories, viewStory, uploadStory, deleteStory, fetchStoryViewers } = useStories({
+  const { groupedStories, viewStory, uploadStory, deleteStory, fetchStoryViewers, toggleStoryLike, sendStoryReply } = useStories({
     profileUserId: profileData?.user_id,
     enabled: !!profileData,
   });
@@ -137,6 +137,8 @@ export default function Profile() {
   const hasUnviewed = currentGroup?.has_unviewed;
 
   useEffect(() => {
+    const fetchToken = ++fetchTokenRef.current;
+
     const fetchProfile = async () => {
       // Reset immediately when the target profile changes so we never render
       // stale data (or the previous user's stories) while loading the new one.
@@ -150,46 +152,62 @@ export default function Profile() {
         return;
       }
 
-      const { data, error: fetchError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('username', username)
-        .maybeSingle();
-
-      if (fetchError || !data) {
-        setError('Profile not found');
-      } else {
-        setProfileData(data as ProfileData);
-
-        const { data: roleData } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', data.user_id)
-          .eq('role', 'admin')
+      try {
+        const { data, error: fetchError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('username', username)
           .maybeSingle();
 
-        setIsProfileAdmin(!!roleData);
+        if (fetchTokenRef.current !== fetchToken) return;
 
-        const { count } = await supabase
-          .from('user_library')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', data.user_id);
+        if (fetchError) {
+          setError('This profile could not be loaded');
+        } else if (!data) {
+          setError('Profile not found');
+        } else {
+          setProfileData(data as ProfileData);
 
-        setLibraryCount(count || 0);
-
-        // Fetch reels count and total views for this profile
-        try {
-          const { count: reelsCnt } = await supabase
-            .from('reels')
-            .select('*', { count: 'exact', head: true })
+          const { data: roleData } = await supabase
+            .from('user_roles')
+            .select('role')
             .eq('user_id', data.user_id)
-            .eq('is_published', true);
-          setReelsCount(reelsCnt || 0);
-        } catch (err) {
-          console.error('Failed to fetch reels stats', err);
+            .eq('role', 'admin')
+            .maybeSingle();
+
+          if (fetchTokenRef.current !== fetchToken) return;
+
+          setIsProfileAdmin(!!roleData);
+
+          const { count } = await supabase
+            .from('user_library')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', data.user_id);
+
+          if (fetchTokenRef.current !== fetchToken) return;
+
+          setLibraryCount(count || 0);
+
+          // Fetch reels count and total views for this profile
+          try {
+            const { count: reelsCnt } = await supabase
+              .from('reels')
+              .select('*', { count: 'exact', head: true })
+              .eq('user_id', data.user_id)
+              .eq('is_published', true);
+            if (fetchTokenRef.current === fetchToken) setReelsCount(reelsCnt || 0);
+          } catch (err) {
+            console.error('Failed to fetch reels stats', err);
+          }
         }
+      } catch (err) {
+        if (fetchTokenRef.current === fetchToken) {
+          console.error('Error loading profile:', err);
+          setError('This profile could not be loaded');
+        }
+      } finally {
+        if (fetchTokenRef.current === fetchToken) setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchProfile();
@@ -225,32 +243,6 @@ export default function Profile() {
 
   const handleShareProfile = () => {
     setShareOpen(true);
-  };
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
-      toast({ variant: 'destructive', title: 'Invalid file type', description: 'Please select an image or video file.' });
-      return;
-    }
-
-    if (file.size > 50 * 1024 * 1024) {
-      toast({ variant: 'destructive', title: 'File too large', description: 'Maximum file size is 50MB.' });
-      return;
-    }
-
-    setUploading(true);
-    try {
-      await uploadStory(file);
-      toast({ title: 'Story added!', description: 'Your story will be visible for 24 hours.' });
-    } catch (err) {
-      toast({ variant: 'destructive', title: 'Upload failed', description: err instanceof Error ? err.message : 'Failed to upload story.' });
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
   };
 
   const openViewer = () => {
@@ -290,9 +282,11 @@ export default function Profile() {
             <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-5">
               <Users className="w-8 h-8 text-muted-foreground" />
             </div>
-            <h1 className="text-2xl font-bold mb-2">Profile not found</h1>
+            <h1 className="text-2xl font-bold mb-2">{error === 'Profile not found' ? 'Profile not found' : 'Couldn’t load this profile'}</h1>
             <p className="text-muted-foreground text-sm mb-6">
-              This user doesn't exist or the profile has been removed.
+              {error === 'Profile not found'
+                ? "This user doesn't exist or the profile has been removed."
+                : 'Something went wrong while loading this profile.'}
             </p>
             <Button onClick={() => navigate('/')} className="px-6">
               Back to Home
@@ -382,15 +376,11 @@ export default function Profile() {
 
                   {isOwnProfile && user && (
                     <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
+                      onClick={() => setCreatorOpen(true)}
                       className="absolute bottom-1 right-1 w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center hover:scale-105 transition-transform border-2 border-card"
+                      aria-label="Add to your story"
                     >
-                      {uploading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Camera className="h-4 w-4" />
-                      )}
+                      <Camera className="h-4 w-4" />
                     </button>
                   )}
 
@@ -676,12 +666,11 @@ export default function Profile() {
       </div>
 
       {/* Hidden file input for story upload */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*,video/*"
-        onChange={handleFileSelect}
-        className="hidden"
+      {/* Story Creator */}
+      <StoryCreator
+        open={creatorOpen}
+        onOpenChange={setCreatorOpen}
+        onUpload={uploadStory}
       />
 
       {/* Story Viewer */}
@@ -694,6 +683,8 @@ export default function Profile() {
         onView={viewStory}
         onDelete={deleteStory}
         onFetchViewers={fetchStoryViewers}
+        onToggleLike={toggleStoryLike}
+        onSendReply={sendStoryReply}
       />
 
       <FollowersFollowingModal

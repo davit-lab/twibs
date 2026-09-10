@@ -150,7 +150,11 @@ function CommentsContent({ reelId }: { reelId: string }) {
     if (!user) return;
     setAnimatingHearts(prev => new Set(prev).add(commentId));
     setTimeout(() => setAnimatingHearts(prev => { const n = new Set(prev); n.delete(commentId); return n; }), 400);
-    await likeComment(commentId);
+    try {
+      await likeComment(commentId);
+    } catch {
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to update like' });
+    }
   };
 
   const handleGifSelect = async (gifUrl: string) => {

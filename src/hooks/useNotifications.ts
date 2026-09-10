@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 
 export type NotificationType =
   | 'follow'
@@ -33,6 +34,7 @@ export interface Notification {
 
 export function useNotifications() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -168,6 +170,7 @@ export function useNotifications() {
       );
     } catch (error) {
       console.error('Error marking notification as read:', error);
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to update notification' });
     }
   };
 
@@ -186,6 +189,7 @@ export function useNotifications() {
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     } catch (error) {
       console.error('Error marking all as read:', error);
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to mark notifications as read' });
     }
   };
 
@@ -206,6 +210,7 @@ export function useNotifications() {
       setNotifications(prev => prev.filter(n => n.id !== notificationId));
     } catch (error) {
       console.error('Error deleting notification:', error);
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete notification' });
     }
   };
 
@@ -223,6 +228,7 @@ export function useNotifications() {
       setNotifications([]);
     } catch (error) {
       console.error('Error clearing notifications:', error);
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to clear notifications' });
     }
   };
 

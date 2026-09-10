@@ -224,6 +224,23 @@ async function enrichInterestPosts(posts: any[], userId?: string): Promise<Inter
   return result as InterestPost[];
 }
 
+export async function uploadInterestMedia(
+  file: File,
+  userId: string
+): Promise<{ url: string; type: string; error?: string } | null> {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+  const { error } = await supabase.storage.from('interest-media').upload(fileName, file);
+  if (error) {
+    console.error('Upload error:', error);
+    return { url: '', type: '', error: error.message };
+  }
+
+  const { data: { publicUrl } } = supabase.storage.from('interest-media').getPublicUrl(fileName);
+  return { url: publicUrl, type: file.type };
+}
+
 export function useInterestPostActions() {
   const { user } = useAuth();
   const { isEnabled } = useAppSettings();
@@ -300,6 +317,14 @@ export function useInterestPostActions() {
         description: 'Your post has been removed.',
       });
     },
+    onError: (error: any) => {
+      console.error('Error deleting interest post:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Failed to delete',
+        description: error?.message || 'Something went wrong. Please try again.',
+      });
+    },
   });
 
   const likePost = useMutation({
@@ -318,6 +343,14 @@ export function useInterestPostActions() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['interest-posts'] });
     },
+    onError: (error: any) => {
+      console.error('Error liking interest post:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Failed to like',
+        description: error?.message || 'Something went wrong. Please try again.',
+      });
+    },
   });
 
   const unlikePost = useMutation({
@@ -334,6 +367,14 @@ export function useInterestPostActions() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['interest-posts'] });
+    },
+    onError: (error: any) => {
+      console.error('Error unliking interest post:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Failed to unlike',
+        description: error?.message || 'Something went wrong. Please try again.',
+      });
     },
   });
 
@@ -354,6 +395,14 @@ export function useInterestPostActions() {
       queryClient.invalidateQueries({ queryKey: ['interest-posts'] });
       queryClient.invalidateQueries({ queryKey: ['saved-interest-posts'] });
     },
+    onError: (error: any) => {
+      console.error('Error saving interest post:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Failed to save',
+        description: error?.message || 'Something went wrong. Please try again.',
+      });
+    },
   });
 
   const unsavePost = useMutation({
@@ -371,6 +420,14 @@ export function useInterestPostActions() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['interest-posts'] });
       queryClient.invalidateQueries({ queryKey: ['saved-interest-posts'] });
+    },
+    onError: (error: any) => {
+      console.error('Error unsaving interest post:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Failed to unsave',
+        description: error?.message || 'Something went wrong. Please try again.',
+      });
     },
   });
 

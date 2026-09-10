@@ -23,6 +23,8 @@ export default function ReelDetailPage() {
   const [reel, setReel] = useState<Reel | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
   const [muted, setMuted] = useState(true);
   const [paused, setPaused] = useState(false);
   const [showComments, setShowComments] = useState(false);
@@ -36,6 +38,7 @@ export default function ReelDetailPage() {
       if (!reelId) return;
       setLoading(true);
       setNotFound(false);
+      setLoadError(false);
       try {
         const { data, error } = await supabase
           .from('reels')
@@ -81,14 +84,14 @@ export default function ReelDetailPage() {
         }
       } catch (e) {
         console.error('Error fetching reel:', e);
-        if (!cancelled) setNotFound(true);
+        if (!cancelled) setLoadError(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
     fetchReel();
     return () => { cancelled = true; };
-  }, [reelId, user]);
+  }, [reelId, user, retryKey]);
 
   const incrementView = useCallback(async () => {
     if (!reelId) return;
@@ -111,7 +114,8 @@ export default function ReelDetailPage() {
     if (!reel) return;
     try {
       if (isLiked) {
-        await supabase.from('reel_likes').delete().eq('reel_id', reel.id).eq('user_id', user.id);
+        const { error } = await supabase.from('reel_likes').delete().eq('reel_id', reel.id).eq('user_id', user.id);
+        if (error) throw error;
         setIsLiked(false);
         setLikeCount(c => Math.max(0, c - 1));
       } else {
@@ -122,6 +126,7 @@ export default function ReelDetailPage() {
       }
     } catch (e) {
       console.error('Error liking reel:', e);
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to update like' });
     }
   };
 
@@ -154,6 +159,25 @@ export default function ReelDetailPage() {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-black">
         <Loader2 className="h-8 w-8 animate-spin text-white/60" />
+      </div>
+    );
+  }
+
+  if (loadError && !reel) {
+    return (
+      <div className="relative flex h-screen w-full flex-col items-center justify-center gap-4 bg-black px-6">
+        <Button
+          variant="ghost" size="icon"
+          onClick={() => navigate(-1)}
+          className="absolute left-4 top-4 z-[60] flex h-10 w-10 rounded-full border border-white/15 bg-black/35 text-white backdrop-blur-md hover:bg-black/55"
+          aria-label="Go back"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <p className="text-center text-sm text-white/70">Couldn’t load this reel.</p>
+        <Button onClick={() => setRetryKey(k => k + 1)} variant="outline" className="rounded-full border-white/20 text-white hover:bg-white/10">
+          Try again
+        </Button>
       </div>
     );
   }

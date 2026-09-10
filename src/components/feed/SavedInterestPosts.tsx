@@ -4,7 +4,7 @@ import { useSavedInterestPosts } from '@/hooks/useInterestPosts';
 import { useMutedUsers } from '@/hooks/useSafety';
 import InterestPostCard from './InterestPostCard';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 interface SavedInterestPostsProps {
   userId: string;
@@ -80,14 +80,11 @@ export default function SavedInterestPosts({ userId, isOwnProfile = false }: Sav
 
   if (posts.length === 0) {
     return (
-      <div className="text-center py-12">
-        <div className="w-14 h-14 rounded-2xl bg-muted mx-auto mb-4 flex items-center justify-center">
-          <Sparkles className="h-7 w-7 text-muted-foreground" />
-        </div>
-        <h3 className="font-bold text-lg mb-2">No added posts yet</h3>
-        <p className="text-muted-foreground text-sm max-w-xs mx-auto">
+      <div className="text-center py-10">
+        <h3 className="font-bold text-lg tracking-tight">No added posts yet</h3>
+        <p className="text-muted-foreground text-sm max-w-xs mx-auto mt-1.5">
           {isOwnProfile
-            ? "Tap 'Add to interests' on any interest post to build your collection here."
+            ? "Use the bookmark on any interest post to build your collection here."
             : "This user hasn't added any posts to their interests collection yet."}
         </p>
       </div>
@@ -95,7 +92,7 @@ export default function SavedInterestPosts({ userId, isOwnProfile = false }: Sav
   }
 
   return (
-    <div className="space-y-3">
+    <div className="divide-y divide-border/70">
       {posts.map((post) => (
         <InterestPostCard key={post.id} post={post} />
       ))}

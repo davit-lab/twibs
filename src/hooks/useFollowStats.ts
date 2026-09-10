@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface FollowStats {
@@ -9,32 +9,44 @@ interface FollowStats {
 export function useFollowStats(userId: string | undefined) {
   const [stats, setStats] = useState<FollowStats>({ followers: 0, following: 0 });
   const [loading, setLoading] = useState(true);
+  const fetchTokenRef = useRef(0);
 
   useEffect(() => {
     if (!userId) {
+      fetchTokenRef.current++;
       setLoading(false);
       return;
     }
 
-    const fetchStats = async () => {
-      const [followersResult, followingResult] = await Promise.all([
-        supabase
-          .from('follows')
-          .select('id', { count: 'exact', head: true })
-          .eq('following_id', userId)
-          .eq('status', 'accepted'),
-        supabase
-          .from('follows')
-          .select('id', { count: 'exact', head: true })
-          .eq('follower_id', userId)
-          .eq('status', 'accepted'),
-      ]);
+    const token = ++fetchTokenRef.current;
+    setLoading(true);
 
-      setStats({
-        followers: followersResult.count || 0,
-        following: followingResult.count || 0,
-      });
-      setLoading(false);
+    const fetchStats = async () => {
+      try {
+        const [followersResult, followingResult] = await Promise.all([
+          supabase
+            .from('follows')
+            .select('id', { count: 'exact', head: true })
+            .eq('following_id', userId)
+            .eq('status', 'accepted'),
+          supabase
+            .from('follows')
+            .select('id', { count: 'exact', head: true })
+            .eq('follower_id', userId)
+            .eq('status', 'accepted'),
+        ]);
+
+        if (fetchTokenRef.current !== token) return;
+
+        setStats({
+          followers: followersResult.error ? stats.followers : followersResult.count || 0,
+          following: followingResult.error ? stats.following : followingResult.count || 0,
+        });
+      } catch (error) {
+        console.error('Error fetching follow stats:', error);
+      } finally {
+        if (fetchTokenRef.current === token) setLoading(false);
+      }
     };
 
     fetchStats();

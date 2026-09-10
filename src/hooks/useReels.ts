@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppSettings } from '@/contexts/SystemSettingsContext';
@@ -420,9 +420,17 @@ export function useReelComments(reelId: string) {
   const { isEnabled } = useAppSettings();
   const [comments, setComments] = useState<ReelComment[]>([]);
   const [loading, setLoading] = useState(true);
+  // Guard against stale responses when reelId changes mid-flight.
+  const fetchTokenRef = useRef(0);
 
   const fetchComments = useCallback(async () => {
-    if (!reelId) return;
+    if (!reelId) {
+      setComments([]);
+      setLoading(false);
+      return;
+    }
+
+    const token = ++fetchTokenRef.current;
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -431,17 +439,27 @@ export function useReelComments(reelId: string) {
         .eq('reel_id', reelId)
         .order('created_at', { ascending: true });
 
+      if (fetchTokenRef.current !== token) return;
       if (error) throw error;
 
-      const userIds = [...new Set((data || []).map(c => c.user_id))];
-      const [{ data: profiles }, { data: likesData }] = await Promise.all([
-        supabase.from('profiles').select('user_id, username, display_name, avatar_url').in('user_id', userIds),
+      const rows = data || [];
+      const userIds = [...new Set(rows.map(c => c.user_id))];
+      const [{ data: profiles, error: profilesError }, { data: likesData }] = await Promise.all([
+        userIds.length > 0
+          ? supabase.from('profiles').select('user_id, username, display_name, avatar_url').in('user_id', userIds)
+          : Promise.resolve({ data: [], error: null }),
         user
           ? supabase.from('reel_comment_likes').select('comment_id').eq('user_id', user.id)
           : Promise.resolve({ data: [] }),
       ]);
+      if (fetchTokenRef.current !== token) return;
+      if (profilesError) throw profilesError;
 
-      const profileMap = new Map(profiles?.map(p => [p.user_id, p]));
+      // Explicit typing avoids inference issues from the empty-list fallback branch.
+      const profileRows = (profiles || []) as { user_id: string; username: string; display_name: string; avatar_url: string | null }[];
+      const profileMap = new Map<string, { username: string; display_name: string; avatar_url: string | null }>(
+        profileRows.map(p => [p.user_id, { username: p.username, display_name: p.display_name, avatar_url: p.avatar_url }])
+      );
       const likedSet = new Set((likesData || []).map(l => l.comment_id));
 
       const commentMap = new Map<string, ReelComment>();
@@ -489,20 +507,36 @@ export function useReelComments(reelId: string) {
 
   const likeComment = async (commentId: string) => {
     if (!user) return;
-    const comment = comments.find(c => c.id === commentId);
-    if (!comment) return;
 
-    if (comment.is_liked) {
-      await supabase.from('reel_comment_likes').delete().eq('comment_id', commentId).eq('user_id', user.id);
+    // Replies live nested under their root comment, so search across the whole tree.
+    const allComments = comments.flatMap(c => [c, ...(c.replies || [])]);
+    const target = allComments.find(c => c.id === commentId);
+    if (!target) return;
+
+    if (target.is_liked) {
+      const { error } = await supabase
+        .from('reel_comment_likes')
+        .delete()
+        .eq('comment_id', commentId)
+        .eq('user_id', user.id);
+      if (error) throw error;
     } else {
-      await supabase.from('reel_comment_likes').insert({ comment_id: commentId, user_id: user.id });
+      const { error } = await supabase
+        .from('reel_comment_likes')
+        .insert({ comment_id: commentId, user_id: user.id });
+      if (error) throw error;
     }
 
-    setComments(prev => prev.map(c =>
-      c.id === commentId
-        ? { ...c, is_liked: !c.is_liked, like_count: c.is_liked ? Math.max(0, c.like_count - 1) : c.like_count + 1 }
-        : c
-    ));
+    const toggle = (c: ReelComment[]): ReelComment[] => c.map(comment =>
+      comment.id === commentId
+        ? {
+            ...comment,
+            is_liked: !comment.is_liked,
+            like_count: comment.is_liked ? Math.max(0, comment.like_count - 1) : comment.like_count + 1,
+          }
+        : { ...comment, replies: toggle(comment.replies || []) }
+    );
+    setComments(prev => toggle(prev));
   };
 
   useEffect(() => {

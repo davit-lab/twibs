@@ -82,6 +82,8 @@ export function useExplore() {
   const [viewerLocationKnown, setViewerLocationKnown] = useState(false);
   const [distancesReady, setDistancesReady] = useState(false);
   const [distancesLoading, setDistancesLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const genRef = useRef(0);
   const distanceTokenRef = useRef(0);
 
   useEffect(() => {
@@ -145,6 +147,8 @@ export function useExplore() {
   );
 
   const fetchData = useCallback(async () => {
+    const gen = ++genRef.current;
+    setError(false);
     setLoading(true);
 
     const profileBase = supabase
@@ -190,6 +194,9 @@ export function useExplore() {
       reelQuery,
     ]);
 
+    if (genRef.current !== gen) return;
+
+    const hasError = !!(usersResult.error || postsResult.error || reelsResult.error);
     if (usersResult.error) console.error('Explore users error:', usersResult.error);
     if (postsResult.error) console.error('Explore posts error:', postsResult.error);
     if (reelsResult.error) console.error('Explore reels error:', reelsResult.error);
@@ -203,6 +210,7 @@ export function useExplore() {
           .select('following_id')
           .eq('status', 'accepted')
           .in('following_id', userIds);
+        if (genRef.current !== gen) return;
         for (const row of followRows || []) {
           counts.set(row.following_id, (counts.get(row.following_id) || 0) + 1);
         }
@@ -225,6 +233,7 @@ export function useExplore() {
           .from('profiles')
           .select('user_id, username, display_name, avatar_url, is_verified')
           .in('user_id', reelUserIds);
+        if (genRef.current !== gen) return;
         if (reelProfiles) {
           reelProfileMap = new Map((reelProfiles as { user_id: string; username: string; display_name: string; avatar_url: string | null; is_verified: boolean }[]).map(p => [p.user_id, p]));
         }
@@ -240,6 +249,8 @@ export function useExplore() {
       })));
     }
 
+    if (genRef.current !== gen) return;
+    setError(prev => prev || hasError);
     setLoading(false);
   }, [searchQuery, user, refreshKey, attachDistances]);
 
@@ -269,6 +280,8 @@ export function useExplore() {
     posts,
     reels,
     loading,
+    error,
+    refetch: () => setRefreshKey(p => p + 1),
     searchQuery,
     setSearchQuery: updateSearch,
     activeTab,

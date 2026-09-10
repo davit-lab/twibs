@@ -10,14 +10,14 @@ import { Label } from '@/components/ui/label';
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/components/ui/input-otp';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Loader2, Mail, KeyRound, ArrowLeft, Phone, Eye, EyeOff, Check, X, Users, Smartphone, Camera, User
+  Loader2, Mail, KeyRound, ArrowLeft, Phone, Eye, EyeOff, Check, X, Users, Smartphone, Camera, User,
+  LogIn, UserPlus, Image as ImageIcon, MessageCircle, Zap, ShieldCheck
 } from 'lucide-react';
 import { validateEmail } from '@/lib/emailValidation';
 import { isValidPhoneNumber } from 'libphonenumber-js';
 import CountryCodeSelector from '@/components/auth/CountryCodeSelector';
 import { countries, type Country } from '@/lib/countryCodes';
 import BrandLogo from '@/components/brand/BrandLogo';
-import { ChatPreview, FeedPreview } from '@/components/auth/AuthPreview';
 import { cn } from '@/lib/utils';
 
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
@@ -40,7 +40,25 @@ function getPasswordStrength(pw: string): { score: number; label: string; color:
 type AuthMode = 'login' | 'signup' | 'otp-request' | 'otp-verify' | 'phone-request' | 'phone-verify' | 'forgot-password' | 'reset-password';
 
 const inputField =
-  'h-11 bg-surface border-border rounded-lg focus-visible:ring-primary/30 focus-visible:ring-offset-0 transition-colors';
+  'h-12 bg-surface border-border rounded-xl focus-visible:ring-primary/30 focus-visible:ring-offset-0 transition-colors';
+
+const primaryBtn =
+  'h-12 rounded-xl font-semibold shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all';
+
+const socialBtn =
+  'w-full h-12 rounded-xl border border-border bg-surface hover:bg-surface-2 text-sm font-semibold flex items-center justify-center gap-2.5 transition-colors';
+
+function FlowHeading({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
+  return (
+    <div className="text-center mb-7">
+      <div className="mx-auto mb-4 h-14 w-14 rounded-2xl bg-gradient-to-br from-primary/15 to-accent/15 ring-1 ring-primary/20 flex items-center justify-center text-primary">
+        {icon}
+      </div>
+      <h1 className="text-[22px] font-bold tracking-tight mb-1.5">{title}</h1>
+      <p className="text-sm text-muted-foreground leading-relaxed">{subtitle}</p>
+    </div>
+  );
+}
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -344,19 +362,13 @@ export default function Auth() {
         <ArrowLeft className="h-4 w-4" /> Back to log in
       </button>
 
-      <div className="text-center mb-6">
-        <div className="w-12 h-12 rounded-xl bg-surface-2 flex items-center justify-center mx-auto mb-3">
-          {authMode === 'otp-request' ? <Mail className="h-5 w-5 text-primary" /> : <KeyRound className="h-5 w-5 text-primary" />}
-        </div>
-        <h1 className="text-xl font-bold mb-1">
-          {authMode === 'otp-request' ? 'Log in with email' : 'Enter the code'}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {authMode === 'otp-request'
-            ? "We'll send a 6-digit code to your email."
-            : `Enter the code sent to ${email}.`}
-        </p>
-      </div>
+      <FlowHeading
+        icon={authMode === 'otp-request' ? <Mail className="h-5 w-5 text-primary" /> : <KeyRound className="h-5 w-5 text-primary" />}
+        title={authMode === 'otp-request' ? 'Log in with email' : 'Enter the code'}
+        subtitle={authMode === 'otp-request'
+          ? "We'll send a 6-digit code to your email."
+          : `Enter the code sent to ${email}.`}
+      />
 
       {authMode === 'otp-request' ? (
         <form onSubmit={handleOtpRequest} className="space-y-4">
@@ -368,7 +380,7 @@ export default function Auth() {
               disabled={loading} />
             {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
           </div>
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className={cn(primaryBtn, 'w-full')} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
             {loading ? 'Sending…' : 'Send code'}
           </Button>
@@ -386,7 +398,7 @@ export default function Auth() {
               </InputOTPGroup>
             </InputOTP>
           </div>
-          <Button type="submit" className="w-full" disabled={loading || otpCode.length !== 6}>
+          <Button type="submit" className={cn(primaryBtn, 'w-full')} disabled={loading || otpCode.length !== 6}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {loading ? 'Verifying…' : 'Verify and log in'}
           </Button>
@@ -406,19 +418,13 @@ export default function Auth() {
         <ArrowLeft className="h-4 w-4" /> Back to log in
       </button>
 
-      <div className="text-center mb-6">
-        <div className="w-12 h-12 rounded-xl bg-surface-2 flex items-center justify-center mx-auto mb-3">
-          {authMode === 'phone-request' ? <Phone className="h-5 w-5 text-primary" /> : <Smartphone className="h-5 w-5 text-primary" />}
-        </div>
-        <h1 className="text-xl font-bold mb-1">
-          {authMode === 'phone-request' ? 'Log in with phone' : 'Enter the code'}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {authMode === 'phone-request'
-            ? "We'll send a 6-digit code via SMS."
-            : `Enter the code sent to ${phoneNumber}.`}
-        </p>
-      </div>
+      <FlowHeading
+        icon={authMode === 'phone-request' ? <Phone className="h-5 w-5 text-primary" /> : <Smartphone className="h-5 w-5 text-primary" />}
+        title={authMode === 'phone-request' ? 'Log in with phone' : 'Enter the code'}
+        subtitle={authMode === 'phone-request'
+          ? "We'll send a 6-digit code via SMS."
+          : `Enter the code sent to ${phoneNumber}.`}
+      />
 
       {authMode === 'phone-request' ? (
         <form onSubmit={handlePhoneRequest} className="space-y-4">
@@ -433,7 +439,7 @@ export default function Auth() {
             </div>
             {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
           </div>
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className={cn(primaryBtn, 'w-full')} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Phone className="h-4 w-4" />}
             {loading ? 'Sending…' : 'Send code'}
           </Button>
@@ -451,7 +457,7 @@ export default function Auth() {
               </InputOTPGroup>
             </InputOTP>
           </div>
-          <Button type="submit" className="w-full" disabled={loading || phoneOtpCode.length !== 6}>
+          <Button type="submit" className={cn(primaryBtn, 'w-full')} disabled={loading || phoneOtpCode.length !== 6}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {loading ? 'Verifying…' : 'Verify and log in'}
           </Button>
@@ -471,15 +477,11 @@ export default function Auth() {
         <ArrowLeft className="h-4 w-4" /> Back to log in
       </button>
 
-      <div className="text-center mb-6">
-        <div className="w-12 h-12 rounded-xl bg-surface-2 flex items-center justify-center mx-auto mb-3">
-          <KeyRound className="h-5 w-5 text-primary" />
-        </div>
-        <h1 className="text-xl font-bold mb-1">Reset your password</h1>
-        <p className="text-sm text-muted-foreground">
-          Enter your email and we'll send you a link to create a new password.
-        </p>
-      </div>
+      <FlowHeading
+        icon={<KeyRound className="h-5 w-5 text-primary" />}
+        title="Reset your password"
+        subtitle="Enter your email and we'll send you a link to create a new password."
+      />
 
       <form onSubmit={handleForgotPassword} className="space-y-4">
         <div className="space-y-1.5">
@@ -493,7 +495,7 @@ export default function Auth() {
           </div>
           {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
         </div>
-        <Button type="submit" className="w-full" disabled={loading}>
+        <Button type="submit" className={cn(primaryBtn, 'w-full')} disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           {loading ? 'Sending…' : 'Send reset link'}
         </Button>
@@ -507,15 +509,11 @@ export default function Auth() {
 
   const renderResetPasswordFlow = () => (
     <div>
-      <div className="text-center mb-6">
-        <div className="w-12 h-12 rounded-xl bg-surface-2 flex items-center justify-center mx-auto mb-3">
-          <KeyRound className="h-5 w-5 text-primary" />
-        </div>
-        <h1 className="text-xl font-bold mb-1">Set a new password</h1>
-        <p className="text-sm text-muted-foreground">
-          Choose a strong password you haven't used before.
-        </p>
-      </div>
+      <FlowHeading
+        icon={<KeyRound className="h-5 w-5 text-primary" />}
+        title="Set a new password"
+        subtitle="Choose a strong password you haven't used before."
+      />
 
       <form onSubmit={handleResetPassword} className="space-y-4">
         <div className="space-y-1.5">
@@ -533,7 +531,7 @@ export default function Auth() {
             </button>
           </div>
         </div>
-        <Button type="submit" className="w-full" disabled={loading}>
+        <Button type="submit" className={cn(primaryBtn, 'w-full')} disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           {loading ? 'Updating…' : 'Update password'}
         </Button>
@@ -543,31 +541,35 @@ export default function Auth() {
 
   const renderAuthForm = () => (
     <div>
-      <p className="text-center text-sm text-muted-foreground mb-6">
-        {activeTab === 'login'
+      <FlowHeading
+        icon={activeTab === 'login' ? <LogIn className="h-5 w-5 text-primary" /> : <UserPlus className="h-5 w-5 text-primary" />}
+        title={activeTab === 'login' ? 'Welcome back' : 'Join Twibsers'}
+        subtitle={activeTab === 'login'
           ? 'Log in to see photos and videos from your friends.'
           : 'Sign up to see photos and videos from your friends.'}
-      </p>
+      />
 
-      <div className="flex gap-1 bg-surface-2 p-1 rounded-full mb-6">
+      <div className="flex gap-1 bg-surface-2 p-1 rounded-xl mb-6 ring-1 ring-border/60">
         <button type="button" onClick={() => switchTab('login')}
-          className={cn('orbis-tab flex-1 text-center', activeTab === 'login' && 'active')}>
+          className={cn('flex-1 h-11 rounded-lg text-sm font-semibold transition-all',
+            activeTab === 'login' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
           Log In
         </button>
         <button type="button" onClick={() => switchTab('signup')}
-          className={cn('orbis-tab flex-1 text-center', activeTab === 'signup' && 'active')}>
+          className={cn('flex-1 h-11 rounded-lg text-sm font-semibold transition-all',
+            activeTab === 'signup' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
           Sign Up
         </button>
       </div>
 
       <div className="space-y-2.5 mb-5">
         <button type="button"
-          className="w-full h-11 rounded-lg border border-border bg-surface hover:bg-surface-2 text-sm font-medium flex items-center justify-center gap-2.5 transition-colors">
+          className={socialBtn}>
           <svg className="h-4 w-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
           Continue with Google
         </button>
         <button type="button"
-          className="w-full h-11 rounded-lg border border-border bg-surface hover:bg-surface-2 text-sm font-medium flex items-center justify-center gap-2.5 transition-colors">
+          className={socialBtn}>
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
           Continue with Apple
         </button>
@@ -610,7 +612,7 @@ export default function Auth() {
             {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className={cn(primaryBtn, 'w-full')} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {loading ? 'Logging in…' : 'Log In'}
           </Button>
@@ -624,13 +626,13 @@ export default function Auth() {
 
           <div className="grid grid-cols-2 gap-2.5">
             <button type="button" onClick={() => setAuthMode('otp-request')}
-              className="h-10 rounded-lg border border-border text-sm font-medium flex items-center justify-center gap-2 hover:bg-surface-2 transition-colors">
-              <Mail className="h-4 w-4 text-muted-foreground" />
+              className="h-11 rounded-xl border border-border bg-surface hover:bg-surface-2 text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
+              <Mail className="h-4 w-4 text-primary" />
               Email code
             </button>
             <button type="button" onClick={() => setAuthMode('phone-request')}
-              className="h-10 rounded-lg border border-border text-sm font-medium flex items-center justify-center gap-2 hover:bg-surface-2 transition-colors">
-              <Phone className="h-4 w-4 text-muted-foreground" />
+              className="h-11 rounded-xl border border-border bg-surface hover:bg-surface-2 text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
+              <Phone className="h-4 w-4 text-primary" />
               Phone
             </button>
           </div>
@@ -767,14 +769,14 @@ export default function Auth() {
             )}
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className={cn(primaryBtn, 'w-full')} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {loading ? 'Creating account…' : 'Create Account'}
           </Button>
 
           <button type="button" onClick={() => setAuthMode('phone-request')}
-            className="w-full h-10 rounded-lg border border-border text-sm font-medium flex items-center justify-center gap-2 hover:bg-surface-2 transition-colors">
-            <Phone className="h-4 w-4 text-muted-foreground" />
+            className="w-full h-12 rounded-xl border border-border bg-surface hover:bg-surface-2 text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
+            <Phone className="h-4 w-4 text-primary" />
             Sign up with Phone
           </button>
         </form>
@@ -783,20 +785,81 @@ export default function Auth() {
   );
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
-      <div className="w-full max-w-7xl grid lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_400px_minmax(0,1fr)] items-center gap-10 lg:gap-12 xl:gap-16">
-        {/* Mock chat */}
-        <div className="hidden lg:flex justify-center">
-          <ChatPreview />
+    <div className="min-h-dvh lg:flex bg-background">
+      {/* Desktop hero panel */}
+      <div className="hidden lg:flex lg:w-[44%] lg:max-w-[640px] flex-col shrink-0 bg-gradient-to-b from-primary/[0.09] via-background to-accent/[0.06] border-r border-border/60">
+        <div className="px-10 pt-9">
+          <BrandLogo className="h-11" />
         </div>
 
-        {/* Auth form */}
-        <div className="w-full max-w-sm mx-auto">
-          <div className="flex justify-center mb-6">
+        <div className="flex-1 flex flex-col justify-center px-10 py-8">
+          <h1 className="text-[2.9rem] leading-[1.06] font-black tracking-tight">
+            Post. Chat.<br /><span className="text-primary">Reel.</span>
+          </h1>
+          <p className="mt-5 text-lg text-muted-foreground leading-relaxed max-w-md">
+            Twibsers is where you and your people hang out — share moments, drop reels and keep the conversation going.
+          </p>
+
+          <ul className="mt-9 space-y-5 max-w-md">
+            <li className="flex items-center gap-3.5">
+              <span className="h-11 w-11 shrink-0 rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20 flex items-center justify-center">
+                <ImageIcon className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold">Share your moments</p>
+                <p className="text-sm text-muted-foreground">Photos and reels that tell your story.</p>
+              </div>
+            </li>
+            <li className="flex items-center gap-3.5">
+              <span className="h-11 w-11 shrink-0 rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20 flex items-center justify-center">
+                <MessageCircle className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold">Right where your friends are</p>
+                <p className="text-sm text-muted-foreground">Like, comment and chat in real time.</p>
+              </div>
+            </li>
+            <li className="flex items-center gap-3.5">
+              <span className="h-11 w-11 shrink-0 rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20 flex items-center justify-center">
+                <Zap className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold">Discover your space</p>
+                <p className="text-sm text-muted-foreground">Stories, groups and interests made for you.</p>
+              </div>
+            </li>
+            <li className="flex items-center gap-3.5">
+              <span className="h-11 w-11 shrink-0 rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20 flex items-center justify-center">
+                <ShieldCheck className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold">Private by default</p>
+                <p className="text-sm text-muted-foreground">Your account and your audience, fully in your control.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <div className="border-t border-border/60 px-10 py-6">
+          <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
+            Join <span className="font-semibold text-foreground">thousands of people</span> already sharing their world on Twibsers.
+          </p>
+        </div>
+      </div>
+
+      {/* Auth column */}
+      <div className="flex-1 min-w-0 flex flex-col items-center justify-center px-4 sm:px-6 py-10 lg:py-14">
+        <div className="w-full max-w-[420px]">
+          {/* Mobile brand header */}
+          <div className="lg:hidden flex flex-col items-center mb-8">
             <BrandLogo className="h-12" />
+            <p className="mt-3 text-center text-sm text-muted-foreground max-w-[300px] leading-relaxed">
+              Post. Chat. Reel. — your people are here.
+            </p>
           </div>
 
-          <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/20">
+          <div className="relative bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/25 overflow-hidden">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent" />
             {(authMode === 'otp-request' || authMode === 'otp-verify') && renderOtpFlow()}
             {(authMode === 'phone-request' || authMode === 'phone-verify') && renderPhoneFlow()}
             {authMode === 'forgot-password' && renderForgotPasswordFlow()}
@@ -805,7 +868,7 @@ export default function Auth() {
           </div>
 
           {(authMode === 'login' || authMode === 'signup') && (
-            <div className="mt-3 bg-card border border-border rounded-3xl p-4 text-center text-sm text-muted-foreground">
+            <div className="mt-3.5 bg-card border border-border rounded-2xl p-4 text-center text-sm text-muted-foreground">
               {activeTab === 'login' ? (
                 <>
                   Don't have an account?{' '}
@@ -820,17 +883,12 @@ export default function Auth() {
             </div>
           )}
 
-          <p className="text-center text-xs text-muted-foreground mt-6 leading-relaxed">
+          <p className="text-center text-xs text-muted-foreground mt-5 leading-relaxed">
             By continuing you agree to our{' '}
             <a href="/terms" className="text-primary font-medium hover:underline">Terms</a>
             {' '}and{' '}
             <a href="/privacy" className="text-primary font-medium hover:underline">Privacy Policy</a>.
           </p>
-        </div>
-
-        {/* Beautiful photos */}
-        <div className="hidden xl:flex justify-center">
-          <FeedPreview />
         </div>
       </div>
     </div>

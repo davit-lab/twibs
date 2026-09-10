@@ -4,66 +4,40 @@ import { useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layout/MainLayout';
 import InterestPostCard from '@/components/feed/InterestPostCard';
 import InterestCard from '@/components/onboarding/InterestCard';
+import CreatePostTrigger from '@/components/feed/CreatePostTrigger';
+import CreatePostDialog from '@/components/feed/CreatePostDialog';
 import {
   useUserInterests,
   useInterestCategories,
   useInterestActions,
 } from '@/hooks/useInterests';
-import { useInterestPosts, useInterestPostActions } from '@/hooks/useInterestPosts';
+import { useInterestPosts } from '@/hooks/useInterestPosts';
+import { useCreateInterestPost } from '@/hooks/useCreateInterestPost';
 import { useMutedUsers } from '@/hooks/useSafety';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
-import {
-  Loader2,
-  ImagePlus,
-  X,
-  Settings2,
-  Sparkles,
-  Plus,
-} from 'lucide-react';
+import { Loader2, Settings2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-interface MediaPreview {
-  file: File;
-  preview: string;
-  type: 'image' | 'video';
-}
 
 export default function Interests() {
   const { user, profile } = useAuth();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: userInterests, isLoading: interestsLoading } = useUserInterests(user?.id);
   const { data: allCategories } = useInterestCategories();
   const { saveInterests } = useInterestActions();
-  const { createPost } = useInterestPostActions();
+  const publish = useCreateInterestPost();
   const { data: mutedIds = [] } = useMutedUsers();
 
   const [activeCategory, setActiveCategory] = useState<string>('all');
-  const [composerOpen, setComposerOpen] = useState(false);
-  const [newPostContent, setNewPostContent] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [mediaPreview, setMediaPreview] = useState<MediaPreview | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   const [manageSelection, setManageSelection] = useState<string[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const interestCategories = useMemo(
@@ -129,82 +103,28 @@ export default function Interests() {
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
-      toast({ variant: 'destructive', title: 'Invalid file', description: 'Please select an image or video file.' });
-      return;
-    }
-    if (file.size > 50 * 1024 * 1024) {
-      toast({ variant: 'destructive', title: 'File too large', description: 'Maximum file size is 50MB.' });
-      return;
-    }
-
-    setMediaPreview({
-      file,
-      preview: URL.createObjectURL(file),
-      type: file.type.startsWith('video/') ? 'video' : 'image',
-    });
-  };
-
-  const removeMedia = () => {
-    if (mediaPreview) URL.revokeObjectURL(mediaPreview.preview);
-    setMediaPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const uploadMedia = async (file: File): Promise<{ url: string; type: string; error?: string } | null> => {
-    if (!user) return null;
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-    const { error } = await supabase.storage.from('interest-media').upload(fileName, file);
-    if (error) {
-      console.error('Upload error:', error);
-      return { url: '', type: '', error: error.message };
-    }
-
-    const { data: { publicUrl } } = supabase.storage.from('interest-media').getPublicUrl(fileName);
-    return { url: publicUrl, type: file.type };
-  };
-
-  const handleCreatePost = async () => {
-    if (!newPostContent.trim() || !selectedCategory) return;
-
-    setUploading(true);
-    try {
-      let mediaUrl: string | undefined;
-      let mediaType: string | undefined;
-
-      if (mediaPreview) {
-        const uploaded = await uploadMedia(mediaPreview.file);
-        if (uploaded && uploaded.url) {
-          mediaUrl = uploaded.url;
-          mediaType = uploaded.type;
-        } else {
-          toast({ variant: 'destructive', title: 'Upload failed', description: uploaded?.error || 'Failed to upload media. Please try again.' });
-          setUploading(false);
-          return;
-        }
-      }
-
-      await createPost.mutateAsync({
-        content: newPostContent.trim(),
-        categoryId: selectedCategory,
-        mediaUrl,
-        mediaType,
-      });
-
-      removeMedia();
-      setNewPostContent('');
-      setSelectedCategory('');
-      setComposerOpen(false);
+  const handlePublish = async ({
+    content,
+    categoryId,
+    file,
+  }: {
+    content: string;
+    categoryId: string;
+    file: File | null;
+  }): Promise<{ ok: boolean; error?: string }> => {
+    const result = await publish({ content, categoryId, file });
+    if (result.ok) {
       setActiveCategory('all');
-    } finally {
-      setUploading(false);
     }
+    return result;
+  };
+
+  const handleCreateClick = () => {
+    if (interestCategories.length === 0) {
+      openManage();
+      return;
+    }
+    setCreateOpen(true);
   };
 
   const openManage = () => {
@@ -221,17 +141,6 @@ export default function Interests() {
     setManageOpen(false);
   };
 
-  const canPost = newPostContent.trim().length > 0 && !!selectedCategory;
-
-  const openComposer = () => {
-    if (interestCategories.length === 0) {
-      openManage();
-      return;
-    }
-    if (!selectedCategory) setSelectedCategory(interestCategories[0]?.id || '');
-    setComposerOpen(true);
-  };
-
   const categoryChips = [
     { id: 'all', name: 'For you' },
     ...interestCategories,
@@ -240,31 +149,31 @@ export default function Interests() {
   return (
     <MainLayout>
       <div className="min-h-screen bg-background pb-28">
-        <div className="max-w-2xl mx-auto px-4">
-          {/* Masthead */}
-          <header className="pt-9 pb-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h1 className="text-2xl font-extrabold tracking-tight">Interests</h1>
-                <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
-                  Posts and discussions from the topics you follow.
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={openManage}
-                className="shrink-0 -mr-2 text-muted-foreground hover:text-foreground"
-              >
-                <Settings2 className="h-4 w-4" />
-                Manage
-              </Button>
+        <div className="max-w-2xl mx-auto">
+          {/* Header */}
+          <header className="flex items-center justify-between gap-4 px-4 pt-5 pb-4 border-b border-border/70">
+            <div className="min-w-0">
+              <h1 className="text-[22px] sm:text-2xl font-bold tracking-tight leading-tight">
+                Interests
+              </h1>
+              <p className="mt-1 text-[13px] text-muted-foreground">
+                Posts from the topics you follow.
+              </p>
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={openManage}
+              className="shrink-0 -mr-2 gap-1.5 text-muted-foreground hover:text-foreground"
+            >
+              <Settings2 className="h-4 w-4" />
+              Manage
+            </Button>
           </header>
 
-          {/* Category filter */}
-          <div className="sticky top-0 z-40 -mx-4 px-4 bg-background/90 backdrop-blur border-b border-border/60">
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide py-3 pr-2">
+          {/* Category filter + create entry */}
+          <div className="sticky top-0 z-30 bg-background border-b border-border/70">
+            <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide px-4 py-2.5">
               {categoryChips.map((chip) => {
                 const active = activeCategory === chip.id;
                 return (
@@ -272,10 +181,10 @@ export default function Interests() {
                     key={chip.id}
                     onClick={() => setActiveCategory(chip.id)}
                     className={cn(
-                      'inline-flex items-center rounded-full px-4 py-2 text-xs font-bold whitespace-nowrap transition-all duration-200',
+                      'inline-flex items-center rounded-full px-3.5 py-2 text-[13px] font-semibold whitespace-nowrap transition-colors',
                       chip.id === 'all'
                         ? active
-                          ? 'bg-foreground text-background shadow-sm'
+                          ? 'bg-foreground text-background'
                           : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
                         : active
                           ? 'bg-primary/10 text-primary ring-1 ring-inset ring-primary/25'
@@ -287,145 +196,36 @@ export default function Interests() {
                 );
               })}
             </div>
-          </div>
-
-          {/* Composer */}
-          <div className="pt-5 pb-1">
-            {composerOpen ? (
-              <div className="rounded-2xl border border-border/70 bg-card">
-                <div className="flex items-start gap-3 p-4">
-                  <LinkAvatar
-                    avatarUrl={profile?.avatar_url || null}
-                    displayName={profile?.display_name || ''}
-                    username={profile?.username || ''}
-                  />
-                  <Textarea
-                    autoFocus
-                    placeholder="Share something with your interests..."
-                    value={newPostContent}
-                    onChange={(e) => setNewPostContent(e.target.value)}
-                    rows={3}
-                    className="flex-1 resize-none bg-transparent border-none focus-visible:ring-0 p-0 text-[15px] py-1"
-                  />
-                </div>
-
-                {mediaPreview && (
-                  <div className="px-4">
-                    <div className="relative rounded-xl overflow-hidden border border-border/60">
-                      {mediaPreview.type === 'video' ? (
-                        <video src={mediaPreview.preview} controls className="w-full max-h-64 object-cover" />
-                      ) : (
-                        <img src={mediaPreview.preview} alt="Preview" className="w-full max-h-64 object-cover" />
-                      )}
-                      <button
-                        onClick={removeMedia}
-                        className="absolute top-2 right-2 p-1.5 rounded-full bg-background/80 hover:bg-background transition-colors"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-border/60">
-                  <div className="flex items-center gap-2">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*,video/*"
-                      onChange={handleFileSelect}
-                      className="hidden"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="gap-2 text-muted-foreground"
-                    >
-                      <ImagePlus className="h-4 w-4" />
-                      Media
-                    </Button>
-
-                    <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                      <SelectTrigger className="h-9 w-auto min-w-[140px] gap-2 text-xs font-bold">
-                        <SelectValue placeholder="Pick a topic" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {interestCategories.map((category) => (
-                          <SelectItem key={category.id} value={category.id}>
-                            {category.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => setComposerOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={handleCreatePost}
-                      disabled={!canPost || createPost.isPending || uploading}
-                    >
-                      {createPost.isPending || uploading ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          {uploading ? 'Uploading...' : 'Posting...'}
-                        </>
-                      ) : (
-                        'Post'
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={openComposer}
-                className="w-full flex items-center gap-3 rounded-2xl border border-border/70 bg-card px-4 py-3.5 text-left transition-colors hover:border-border group"
-              >
-                <LinkAvatar
-                  avatarUrl={profile?.avatar_url || null}
-                  displayName={profile?.display_name || ''}
-                  username={profile?.username || ''}
-                />
-                <span className="flex-1 text-sm text-muted-foreground font-medium">
-                  {interestCategories.length > 0
-                    ? 'Share something with your interests…'
-                    : 'Pick interests to start posting'}
-                </span>
-                <Plus className="h-5 w-5 text-muted-foreground transition-colors group-hover:text-primary" />
-              </button>
-            )}
+            <div className="px-4 pb-3 pt-1">
+              <CreatePostTrigger onClick={handleCreateClick} />
+            </div>
           </div>
 
           {/* Feed */}
           {postsLoading || interestsLoading ? (
-            <div className="pt-5 space-y-3">
+            <div className="mt-2 divide-y divide-border/60">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="p-5 rounded-2xl border border-border/60 bg-card animate-pulse space-y-3">
+                <div key={i} className="px-4 sm:px-5 py-4 space-y-3 animate-pulse">
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-full bg-muted" />
                     <div className="space-y-1.5 flex-1">
-                      <div className="h-4 w-28 bg-muted rounded" />
+                      <div className="h-3.5 w-28 bg-muted rounded" />
                       <div className="h-3 w-20 bg-muted rounded" />
                     </div>
                   </div>
                   <div className="h-4 w-full bg-muted rounded" />
-                  <div className="h-4 w-3/4 bg-muted rounded" />
+                  <div className="h-4 w-2/3 bg-muted rounded" />
+                  <div className="h-44 w-full bg-muted rounded-xl" />
                 </div>
               ))}
             </div>
           ) : posts.length > 0 ? (
-            <div className="pt-5 space-y-3">
+            <div className="mt-2 divide-y divide-border/60">
               {posts.map((post) => (
                 <InterestPostCard key={post.id} post={post} />
               ))}
 
-              <div ref={loadMoreRef} className="py-4">
+              <div ref={loadMoreRef} className="px-4 py-5">
                 {isFetchingNextPage && (
                   <div className="flex justify-center">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -439,34 +239,51 @@ export default function Interests() {
               </div>
             </div>
           ) : (
-            <div className="text-center py-20">
-              <div className="mx-auto mb-4 w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <Sparkles className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="font-bold text-lg tracking-tight mb-1">
+            <div className="px-6 py-20 text-center">
+              <h3 className="text-lg font-bold tracking-tight">
                 {interestCategories.length === 0 ? 'No interests yet' : 'Nothing here yet'}
               </h3>
-              <p className="text-sm text-muted-foreground font-medium max-w-xs mx-auto mb-5 leading-relaxed">
+              <p className="mt-1.5 text-sm text-muted-foreground max-w-xs mx-auto leading-relaxed">
                 {interestCategories.length === 0
                   ? "Pick a few things you love and we'll fill this space with posts and discussions."
-                  : 'Be the first to post about this topic.'}
+                  : 'There are no posts from these interests yet. Be the first to start one.'}
               </p>
-              <Button variant="outline" onClick={interestCategories.length === 0 ? openManage : openComposer}>
-                {interestCategories.length === 0 ? 'Choose interests' : 'Post to your interests'}
+              <Button
+                variant="outline"
+                className="mt-5"
+                onClick={interestCategories.length === 0 ? openManage : handleCreateClick}
+              >
+                {interestCategories.length === 0 ? 'Choose interests' : 'Create a post'}
               </Button>
             </div>
           )}
         </div>
       </div>
 
+      {/* Create post dialog */}
+      <CreatePostDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        categories={interestCategories}
+        profile={profile}
+        onPublish={handlePublish}
+        onManageInterests={() => {
+          setCreateOpen(false);
+          openManage();
+        }}
+      />
+
       {/* Manage interests dialog */}
       <Dialog open={manageOpen} onOpenChange={setManageOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Manage your interests</DialogTitle>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader className="text-left">
+            <DialogTitle>Manage interests</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Choose the topics you want to see in your feed.
+            </p>
           </DialogHeader>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[50vh] overflow-y-auto pr-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[55vh] overflow-y-auto pr-1">
             {allCategories?.map((category) => (
               <InterestCard
                 key={category.id}
@@ -478,7 +295,7 @@ export default function Interests() {
             ))}
           </div>
 
-          <div className="flex items-center justify-between gap-3 pt-2">
+          <div className="sticky bottom-0 -mx-6 -mb-6 mt-2 px-6 py-3.5 bg-background border-t border-border/60 flex items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground font-medium">
               {manageSelection.length} {manageSelection.length === 1 ? 'interest' : 'interests'} selected
             </p>
@@ -504,24 +321,5 @@ export default function Interests() {
         </DialogContent>
       </Dialog>
     </MainLayout>
-  );
-}
-
-function LinkAvatar({
-  avatarUrl,
-  displayName,
-  username,
-}: {
-  avatarUrl: string | null;
-  displayName: string;
-  username: string;
-}) {
-  return (
-    <Avatar className="h-10 w-10 flex-shrink-0">
-      <AvatarImage src={avatarUrl || undefined} />
-      <AvatarFallback className="bg-surface-2 text-foreground font-bold">
-        {displayName?.charAt(0) || 'U'}
-      </AvatarFallback>
-    </Avatar>
   );
 }
