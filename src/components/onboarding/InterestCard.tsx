@@ -22,7 +22,6 @@ import {
 interface InterestCardProps {
   name: string;
   icon: string;
-  color: string;
   selected: boolean;
   onToggle: () => void;
 }
@@ -52,12 +51,10 @@ export function getInterestIcon(icon: string): LucideIcon {
 export default function InterestCard({
   name,
   icon,
-  color,
   selected,
   onToggle,
 }: InterestCardProps) {
   const Icon = getInterestIcon(icon);
-  const resolvedColor = color || 'hsl(var(--primary))';
 
   return (
     <button
@@ -65,46 +62,44 @@ export default function InterestCard({
       onClick={onToggle}
       aria-pressed={selected}
       className={cn(
-        'group relative flex flex-col items-center justify-center gap-2.5 w-full p-4 sm:p-5 rounded-2xl border transition-all duration-200 ease-out',
+        'group relative flex items-center gap-3 w-full p-3 rounded-2xl border transition-all duration-200 ease-out text-left',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
         selected
-          ? 'border-primary -translate-y-0.5'
-          : 'border-border/80 bg-card hover:-translate-y-0.5 hover:border-border'
+          ? 'border-primary/50 bg-primary/5'
+          : 'border-border/80 bg-card hover:bg-surface-2/60 hover:border-border'
       )}
     >
-      {selected && (
-        <span
-          className="absolute top-2 right-2 grid place-items-center w-5 h-5 rounded-full text-white shadow-sm"
-          style={{ backgroundColor: resolvedColor }}
-        >
-          <Check className="w-3 h-3" strokeWidth={3.5} />
-        </span>
-      )}
-
       <span
-        className="grid place-items-center w-12 h-12 sm:w-14 sm:h-14 rounded-xl transition-all duration-200 group-hover:scale-105"
-        style={{
-          backgroundColor: selected
-            ? `color-mix(in srgb, ${resolvedColor} 16%, hsl(var(--surface-2)))`
-            : 'hsl(var(--surface-2))',
-        }}
+        className={cn(
+          'grid place-items-center w-11 h-11 shrink-0 rounded-xl transition-colors duration-200',
+          selected
+            ? 'bg-primary/10 text-primary'
+            : 'bg-surface-2 text-muted-foreground group-hover:text-foreground'
+        )}
       >
-        <Icon
-          className={cn('w-6 h-6 sm:w-7 sm:h-7 transition-transform duration-200', selected && 'scale-110')}
-          style={{ color: resolvedColor }}
-          strokeWidth={selected ? 2.25 : 2}
-        />
+        <Icon className="w-5 h-5" strokeWidth={selected ? 2.25 : 2} />
       </span>
 
       <span
         className={cn(
-          'text-[13px] sm:text-sm leading-tight text-center transition-colors duration-200',
+          'flex-1 text-sm leading-tight transition-colors duration-200',
           selected
             ? 'font-bold text-foreground'
-            : 'font-semibold text-muted-foreground group-hover:text-foreground'
+            : 'font-medium text-muted-foreground group-hover:text-foreground'
         )}
       >
         {name}
+      </span>
+
+      <span
+        className={cn(
+          'grid place-items-center w-5 h-5 shrink-0 rounded-full border transition-colors duration-200',
+          selected
+            ? 'border-primary bg-primary text-primary-foreground'
+            : 'border-border text-transparent'
+        )}
+      >
+        <Check className="w-3 h-3" strokeWidth={3.5} />
       </span>
     </button>
   );

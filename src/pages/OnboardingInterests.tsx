@@ -96,7 +96,6 @@ export default function OnboardingInterests() {
               <InterestCard
                 name={category.name}
                 icon={category.icon}
-                color={category.color}
                 selected={selectedIds.includes(category.id)}
                 onToggle={() => toggleInterest(category.id)}
               />

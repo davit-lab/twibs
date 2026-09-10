@@ -1225,7 +1225,6 @@ function InterestsSection() {
                 key={category.id}
                 name={category.name}
                 icon={category.icon}
-                color={category.color}
                 selected={selected.includes(category.id)}
                 onToggle={() => toggle(category.id)}
               />

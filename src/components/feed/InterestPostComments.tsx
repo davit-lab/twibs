@@ -20,6 +20,7 @@ import {
   X,
   Pencil,
   Flag,
+  MessageCircle,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -128,7 +129,7 @@ function CommentItem({ comment, currentUserId, depth = 0, onReport }: CommentIte
   const nestedReplies = (comment as any).replies || [];
 
   return (
-    <div className={cn('group', depth > 0 && 'ml-10 mt-2')}>
+    <div className={cn('group', depth > 0 && 'mt-2')}>
       <div className="flex gap-2">
         <Link to={`/profile/${profile?.username || ''}`} className="flex-shrink-0">
           <Avatar className="h-8 w-8">
@@ -141,7 +142,7 @@ function CommentItem({ comment, currentUserId, depth = 0, onReport }: CommentIte
 
         <div className="flex-1 min-w-0">
           {/* Comment bubble */}
-          <div className="bg-muted/40 rounded-2xl px-3 py-2">
+          <div className="bg-surface-2 rounded-2xl px-3.5 py-2.5">
             <div className="flex items-center gap-1.5 flex-wrap">
               <Link
                 to={`/profile/${profile?.username || ''}`}
@@ -300,7 +301,7 @@ function CommentItem({ comment, currentUserId, depth = 0, onReport }: CommentIte
 
       {/* Nested replies */}
       {nestedReplies.length > 0 && showReplies && (
-        <div className="mt-1">
+        <div className="mt-2 ml-10 border-l-2 border-border/60 pl-4">
           {nestedReplies.map((reply: InterestPostComment) => (
             <CommentItem
               key={reply.id}
@@ -382,6 +383,17 @@ export default function InterestPostComments({ postId }: InterestPostCommentsPro
 
   return (
     <div className="space-y-3">
+      {/* Discussion header */}
+      <div className="flex items-center gap-2">
+        <MessageCircle className="h-4 w-4 text-primary" />
+        <p className="text-sm font-bold">Discussion</p>
+        {comments && comments.length > 0 && (
+          <span className="text-xs font-bold text-muted-foreground tabular-nums">
+            {comments.length} {comments.length === 1 ? 'reply' : 'replies'}
+          </span>
+        )}
+      </div>
+
       {/* Comment input */}
       {user ? (
         <div className="flex gap-2 items-start">
@@ -396,8 +408,8 @@ export default function InterestPostComments({ postId }: InterestPostCommentsPro
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Add a comment..."
-              className="flex-1 bg-muted/50 border border-border/50 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 placeholder:text-muted-foreground"
+              placeholder="Join the discussion..."
+              className="flex-1 bg-surface-2 border border-border/50 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 placeholder:text-muted-foreground"
             />
             <Button
               size="icon"
@@ -412,15 +424,18 @@ export default function InterestPostComments({ postId }: InterestPostCommentsPro
         </div>
       ) : (
         <p className="text-sm text-muted-foreground text-center py-2">
-          Sign in to comment
+          Sign in to join the discussion
         </p>
       )}
 
       {/* Comments list */}
       {threads.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-4">
-          No comments yet
-        </p>
+        <div className="text-center py-7">
+          <p className="text-sm font-semibold">Start the discussion</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Be the first to share your take on this post.
+          </p>
+        </div>
       ) : (
         <div className="space-y-1">
           {threads.map((comment) => (

@@ -4,13 +4,14 @@ import { useSavedInterestPosts } from '@/hooks/useInterestPosts';
 import { useMutedUsers } from '@/hooks/useSafety';
 import InterestPostCard from './InterestPostCard';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Bookmark } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 
 interface SavedInterestPostsProps {
   userId: string;
+  isOwnProfile?: boolean;
 }
 
-export default function SavedInterestPosts({ userId }: SavedInterestPostsProps) {
+export default function SavedInterestPosts({ userId, isOwnProfile = false }: SavedInterestPostsProps) {
   const { data: postsData, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useSavedInterestPosts(userId);
   const queryClient = useQueryClient();
@@ -81,11 +82,13 @@ export default function SavedInterestPosts({ userId }: SavedInterestPostsProps) 
     return (
       <div className="text-center py-12">
         <div className="w-14 h-14 rounded-2xl bg-muted mx-auto mb-4 flex items-center justify-center">
-          <Bookmark className="h-7 w-7 text-muted-foreground" />
+          <Sparkles className="h-7 w-7 text-muted-foreground" />
         </div>
-        <h3 className="font-bold text-lg mb-2">No saved posts yet</h3>
+        <h3 className="font-bold text-lg mb-2">No added posts yet</h3>
         <p className="text-muted-foreground text-sm max-w-xs mx-auto">
-          Tap the bookmark on interest posts to save them here.
+          {isOwnProfile
+            ? "Tap 'Add to interests' on any interest post to build your collection here."
+            : "This user hasn't added any posts to their interests collection yet."}
         </p>
       </div>
     );
@@ -105,7 +108,7 @@ export default function SavedInterestPosts({ userId }: SavedInterestPostsProps) 
         )}
         {!hasNextPage && posts.length > 0 && (
           <p className="text-center text-sm text-muted-foreground font-medium">
-            You've seen all saved posts
+            You've seen all added posts
           </p>
         )}
       </div>

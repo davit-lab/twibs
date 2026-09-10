@@ -33,6 +33,7 @@ import {
   ImagePlus,
   X,
   Plus,
+  Sparkles,
 } from 'lucide-react';
 
 interface MediaPreview {
@@ -265,36 +266,35 @@ export default function InterestsFeed({ userId, isOwnProfile = false }: Interest
 
   return (
     <div className="space-y-5">
-      {/* Posts / Saved toggle (own profile only) */}
-      {isOwnProfile && (
-        <div className="flex gap-1 p-1 bg-muted border border-border/60 rounded-full w-fit">
-          <button
-            onClick={() => setView('posts')}
-            className={cn(
-              'px-4 py-1.5 rounded-full text-sm font-semibold transition-all duration-200',
-              view === 'posts'
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            Posts
-          </button>
-          <button
-            onClick={() => setView('saved')}
-            className={cn(
-              'px-4 py-1.5 rounded-full text-sm font-semibold transition-all duration-200',
-              view === 'saved'
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            Saved
-          </button>
-        </div>
-      )}
+      {/* Posted / Added toggle (visible to everyone on the profile) */}
+      <div className="flex gap-1 p-1 bg-muted border border-border/60 rounded-full w-fit">
+        <button
+          onClick={() => setView('posts')}
+          className={cn(
+            'px-4 py-1.5 rounded-full text-sm font-semibold transition-all duration-200',
+            view === 'posts'
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          Posted
+        </button>
+        <button
+          onClick={() => setView('saved')}
+          className={cn(
+            'inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold transition-all duration-200',
+            view === 'saved'
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          Added
+        </button>
+      </div>
 
-      {view === 'saved' && isOwnProfile ? (
-        <SavedInterestPosts userId={userId} />
+      {view === 'saved' ? (
+        <SavedInterestPosts userId={userId} isOwnProfile={isOwnProfile} />
       ) : (
         <>
           {/* Category filter */}
@@ -318,19 +318,11 @@ export default function InterestsFeed({ userId, isOwnProfile = false }: Interest
                   onClick={() => setActiveCategory(c.id)}
                   className={cn(
                     'inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-bold whitespace-nowrap transition-all duration-200 border',
-                    active ? 'shadow-sm' : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
-                  )}
-                  style={
                     active
-                      ? {
-                          backgroundColor: 'hsl(var(--primary) / 0.08)',
-                          color: 'hsl(var(--primary))',
-                          borderColor: 'hsl(var(--primary) / 0.15)',
-                        }
-                      : { borderColor: 'hsl(var(--primary) / 0.18)' }
-                  }
+                      ? 'border-primary/40 bg-primary/10 text-primary shadow-sm'
+                      : 'border-border text-muted-foreground hover:bg-surface-2 hover:text-foreground'
+                  )}
                 >
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: c.color }} />
                   {c.name}
                 </button>
               );
@@ -342,12 +334,7 @@ export default function InterestsFeed({ userId, isOwnProfile = false }: Interest
         {interests.map((interest) => (
           <span
             key={interest.id}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border"
-            style={{
-              backgroundColor: 'hsl(var(--primary) / 0.08)',
-              color: 'hsl(var(--primary))',
-              borderColor: 'hsl(var(--primary) / 0.15)',
-            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border border-primary/30 bg-primary/10 text-primary"
           >
             {interest.name}
           </span>
@@ -554,7 +541,6 @@ export default function InterestsFeed({ userId, isOwnProfile = false }: Interest
                 key={category.id}
                 name={category.name}
                 icon={category.icon}
-                color={category.color}
                 selected={interestIds.has(category.id)}
                 onToggle={() => toggleInterest(category.id)}
               />

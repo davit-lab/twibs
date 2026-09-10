@@ -22,7 +22,7 @@ import {
   Facebook,
   MessageSquare,
   Link as LinkIcon,
-  Bookmark,
+  Sparkles,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -105,9 +105,9 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
   };
 
   return (
-    <div className="p-4 sm:p-5 rounded-2xl border border-border/70 bg-card transition-colors hover:border-border">
+    <div className="p-4 sm:p-5 rounded-2xl border border-border/60 bg-card transition-colors hover:border-border">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3 mb-3">
+      <div className="flex items-start justify-between gap-3 mb-4">
         <div className="flex items-center gap-3 min-w-0">
           <Link to={`/profile/${username}`}>
             <Avatar className="h-10 w-10 flex-shrink-0">
@@ -135,12 +135,7 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
         <div className="flex items-center gap-2 flex-shrink-0">
           {category && (
             <span
-              className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap border"
-              style={{
-                backgroundColor: 'hsl(var(--primary) / 0.08)',
-                color: 'hsl(var(--primary))',
-                borderColor: 'hsl(var(--primary) / 0.15)',
-              }}
+              className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap border border-primary/30 bg-primary/10 text-primary"
             >
               {category.name}
             </span>
@@ -231,10 +226,14 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
               ? 'text-primary bg-primary/10'
               : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
           )}
-          aria-label={commentsOpen ? 'Close comments' : 'Open comments'}
+          aria-label={commentsOpen ? 'Close discussion' : 'Open discussion'}
         >
           <MessageCircle className={cn('h-[18px] w-[18px]', commentsOpen && 'fill-current')} />
-          <span>{post.comment_count > 0 ? formatCount(post.comment_count) : 'Comment'}</span>
+          <span>
+            {post.comment_count > 0
+              ? `${formatCount(post.comment_count)} · Discuss`
+              : 'Discuss'}
+          </span>
         </button>
 
         <div className="flex-1" />
@@ -244,14 +243,16 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
           className={cn(
             'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-bold transition-colors',
             post.user_has_saved
-              ? 'text-primary'
+              ? 'text-primary bg-primary/10'
               : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
           )}
-          aria-label={post.user_has_saved ? 'Remove from saved' : 'Save post'}
-          title={post.user_has_saved ? 'Remove from saved' : 'Save post'}
+          aria-label={post.user_has_saved ? 'Remove from interests' : 'Add to interests'}
+          title={post.user_has_saved ? 'Remove from interests' : 'Add to interests'}
         >
-          <Bookmark className={cn('h-[18px] w-[18px]', post.user_has_saved && 'fill-current')} />
-          <span className="hidden sm:inline">{post.user_has_saved ? 'Saved' : 'Save'}</span>
+          <Sparkles className={cn('h-[18px] w-[18px]', post.user_has_saved && 'fill-current')} />
+          <span className="hidden sm:inline">
+            {post.user_has_saved ? 'Added' : 'Add to interests'}
+          </span>
         </button>
 
         <Popover>
@@ -303,7 +304,7 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
       {/* Comments Section */}
       <Collapsible open={commentsOpen} onOpenChange={setCommentsOpen}>
         <CollapsibleContent>
-          <div className="mt-3">
+          <div className="mt-3 pt-4 border-t border-border/60">
             <InterestPostComments postId={post.id} />
           </div>
         </CollapsibleContent>
