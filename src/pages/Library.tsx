@@ -9,7 +9,6 @@ import { usePremiumStatus } from '@/hooks/usePremiumStatus';
 import LibraryBookCard from '@/components/library/LibraryBookCard';
 import ContinueReadingCard from '@/components/library/ContinueReadingCard';
 import CreateBookDialog from '@/components/library/CreateBookDialog';
-import ImportBookDialog from '@/components/library/ImportBookDialog';
 import UploadItemModal from '@/components/library/UploadItemModal';
 import ReadingStreakCard from '@/components/library/ReadingStreakCard';
 import BookCard from '@/components/library/BookCard';
@@ -47,7 +46,6 @@ import {
   Flame,
   PenTool,
   Upload,
-  Download,
   SlidersHorizontal,
   LayoutGrid,
   List,
@@ -199,12 +197,6 @@ export default function Library() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            <ImportBookDialog onBookImported={refetchMyBooks}>
-              <Button variant="outline" className="h-11 rounded-xl px-4 font-semibold border-border/60">
-                <Download className="h-4 w-4" />
-                Import book
-              </Button>
-            </ImportBookDialog>
             <UploadItemModal onSuccess={libraryItemsHook.refetch}>
               <Button variant="outline" className="h-11 rounded-xl px-4 font-semibold border-border/60">
                 <Upload className="h-4 w-4" />
@@ -422,15 +414,9 @@ export default function Library() {
                     <div className="flex-1">
                       <h3 className="text-lg font-bold tracking-tight">Want to publish your own books?</h3>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Get verified or upgrade to premium to create and publish books, or import classics from Open Library.
+                        Get verified or upgrade to premium to create and publish books.
                       </p>
                     </div>
-                    <ImportBookDialog onBookImported={refetchMyBooks}>
-                      <Button variant="outline" className="h-11 rounded-xl border-primary/30 font-semibold hover:bg-primary/10">
-                        <Download className="h-4 w-4" />
-                        Import a book
-                      </Button>
-                    </ImportBookDialog>
                   </div>
                 </section>
               )}

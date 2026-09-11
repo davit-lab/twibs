@@ -342,7 +342,7 @@ export function useCollections(userId?: string) {
         if (error.code === '23505') {
           toast.error('Item already in collection');
         } else {
-          throw error;
+          toast.error('Failed to add to collection: ' + error.message);
         }
         return false;
       }
@@ -351,6 +351,7 @@ export function useCollections(userId?: string) {
       fetchCollections();
       return true;
     } catch (err: any) {
+      console.error('addToCollection error:', err);
       toast.error('Failed to add to collection');
       return false;
     }
