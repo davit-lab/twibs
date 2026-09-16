@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
 export function useInView<T extends HTMLElement = HTMLDivElement>(
   threshold = 0.15,
@@ -47,4 +47,41 @@ export function useCountUp(target: number, active: boolean, duration = 1600) {
   }, [target, active, duration]);
 
   return value;
+}
+
+/**
+ * Subtle scroll parallax. Pushes a per-element `--py` (px) CSS variable on
+ * scroll so layered visuals drift at slightly different speeds. No-ops when
+ * the user prefers reduced motion.
+ */
+export function useParallax(rate = 0.06) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (typeof window === 'undefined') return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const apply = () => {
+      const rect = el.getBoundingClientRect();
+      const offset = rect.top + rect.height / 2 - window.innerHeight / 2;
+      el.style.setProperty('--py', `${(offset * rate).toFixed(1)}px`);
+    };
+
+    apply();
+    window.addEventListener('scroll', apply, { passive: true });
+    window.addEventListener('resize', apply);
+    return () => {
+      window.removeEventListener('scroll', apply);
+      window.removeEventListener('resize', apply);
+    };
+  }, [rate]);
+
+  return ref;
+}
+
+/** Applies the parallax offset; wrap around the visual that should drift. */
+export function parallaxStyle(): CSSProperties {
+  return { transform: 'translateY(var(--py, 0px))' };
 }

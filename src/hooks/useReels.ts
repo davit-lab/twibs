@@ -71,7 +71,234 @@ export interface UploadReelOptions {
   thumbnailBlob?: Blob | null;
 }
 
-type ReelCursor = { created_at: string; id: string } | null;
+type ReelCursor = { created_at: string; id: string } | { seen: string[]; offset: number } | null;
+
+const HOUR_MS = 3_600_000;
+const FORYOU_CANDIDATE_LIMIT = 600;
+
+interface RankingContext {
+  now: number;
+  followed: Set<string>;
+  muted: Set<string>;
+  blocked: Set<string>;
+  verified: Set<string>;
+  followerCounts: Map<string, number>;
+  interestNames: string[];
+}
+
+function matchesInterests(reel: { caption?: string | null }, interestNames: string[]): boolean {
+  if (interestNames.length === 0) return false;
+  const text = (reel.caption || '').toLowerCase();
+  return interestNames.some((name) => name.length > 2 && text.includes(name.toLowerCase()));
+}
+
+function computeReelScore(reel: Reel, ctx: RankingContext): number {
+  const ageHours = (ctx.now - new Date(reel.created_at).getTime()) / HOUR_MS;
+  const views = Math.max(1, reel.view_count || 0);
+  const engagement =
+    (reel.like_count || 0) * 2 +
+    (reel.comment_count || 0) * 3 +
+    (reel.share_count || 0) * 4;
+  const engagementRate = engagement / views;
+  const popularity = Math.log10(1 + engagement + views * 0.05) * 8;
+  const freshness = 1 / (1 + ageHours / 30);
+
+  // Quality-driven score with a ~30h freshness half-life so new content
+  // competes fairly with older viral reels.
+  let score = (engagementRate * 30 + popularity) * freshness;
+
+  // Personalization & creator signals.
+  if (ctx.followed.has(reel.user_id)) score *= 2.0;
+  if (matchesInterests(reel, ctx.interestNames)) score *= 1.5;
+  if (ctx.verified.has(reel.user_id)) score *= 1.25;
+  score *= 1 + Math.log10(1 + (ctx.followerCounts.get(reel.user_id) || 0)) / 50;
+
+  return score;
+}
+
+// Spread creators so the same account never floods consecutive slots,
+// while still surfacing every scored reel in overall ranked order.
+function buildCuratedFeed(scored: { reel: Reel; score: number }[]): Reel[] {
+  const byCreator = new Map<string, { reel: Reel; score: number }[]>();
+  for (const entry of scored) {
+    if (!byCreator.has(entry.reel.user_id)) byCreator.set(entry.reel.user_id, []);
+    byCreator.get(entry.reel.user_id)!.push(entry);
+  }
+
+  const creators = [...byCreator.entries()].filter(([, list]) => list.length > 0);
+  const lastPos = new Map<string, number>();
+  const result: Reel[] = [];
+
+  while (creators.length > 0) {
+    let bestIndex = -1;
+    let bestGap = -1;
+    let bestHead = -Infinity;
+    for (let i = 0; i < creators.length; i++) {
+      const [creatorId, list] = creators[i];
+      const last = lastPos.get(creatorId) ?? -Infinity;
+      const gap = result.length - last;
+      const headScore = list[0].score;
+      if (bestIndex === -1 || gap > bestGap || (gap === bestGap && headScore > bestHead)) {
+        bestIndex = i;
+        bestGap = gap;
+        bestHead = headScore;
+      }
+    }
+
+    const [creatorId, list] = creators[bestIndex];
+    const entry = list.shift()!;
+    lastPos.set(creatorId, result.length);
+    result.push(entry.reel);
+    if (list.length === 0) creators.splice(bestIndex, 1);
+  }
+
+  return result;
+}
+
+async function enrichReels(reelsData: Reel[], userId: string | null): Promise<Reel[]> {
+  const userIds = [...new Set(reelsData.map((reel) => reel.user_id))];
+  const [{ data: profiles }, { data: likesData }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('user_id, username, display_name, avatar_url, is_verified')
+      .in('user_id', userIds),
+    userId
+      ? supabase.from('reel_likes').select('reel_id').eq('user_id', userId)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const profileMap = new Map((profiles || []).map((profile) => [profile.user_id, profile]));
+  const likedSet = new Set((likesData || []).map((like) => like.reel_id));
+
+  return reelsData.map((reel) => ({
+    ...reel,
+    duration: reel.duration ?? 0,
+    view_count: reel.view_count ?? 0,
+    like_count: reel.like_count ?? 0,
+    comment_count: reel.comment_count ?? 0,
+    share_count: reel.share_count ?? 0,
+    is_published: reel.is_published ?? true,
+    profile: profileMap.get(reel.user_id) || {
+      username: 'unknown',
+      display_name: 'Unknown User',
+      avatar_url: null,
+      is_verified: false,
+    },
+    is_liked: likedSet.has(reel.id),
+  })) as unknown as Reel[];
+}
+
+async function fetchRankedReelsPage({
+  userId,
+  seen,
+  offset,
+  pageSize,
+}: {
+  userId: string | null;
+  seen: string[];
+  offset: number;
+  pageSize: number;
+}) {
+  // Candidate pool: enough content to make ranking meaningful.
+  const { data: candidates, error } = await supabase
+    .from('reels')
+    .select('*')
+    .eq('is_published', true)
+    .eq('hidden', false)
+    .order('created_at', { ascending: false })
+    .limit(FORYOU_CANDIDATE_LIMIT);
+
+  if (error) throw error;
+  if (!candidates || candidates.length === 0) return { reels: [] as Reel[], nextCursor: null as ReelCursor };
+
+  const creatorIds = [...new Set(candidates.map((r: { user_id: string }) => r.user_id))];
+
+  const [
+    { data: profiles },
+    { data: likesData },
+    { data: followedUsers },
+    { data: mutedUsers },
+    { data: blockedUsers },
+    { data: creatorFollowers },
+    { data: userInterestsRaw },
+  ] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('user_id, username, display_name, avatar_url, is_verified')
+      .in('user_id', creatorIds),
+    userId ? supabase.from('reel_likes').select('reel_id').eq('user_id', userId) : Promise.resolve({ data: [] }),
+    userId ? supabase.from('follows').select('following_id').eq('follower_id', userId).eq('status', 'accepted') : Promise.resolve({ data: [] }),
+    userId ? supabase.from('mutes').select('muted_id').eq('muter_id', userId) : Promise.resolve({ data: [] }),
+    userId ? supabase.from('blocks').select('blocked_id').eq('blocker_id', userId) : Promise.resolve({ data: [] }),
+    creatorIds.length > 0
+      ? supabase.from('follows').select('following_id').eq('status', 'accepted').in('following_id', creatorIds)
+      : Promise.resolve({ data: [] }),
+    userId ? supabase.from('user_interests').select('interest_categories(name)').eq('user_id', userId) : Promise.resolve({ data: [] }),
+  ]);
+
+  const muted = new Set((mutedUsers || []).map((m: { muted_id: string }) => m.muted_id));
+  const blocked = new Set((blockedUsers || []).map((b: { blocked_id: string }) => b.blocked_id));
+  const excluded = new Set([...muted, ...blocked]);
+  const followed = new Set((followedUsers || []).map((f: { following_id: string }) => f.following_id));
+  const verified = new Set(
+    (profiles || [])
+      .filter((p: { is_verified: boolean }) => p.is_verified)
+      .map((p: { user_id: string }) => p.user_id)
+  );
+
+  const followerCounts = new Map<string, number>();
+  for (const row of creatorFollowers || []) {
+    followerCounts.set(row.following_id, (followerCounts.get(row.following_id) || 0) + 1);
+  }
+
+  const interestNames = (userInterestsRaw || [])
+    .flatMap(
+      (row: { interest_categories?: { name: string } | { name: string }[] | null }) => {
+        const c = row.interest_categories;
+        if (!c) return [];
+        return Array.isArray(c) ? c.map((i) => i.name) : [c.name];
+      }
+    )
+    .filter(Boolean);
+
+  const ctx: RankingContext = {
+    now: Date.now(),
+    followed,
+    muted,
+    blocked,
+    verified,
+    followerCounts,
+    interestNames,
+  };
+
+  const candidatesTyped = candidates as unknown as Reel[];
+  const pool = excluded.size > 0 ? candidatesTyped.filter((r) => !excluded.has(r.user_id)) : candidatesTyped;
+
+  const scored = pool
+    .map((reel) => ({ reel, score: computeReelScore(reel, ctx) }))
+    .sort((a, b) => b.score - a.score || b.reel.created_at.localeCompare(a.reel.created_at));
+
+  // Stable order across pages: slice the curated feed by index and skip
+  // anything already returned, so pagination only ends when the pool is
+  // genuinely exhausted.
+  const curated = buildCuratedFeed(scored);
+  const seenSet = new Set(seen);
+  const picked: Reel[] = [];
+  let nextOffset = offset;
+  for (let i = offset; i < curated.length && picked.length < pageSize; i++) {
+    nextOffset = i + 1;
+    if (seenSet.has(curated[i].id)) continue;
+    picked.push(curated[i]);
+  }
+
+  const reels = await enrichReels(picked, userId);
+  const nextCursor: ReelCursor =
+    nextOffset < curated.length
+      ? { seen: [...seen, ...picked.map((r) => r.id)], offset: nextOffset }
+      : null;
+
+  return { reels, nextCursor };
+}
 
 async function fetchReelsPage({
   feedType,
@@ -86,6 +313,16 @@ async function fetchReelsPage({
   cursor: ReelCursor;
   pageSize: number;
 }) {
+  // "For You" is served by the ranking algorithm.
+  if (feedType === 'foryou' && !targetUserId) {
+    return fetchRankedReelsPage({
+      userId,
+      seen: cursor && 'seen' in cursor ? cursor.seen : [],
+      offset: cursor && 'seen' in cursor ? cursor.offset : 0,
+      pageSize,
+    });
+  }
+
   let followedIds: string[] = [];
   if (!targetUserId && feedType === 'following' && userId) {
     const { data: followedUsers } = await supabase
@@ -112,7 +349,7 @@ async function fetchReelsPage({
     query = query.in('user_id', followedIds);
   }
 
-  if (cursor) {
+  if (cursor && 'created_at' in cursor) {
     query = query.or(
       `and(created_at.lt."${cursor.created_at}"),and(created_at.eq."${cursor.created_at}",id.lt."${cursor.id}")`
     );
@@ -122,36 +359,7 @@ async function fetchReelsPage({
   if (reelsError) throw reelsError;
   if (!reelsData || reelsData.length === 0) return { reels: [] as Reel[], nextCursor: null as ReelCursor };
 
-  const userIds = [...new Set(reelsData.map((reel) => reel.user_id))];
-  const [{ data: profiles }, { data: likesData }] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('user_id, username, display_name, avatar_url, is_verified')
-      .in('user_id', userIds),
-    userId
-      ? supabase.from('reel_likes').select('reel_id').eq('user_id', userId)
-      : Promise.resolve({ data: [] }),
-  ]);
-
-  const profileMap = new Map((profiles || []).map((profile) => [profile.user_id, profile]));
-  const likedSet = new Set((likesData || []).map((like) => like.reel_id));
-
-  const reels: Reel[] = reelsData.map((reel) => ({
-    ...reel,
-    duration: reel.duration ?? 0,
-    view_count: reel.view_count ?? 0,
-    like_count: reel.like_count ?? 0,
-    comment_count: reel.comment_count ?? 0,
-    share_count: reel.share_count ?? 0,
-    is_published: reel.is_published ?? true,
-    profile: profileMap.get(reel.user_id) || {
-      username: 'unknown',
-      display_name: 'Unknown User',
-      avatar_url: null,
-      is_verified: false,
-    },
-    is_liked: likedSet.has(reel.id),
-  })) as unknown as Reel[];
+  const reels = await enrichReels(reelsData as unknown as Reel[], userId);
 
   const nextCursor: ReelCursor =
     reels.length === pageSize

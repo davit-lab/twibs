@@ -3,41 +3,55 @@ import { Notification } from '@/hooks/useNotifications';
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { NotificationAvatar } from './NotificationAvatar';
+import { NotificationActorStack } from './NotificationActorStack';
 import { NotificationMediaPreview } from './NotificationMediaPreview';
-import { formatRelativeTime, getNotificationLink } from './notification-utils';
+import {
+  aggregateTitle,
+  formatRelativeTime,
+  getNotificationLink,
+} from './notification-utils';
 
-interface NotificationItemProps {
-  notification: Notification;
+interface AggregatedNotificationRowProps {
+  items: Notification[];
   onMarkAsRead: (id: string) => void;
   onDelete: (id: string) => void;
   onClick?: () => void;
 }
 
-export default function NotificationItem({
-  notification,
+// A combined row for several identical reactions to the same target, e.g.
+// "Alex, Maria and 12 others starred your post".
+export default function AggregatedNotificationRow({
+  items,
   onMarkAsRead,
   onDelete,
   onClick,
-}: NotificationItemProps) {
-  const unread = !notification.is_read;
-  const link = getNotificationLink(notification);
-
-  const handleActivate = () => {
-    if (!notification.is_read) {
-      onMarkAsRead(notification.id);
-    }
-    onClick?.();
-  };
+}: AggregatedNotificationRowProps) {
+  const latest = items[0];
+  const unread = items.some(item => !item.is_read);
+  const link = getNotificationLink(latest);
+  const title = aggregateTitle(items);
+  const actors = items
+    .map(item => item.actor)
+    .filter((actor): actor is NonNullable<typeof actor> => Boolean(actor))
+    .reduce<Array<NonNullable<typeof latest.actor>>>((acc, actor) => {
+      if (!acc.some(a => a.user_id === actor.user_id)) acc.push(actor);
+      return acc;
+    }, []);
 
   const label = [
     unread ? 'Unread' : 'Notification',
-    notification.title,
-    notification.body || null,
-    formatRelativeTime(notification.created_at),
+    title,
+    formatRelativeTime(latest.created_at),
   ]
     .filter(Boolean)
     .join('. ');
+
+  const handleActivate = () => {
+    items.forEach(item => {
+      if (!item.is_read) onMarkAsRead(item.id);
+    });
+    onClick?.();
+  };
 
   const inner = (
     <div
@@ -62,7 +76,6 @@ export default function NotificationItem({
             }
       }
     >
-      {/* Unread accent */}
       {unread && (
         <span
           aria-hidden="true"
@@ -70,9 +83,8 @@ export default function NotificationItem({
         />
       )}
 
-      <NotificationAvatar notification={notification} />
+      <NotificationActorStack actors={actors} total={items.length} />
 
-      {/* Content */}
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <p
@@ -81,7 +93,7 @@ export default function NotificationItem({
               unread ? 'font-semibold text-foreground' : 'font-medium text-foreground/90'
             )}
           >
-            {notification.title}
+            {title}
           </p>
           <span
             className={cn(
@@ -89,19 +101,13 @@ export default function NotificationItem({
               unread ? 'font-semibold text-primary' : 'text-muted-foreground/80'
             )}
           >
-            {formatRelativeTime(notification.created_at)}
+            {formatRelativeTime(latest.created_at)}
           </span>
         </div>
-        {notification.body && (
-          <p className="mt-0.5 line-clamp-1 text-[13px] text-muted-foreground">
-            {notification.body}
-          </p>
-        )}
       </div>
 
-      <NotificationMediaPreview notification={notification} />
+      <NotificationMediaPreview notification={latest} />
 
-      {/* Actions */}
       <div className="flex w-6 flex-shrink-0 flex-col items-center justify-center gap-1.5">
         {unread && (
           <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-primary" />
@@ -115,7 +121,7 @@ export default function NotificationItem({
           onClick={(e) => {
             e.stopPropagation();
             e.preventDefault();
-            onDelete(notification.id);
+            items.forEach(item => onDelete(item.id));
           }}
         >
           <X className="h-4 w-4" />
@@ -126,12 +132,7 @@ export default function NotificationItem({
 
   if (link) {
     return (
-      <Link
-        to={link}
-        className="group block rounded-xl"
-        aria-label={label}
-        onClick={handleActivate}
-      >
+      <Link to={link} className="group block rounded-xl" aria-label={label} onClick={handleActivate}>
         {inner}
       </Link>
     );

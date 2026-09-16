@@ -17,7 +17,6 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -40,8 +39,9 @@ import {
   Plus,
   Radio,
   Users,
-  Sparkles,
+  Target,
   Megaphone,
+  ChevronRight,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -59,7 +59,7 @@ const navItems = [
   { icon: PlusSquare, label: 'Create', href: '#create', id: 'create' },
   { icon: BookOpen, label: 'Library', href: '/library', id: 'library' },
   { icon: Users, label: 'Groups', href: '/groups', id: 'groups' },
-  { icon: Sparkles, label: 'Interests', href: '/interests', id: 'interests' },
+  { icon: Target, label: 'Interests', href: '/interests', id: 'interests' },
   { icon: Megaphone, label: 'Advertise', href: '/ads', id: 'ads' },
 ];
 
@@ -77,6 +77,7 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
   usePresence();
   const location = useLocation();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [navVisible, setNavVisible] = useState(true);
   const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -108,6 +109,21 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
     if (href === '/groups' && location.pathname.startsWith('/groups/')) return true;
     return location.pathname === href;
   };
+
+const moreNavItems = [
+  {
+    icon: User,
+    label: 'Profile',
+    href: `/profile/${profile?.username || ''}`,
+    id: 'profile',
+  },
+  { icon: BookOpen, label: 'Library', href: '/library', id: 'library' },
+  { icon: Users, label: 'Groups', href: '/groups', id: 'groups' },
+];
+
+const moreAccountItems = [
+  { icon: Settings, label: 'Settings', href: '/settings', id: 'settings' },
+];
 
   return (
     <div className={cn('bg-background', immersive ? 'h-[100dvh] overflow-hidden' : 'min-h-screen')}>
@@ -224,97 +240,132 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
           )}
         >
           <NotificationDropdown className="text-muted-foreground hover:text-foreground hover:bg-primary/10" />
-          <DropdownMenu>
+          <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
             <DropdownMenuTrigger asChild>
               <button
                 aria-label="More"
-                className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground hover:bg-primary/10"
+                className={cn(
+                  'flex h-9 w-9 items-center justify-center rounded-full transition-all duration-300',
+                  moreOpen
+                    ? 'bg-white/15 text-white'
+                    : 'text-neutral-300 hover:bg-white/10 hover:text-white'
+                )}
               >
-                <Menu className="h-5 w-5" strokeWidth={1.5} />
+                <Menu
+                  className={cn('h-5 w-5 transition-transform duration-300', moreOpen && 'rotate-90')}
+                  strokeWidth={1.5}
+                />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
               side="bottom"
               sideOffset={10}
-              className="w-64 rounded-2xl border-border/70 bg-background/95 p-1.5 shadow-xl shadow-black/20 backdrop-blur-xl"
+              className="w-60 rounded-2xl border border-white/15 bg-black/45 p-1 text-white shadow-2xl shadow-black/50 backdrop-blur-2xl backdrop-saturate-150"
             >
+              {/* Profile card header */}
+              <Link
+                to={`/profile/${profile?.username || ''}`}
+                className="flex items-center gap-2.5 rounded-lg p-1.5 transition-colors hover:bg-white/10"
+              >
+                <Avatar className="h-9 w-9 flex-shrink-0 ring-1 ring-white/20">
+                  <AvatarImage src={profile?.avatar_url || undefined} />
+                  <AvatarFallback className="bg-white/10 text-xs font-semibold text-white/90">
+                    {getInitials(profile?.display_name || 'U')}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-white">
+                    {profile?.display_name || 'You'}
+                  </span>
+                  <span className="block truncate text-[11px] text-neutral-400">
+                    @{profile?.username || 'username'}
+                  </span>
+                </span>
+                <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-neutral-500" />
+              </Link>
+
+              <DropdownMenuSeparator className="my-1 bg-white/10" />
+
               <DropdownMenuGroup>
-                <DropdownMenuLabel className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Navigation
-                </DropdownMenuLabel>
-                <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
-                  <Link to={`/profile/${profile?.username}`}>
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
-                      <User className="h-4 w-4" />
-                    </span>
-                    Profile
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
-                  <Link to="/library">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
-                      <BookOpen className="h-4 w-4" />
-                    </span>
-                    Library
-                  </Link>
-                </DropdownMenuItem>
-                {/* Live TV removed */}
-                <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
-                  <Link to="/groups">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
-                      <Users className="h-4 w-4" />
-                    </span>
-                    Groups
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
-                  <Link to="/interests">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
-                      <Sparkles className="h-4 w-4" />
-                    </span>
-                    Interests
-                  </Link>
-                </DropdownMenuItem>
+                {moreNavItems.map((item) => {
+                  const active = isActive(item.href);
+                  return (
+                    <DropdownMenuItem
+                      key={item.id}
+                      asChild
+                      className="cursor-pointer gap-2 rounded-lg py-1.5 focus:bg-white/10 focus:text-white"
+                    >
+                      <Link to={item.href}>
+                        <span
+                          className={cn(
+                            'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border transition-colors',
+                            active
+                              ? 'border-white/20 bg-white/20 text-white'
+                              : 'border-white/10 bg-white/10 text-neutral-200'
+                          )}
+                        >
+                          <item.icon className="h-3.5 w-3.5" strokeWidth={1.8} />
+                        </span>
+                        <span className="text-sm font-medium text-white">{item.label}</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  );
+                })}
               </DropdownMenuGroup>
 
-              <DropdownMenuSeparator className="my-1.5" />
+              <DropdownMenuSeparator className="my-1 bg-white/10" />
 
               <DropdownMenuGroup>
-                <DropdownMenuLabel className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Account
-                </DropdownMenuLabel>
-                <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
-                  <Link to="/settings">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
-                      <Settings className="h-4 w-4" />
-                    </span>
-                    Settings
-                  </Link>
-                </DropdownMenuItem>
-                {/* Premium removed */}
+                {moreAccountItems.map((item) => {
+                  const active = isActive(item.href);
+                  return (
+                    <DropdownMenuItem
+                      key={item.id}
+                      asChild
+                      className="cursor-pointer gap-2 rounded-lg py-1.5 focus:bg-white/10 focus:text-white"
+                    >
+                      <Link to={item.href}>
+                        <span
+                          className={cn(
+                            'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border transition-colors',
+                            active
+                              ? 'border-white/20 bg-white/20 text-white'
+                              : 'border-white/10 bg-white/10 text-neutral-200'
+                          )}
+                        >
+                          <item.icon className="h-3.5 w-3.5" strokeWidth={1.8} />
+                        </span>
+                        <span className="text-sm font-medium text-white">{item.label}</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  );
+                })}
                 {(isAdmin || isModerator) && (
-                  <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-xl py-2">
+                  <DropdownMenuItem
+                    asChild
+                    className="cursor-pointer gap-2 rounded-lg py-1.5 focus:bg-white/10 focus:text-white"
+                  >
                     <Link to="/admin">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2">
-                        <Shield className="h-4 w-4" />
+<span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-neutral-200">
+                        <Shield className="h-3.5 w-3.5" strokeWidth={1.8} />
                       </span>
-                      Admin
+                      <span className="text-sm font-medium text-white">Admin</span>
                     </Link>
                   </DropdownMenuItem>
                 )}
               </DropdownMenuGroup>
 
-              <DropdownMenuSeparator className="my-1.5" />
+              <DropdownMenuSeparator className="my-1 bg-white/10" />
 
-              <DropdownMenuItem
+<DropdownMenuItem
                 onClick={signOut}
-                className="cursor-pointer gap-2.5 rounded-xl py-2 text-destructive"
+                className="cursor-pointer gap-2 rounded-lg py-1.5 text-red-400 focus:bg-white/10 focus:text-red-300"
               >
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-destructive/10">
-                  <LogOut className="h-4 w-4" />
+                <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-red-400/20 bg-red-400/10 text-red-400">
+                  <LogOut className="h-3.5 w-3.5" strokeWidth={1.8} />
                 </span>
-                Log out
+                <span className="text-sm font-medium">Log out</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

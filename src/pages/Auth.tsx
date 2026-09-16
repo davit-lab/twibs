@@ -10,8 +10,7 @@ import { Label } from '@/components/ui/label';
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/components/ui/input-otp';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Loader2, Mail, KeyRound, ArrowLeft, Phone, Eye, EyeOff, Check, X, Users, Smartphone, Camera, User,
-  LogIn, UserPlus, Image as ImageIcon, MessageCircle, Zap, ShieldCheck
+  ArrowLeft, Check, Eye, EyeOff, Loader2, Mail, Phone, User
 } from 'lucide-react';
 import { validateEmail } from '@/lib/emailValidation';
 import { isValidPhoneNumber } from 'libphonenumber-js';
@@ -39,23 +38,167 @@ function getPasswordStrength(pw: string): { score: number; label: string; color:
 
 type AuthMode = 'login' | 'signup' | 'otp-request' | 'otp-verify' | 'phone-request' | 'phone-verify' | 'forgot-password' | 'reset-password';
 
-const inputField =
-  'h-12 bg-surface border-border rounded-xl focus-visible:ring-primary/30 focus-visible:ring-offset-0 transition-colors';
+const HERO_IMAGE =
+  'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1600&q=80';
+
+const field =
+  'h-12 bg-surface border border-border rounded-[10px] px-4 text-[15px] placeholder:text-muted-foreground/70 transition-colors duration-150 focus:border-primary focus-visible:ring-1 focus-visible:ring-primary/25 focus-visible:ring-offset-0';
 
 const primaryBtn =
-  'h-12 rounded-xl font-semibold shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all';
+  'w-full h-12 rounded-[10px] bg-primary text-primary-foreground text-[15px] font-semibold shadow-none hover:bg-primary/90 transition-colors duration-150';
+
+const secondaryBtn =
+  'h-11 rounded-[10px] border border-border bg-surface text-sm font-medium text-foreground hover:bg-surface-2 transition-colors duration-150 flex items-center justify-center gap-2';
 
 const socialBtn =
-  'w-full h-12 rounded-xl border border-border bg-surface hover:bg-surface-2 text-sm font-semibold flex items-center justify-center gap-2.5 transition-colors';
+  'flex h-12 w-full items-center justify-center gap-2.5 rounded-[10px] border border-border bg-surface text-[15px] font-semibold text-foreground transition-colors duration-150 hover:bg-surface-2';
 
-function FlowHeading({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
+const otpSlot =
+  'h-12 sm:h-[52px] w-10 sm:w-11 rounded-[10px] bg-surface border-border text-lg font-semibold text-foreground';
+
+function Field({ label, htmlFor, error, required, children }: {
+  label: React.ReactNode;
+  htmlFor?: string;
+  error?: string | null;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="text-center mb-7">
-      <div className="mx-auto mb-4 h-14 w-14 rounded-2xl bg-gradient-to-br from-primary/15 to-accent/15 ring-1 ring-primary/20 flex items-center justify-center text-primary">
-        {icon}
+    <div className="space-y-1.5">
+      <Label htmlFor={htmlFor} className="text-[13px] font-medium text-foreground">
+        {label}
+        {required && <span className="ml-0.5 text-destructive">*</span>}
+      </Label>
+      {children}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+function PasswordInput({ id, inputRef, value, onChange, placeholder, show, onToggle, disabled, autoComplete, error }: {
+  id: string;
+  inputRef?: React.Ref<HTMLInputElement>;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  show: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
+  autoComplete?: string;
+  error?: boolean;
+}) {
+  return (
+    <div className="relative">
+      <Input
+        ref={inputRef}
+        id={id}
+        type={show ? 'text' : 'password'}
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        autoComplete={autoComplete}
+        disabled={disabled}
+        aria-invalid={error}
+        className={cn(field, 'pr-12', error && 'border-destructive focus:border-destructive')}
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={show ? 'Hide password' : 'Show password'}
+        className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-3 hover:text-foreground"
+      >
+        {show ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
+      </button>
+    </div>
+  );
+}
+
+function PasswordStrengthMeter({ password }: { password: string }) {
+  const strength = getPasswordStrength(password);
+  if (!password) return null;
+  const toneText = strength.score >= 4 ? 'text-success' : strength.score >= 2 ? 'text-warning' : 'text-destructive';
+  const requirements = [
+    { check: password.length >= 6, text: '6+ chars' },
+    { check: /[A-Z]/.test(password), text: 'Uppercase' },
+    { check: /[0-9]/.test(password), text: 'Number' },
+    { check: /[^A-Za-z0-9]/.test(password), text: 'Symbol' },
+  ];
+  return (
+    <div className="space-y-2.5 pt-2">
+      <div className="flex gap-1.5" aria-hidden>
+        {[1, 2, 3, 4, 5].map(i => (
+          <span
+            key={i}
+            className={cn(
+              'h-[3px] flex-1 rounded-full transition-colors duration-200',
+              i <= strength.score ? strength.color : 'bg-surface-3'
+            )}
+          />
+        ))}
       </div>
-      <h1 className="text-[22px] font-bold tracking-tight mb-1.5">{title}</h1>
-      <p className="text-sm text-muted-foreground leading-relaxed">{subtitle}</p>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap gap-x-3 gap-y-1">
+          {requirements.map(req => (
+            <span
+              key={req.text}
+              className={cn('text-[11px] font-medium', req.check ? 'text-foreground/80' : 'text-muted-foreground/60')}
+            >
+              <Check
+                className={cn('mr-1 inline h-3 w-3 align-[-1px]', req.check ? 'text-success' : 'text-muted-foreground/40')}
+              />
+              {req.text}
+            </span>
+          ))}
+        </div>
+        <span className={cn('shrink-0 text-xs font-medium', toneText)}>{strength.label}</span>
+      </div>
+    </div>
+  );
+}
+
+function Divider({ label = 'or' }: { label?: string }) {
+  return (
+    <div className="mx-auto flex w-full max-w-[200px] items-center gap-4 py-1" role="separator">
+      <span className="h-px flex-1 bg-border" />
+      <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</span>
+      <span className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
+
+function BackButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mb-7 flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <ArrowLeft className="h-4 w-4" /> {label}
+    </button>
+  );
+}
+
+function OtpFields({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
+  return (
+    <div className="flex justify-center pt-1">
+      <InputOTP maxLength={6} value={value} onChange={onChange} disabled={disabled} inputMode="numeric" pattern="[0-9]*">
+        <InputOTPGroup>
+          {[0, 1, 2].map(i => <InputOTPSlot key={i} index={i} className={otpSlot} />)}
+        </InputOTPGroup>
+        <InputOTPSeparator />
+        <InputOTPGroup>
+          {[3, 4, 5].map(i => <InputOTPSlot key={i} index={i} className={otpSlot} />)}
+        </InputOTPGroup>
+      </InputOTP>
+    </div>
+  );
+}
+
+function FlowHeading({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="mb-7">
+      <h1 className="text-3xl font-semibold tracking-tight text-foreground">{title}</h1>
+      <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">{subtitle}</p>
     </div>
   );
 }
@@ -356,55 +499,48 @@ export default function Auth() {
   }
 
   const renderOtpFlow = () => (
-    <div>
-      <button type="button" onClick={() => setAuthMode('login')}
-        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6">
-        <ArrowLeft className="h-4 w-4" /> Back to log in
-      </button>
+    <div className="page-transition">
+      <BackButton label="Back to log in" onClick={() => setAuthMode('login')} />
 
       <FlowHeading
-        icon={authMode === 'otp-request' ? <Mail className="h-5 w-5 text-primary" /> : <KeyRound className="h-5 w-5 text-primary" />}
-        title={authMode === 'otp-request' ? 'Log in with email' : 'Enter the code'}
+        title={authMode === 'otp-request' ? 'Log in with email' : 'Check your email'}
         subtitle={authMode === 'otp-request'
           ? "We'll send a 6-digit code to your email."
-          : `Enter the code sent to ${email}.`}
+          : `Enter the 6-digit code we sent to ${email}.`}
       />
 
       {authMode === 'otp-request' ? (
         <form onSubmit={handleOtpRequest} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Email</Label>
-            <Input type="email" placeholder="name@example.com" value={email}
+          <Field label="Email" htmlFor="otp-email" error={errors.email}>
+            <Input
+              id="otp-email"
+              type="email"
+              placeholder="name@example.com"
+              autoComplete="email"
+              value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={cn(inputField, errors.email && 'border-destructive')}
-              disabled={loading} />
-            {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
-          </div>
-          <Button type="submit" className={cn(primaryBtn, 'w-full')} disabled={loading}>
+              className={cn(field, errors.email && 'border-destructive')}
+              disabled={loading}
+              aria-invalid={!!errors.email}
+            />
+          </Field>
+          <Button type="submit" className={primaryBtn} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
             {loading ? 'Sending…' : 'Send code'}
           </Button>
         </form>
       ) : (
         <form onSubmit={handleOtpVerify} className="space-y-5">
-          <div className="flex justify-center">
-            <InputOTP maxLength={6} value={otpCode} onChange={setOtpCode} disabled={loading}>
-              <InputOTPGroup>
-                {[0, 1, 2].map(i => <InputOTPSlot key={i} index={i} className="w-11 h-12 text-lg rounded-lg border-border focus:border-primary focus:ring-primary/30" />)}
-              </InputOTPGroup>
-              <InputOTPSeparator />
-              <InputOTPGroup>
-                {[3, 4, 5].map(i => <InputOTPSlot key={i} index={i} className="w-11 h-12 text-lg rounded-lg border-border focus:border-primary focus:ring-primary/30" />)}
-              </InputOTPGroup>
-            </InputOTP>
-          </div>
-          <Button type="submit" className={cn(primaryBtn, 'w-full')} disabled={loading || otpCode.length !== 6}>
+          <OtpFields value={otpCode} onChange={setOtpCode} disabled={loading} />
+          <Button type="submit" className={primaryBtn} disabled={loading || otpCode.length !== 6}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {loading ? 'Verifying…' : 'Verify and log in'}
           </Button>
           <p className="text-center text-sm text-muted-foreground">
             Didn't receive the code?{' '}
-            <button type="button" onClick={() => setAuthMode('otp-request')} className="text-primary font-semibold hover:underline">Resend</button>
+            <button type="button" onClick={() => setAuthMode('otp-request')} className="font-semibold text-primary transition-colors hover:underline">
+              Resend
+            </button>
           </p>
         </form>
       )}
@@ -412,58 +548,55 @@ export default function Auth() {
   );
 
   const renderPhoneFlow = () => (
-    <div>
-      <button type="button" onClick={() => setAuthMode('login')}
-        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6">
-        <ArrowLeft className="h-4 w-4" /> Back to log in
-      </button>
+    <div className="page-transition">
+      <BackButton label="Back to log in" onClick={() => setAuthMode('login')} />
 
       <FlowHeading
-        icon={authMode === 'phone-request' ? <Phone className="h-5 w-5 text-primary" /> : <Smartphone className="h-5 w-5 text-primary" />}
-        title={authMode === 'phone-request' ? 'Log in with phone' : 'Enter the code'}
+        title={authMode === 'phone-request' ? 'Log in with phone' : 'Check your phone'}
         subtitle={authMode === 'phone-request'
           ? "We'll send a 6-digit code via SMS."
-          : `Enter the code sent to ${phoneNumber}.`}
+          : `Enter the 6-digit code we sent to ${phoneNumber}.`}
       />
 
       {authMode === 'phone-request' ? (
         <form onSubmit={handlePhoneRequest} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Phone number</Label>
+          <Field label="Phone number" htmlFor="phone-number" error={errors.email}>
             <div className="flex gap-2">
-              <CountryCodeSelector value={selectedCountry.code} onChange={setSelectedCountry} disabled={loading} />
-              <Input type="tel" placeholder="Enter your number" value={phoneNumber}
+              <CountryCodeSelector
+                value={selectedCountry.code}
+                onChange={setSelectedCountry}
+                disabled={loading}
+                className="h-12"
+              />
+              <Input
+                id="phone-number"
+                type="tel"
+                placeholder="Enter your number"
+                value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value.replace(/[^\d]/g, ''))}
-                className={cn('flex-1', inputField, errors.email && 'border-destructive')}
-                disabled={loading} />
+                className={cn('min-w-0 flex-1', field, errors.email && 'border-destructive')}
+                disabled={loading}
+                aria-invalid={!!errors.email}
+              />
             </div>
-            {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
-          </div>
-          <Button type="submit" className={cn(primaryBtn, 'w-full')} disabled={loading}>
+          </Field>
+          <Button type="submit" className={primaryBtn} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Phone className="h-4 w-4" />}
             {loading ? 'Sending…' : 'Send code'}
           </Button>
         </form>
       ) : (
         <form onSubmit={handlePhoneVerify} className="space-y-5">
-          <div className="flex justify-center">
-            <InputOTP maxLength={6} value={phoneOtpCode} onChange={setPhoneOtpCode} disabled={loading}>
-              <InputOTPGroup>
-                {[0, 1, 2].map(i => <InputOTPSlot key={i} index={i} className="w-11 h-12 text-lg rounded-lg border-border focus:border-primary focus:ring-primary/30" />)}
-              </InputOTPGroup>
-              <InputOTPSeparator />
-              <InputOTPGroup>
-                {[3, 4, 5].map(i => <InputOTPSlot key={i} index={i} className="w-11 h-12 text-lg rounded-lg border-border focus:border-primary focus:ring-primary/30" />)}
-              </InputOTPGroup>
-            </InputOTP>
-          </div>
-          <Button type="submit" className={cn(primaryBtn, 'w-full')} disabled={loading || phoneOtpCode.length !== 6}>
+          <OtpFields value={phoneOtpCode} onChange={setPhoneOtpCode} disabled={loading} />
+          <Button type="submit" className={primaryBtn} disabled={loading || phoneOtpCode.length !== 6}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {loading ? 'Verifying…' : 'Verify and log in'}
           </Button>
           <p className="text-center text-sm text-muted-foreground">
             Didn't receive the code?{' '}
-            <button type="button" onClick={() => setAuthMode('phone-request')} className="text-primary font-semibold hover:underline">Resend</button>
+            <button type="button" onClick={() => setAuthMode('phone-request')} className="font-semibold text-primary transition-colors hover:underline">
+              Resend
+            </button>
           </p>
         </form>
       )}
@@ -471,67 +604,63 @@ export default function Auth() {
   );
 
   const renderForgotPasswordFlow = () => (
-    <div>
-      <button type="button" onClick={() => setAuthMode('login')}
-        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6">
-        <ArrowLeft className="h-4 w-4" /> Back to log in
-      </button>
+    <div className="page-transition">
+      <BackButton label="Back to log in" onClick={() => setAuthMode('login')} />
 
       <FlowHeading
-        icon={<KeyRound className="h-5 w-5 text-primary" />}
         title="Reset your password"
         subtitle="Enter your email and we'll send you a link to create a new password."
       />
 
       <form onSubmit={handleForgotPassword} className="space-y-4">
-        <div className="space-y-1.5">
-          <Label className="text-sm font-medium">Email</Label>
-          <div className="relative">
-            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input type="email" placeholder="name@example.com" value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={cn(inputField, 'pl-10', errors.email && 'border-destructive')}
-              disabled={loading} />
-          </div>
-          {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
-        </div>
-        <Button type="submit" className={cn(primaryBtn, 'w-full')} disabled={loading}>
+        <Field label="Email" htmlFor="reset-email" error={errors.email}>
+          <Input
+            id="reset-email"
+            type="email"
+            placeholder="name@example.com"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={cn(field, errors.email && 'border-destructive')}
+            disabled={loading}
+            aria-invalid={!!errors.email}
+          />
+        </Field>
+        <Button type="submit" className={primaryBtn} disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           {loading ? 'Sending…' : 'Send reset link'}
         </Button>
       </form>
 
-      <p className="text-center text-xs text-muted-foreground mt-5">
-        Forgot your email? <a href="/auth" className="text-primary font-medium hover:underline">Log in another way</a>
+      <p className="mt-5 text-center text-xs text-muted-foreground">
+        Forgot your email? <a href="/auth" className="font-medium text-primary transition-colors hover:underline">Log in another way</a>
       </p>
     </div>
   );
 
   const renderResetPasswordFlow = () => (
-    <div>
+    <div className="page-transition">
       <FlowHeading
-        icon={<KeyRound className="h-5 w-5 text-primary" />}
         title="Set a new password"
         subtitle="Choose a strong password you haven't used before."
       />
 
       <form onSubmit={handleResetPassword} className="space-y-4">
-        <div className="space-y-1.5">
-          <Label className="text-sm font-medium">New password</Label>
-          <div className="relative">
-            <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input ref={passwordInputRef} type={showPassword ? 'text' : 'password'} placeholder="Create a strong password"
-              value={resetPassword}
-              onChange={(e) => setResetPassword(e.target.value)}
-              className={cn(inputField, 'pl-10 pr-11')}
-              disabled={loading} />
-            <button type="button" onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1.5">
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
-        </div>
-        <Button type="submit" className={cn(primaryBtn, 'w-full')} disabled={loading}>
+        <Field label="New password" htmlFor="new-password">
+          <PasswordInput
+            id="new-password"
+            inputRef={passwordInputRef}
+            value={resetPassword}
+            onChange={(e) => setResetPassword(e.target.value)}
+            placeholder="Create a strong password"
+            show={showPassword}
+            onToggle={() => setShowPassword(v => !v)}
+            disabled={loading}
+            autoComplete="new-password"
+          />
+          <PasswordStrengthMeter password={resetPassword} />
+        </Field>
+        <Button type="submit" className={primaryBtn} disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           {loading ? 'Updating…' : 'Update password'}
         </Button>
@@ -540,357 +669,332 @@ export default function Auth() {
   );
 
   const renderAuthForm = () => (
-    <div>
-      <FlowHeading
-        icon={activeTab === 'login' ? <LogIn className="h-5 w-5 text-primary" /> : <UserPlus className="h-5 w-5 text-primary" />}
-        title={activeTab === 'login' ? 'Welcome back' : 'Join Twibsers'}
-        subtitle={activeTab === 'login'
-          ? 'Log in to see photos and videos from your friends.'
-          : 'Sign up to see photos and videos from your friends.'}
-      />
-
-      <div className="flex gap-1 bg-surface-2 p-1 rounded-xl mb-6 ring-1 ring-border/60">
-        <button type="button" onClick={() => switchTab('login')}
-          className={cn('flex-1 h-11 rounded-lg text-sm font-semibold transition-all',
-            activeTab === 'login' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
-          Log In
-        </button>
-        <button type="button" onClick={() => switchTab('signup')}
-          className={cn('flex-1 h-11 rounded-lg text-sm font-semibold transition-all',
-            activeTab === 'signup' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
-          Sign Up
-        </button>
-      </div>
-
-      <div className="space-y-2.5 mb-5">
-        <button type="button"
-          className={socialBtn}>
-          <svg className="h-4 w-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-          Continue with Google
-        </button>
-        <button type="button"
-          className={socialBtn}>
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
-          Continue with Apple
-        </button>
-      </div>
-
-      <div className="relative mb-5">
-        <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
-        <div className="relative flex justify-center">
-          <span className="bg-card px-3 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">or</span>
-        </div>
-      </div>
+    <div key={activeTab} className="page-transition">
+      <h1 className="text-3xl font-semibold leading-tight tracking-tight text-foreground sm:text-[2.125rem]">
+        {activeTab === 'login' ? 'Welcome back' : 'Create your account'}
+      </h1>
+      <p className="mt-2 text-[15px] text-muted-foreground">
+        {activeTab === 'login' ? 'Log in to Twibsers' : 'Join Twibsers and start sharing.'}
+      </p>
 
       {activeTab === 'login' ? (
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Email</Label>
-            <div className="relative">
-              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input ref={emailInputRef} type="email" placeholder="name@example.com" autoFocus value={email}
-                onChange={(e) => setEmail(e.target.value)} onBlur={() => setTouchedFields(p => ({ ...p, email: true }))}
-                className={cn(inputField, 'pl-10', errors.email && 'border-destructive')}
-                disabled={loading} />
-            </div>
-            {errors.email && touchedFields.email && <p className="text-xs text-destructive">{errors.email}</p>}
+        <>
+          {/* Social sign in */}
+          <div className="mt-7 space-y-2.5">
+            <button type="button" className={socialBtn}>
+              <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden>
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+              Continue with Google
+            </button>
+            <button type="button" className={socialBtn}>
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+              </svg>
+              Continue with Apple
+            </button>
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Password</Label>
-            <div className="relative">
-              <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input ref={passwordInputRef} type={showPassword ? 'text' : 'password'} placeholder="Enter your password" value={password}
+          <div className="mt-5">
+            <Divider />
+          </div>
+
+          {/* Email / password */}
+          <form onSubmit={handleLogin} className="mt-4 space-y-4">
+            <Field label="Email" htmlFor="login-email" error={errors.email && touchedFields.email ? errors.email : null}>
+              <Input
+                ref={emailInputRef}
+                id="login-email"
+                type="email"
+                placeholder="name@example.com"
+                autoComplete="email"
+                autoFocus
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onBlur={() => setTouchedFields(p => ({ ...p, email: true }))}
+                className={cn(field, errors.email && 'border-destructive')}
+                disabled={loading}
+                aria-invalid={!!errors.email}
+              />
+            </Field>
+
+            <Field label="Password" htmlFor="login-password" error={errors.password}>
+              <PasswordInput
+                id="login-password"
+                inputRef={passwordInputRef}
+                value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className={cn(inputField, 'pl-10 pr-11', errors.password && 'border-destructive')}
-                disabled={loading} />
-              <button type="button" onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1.5">
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                placeholder="Enter your password"
+                show={showPassword}
+                onToggle={() => setShowPassword(v => !v)}
+                disabled={loading}
+                autoComplete="current-password"
+                error={!!errors.password}
+              />
+            </Field>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => { setAuthMode('forgot-password'); setErrors({}); }}
+                className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
+              >
+                Forgot password?
               </button>
             </div>
-            {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
-          </div>
 
-          <Button type="submit" className={cn(primaryBtn, 'w-full')} disabled={loading}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {loading ? 'Logging in…' : 'Log In'}
-          </Button>
+            <Button type="submit" className={primaryBtn} disabled={loading}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {loading ? 'Logging in…' : 'Log In'}
+            </Button>
+          </form>
 
-          <div className="flex justify-end -mt-1">
-            <button type="button" onClick={() => { setAuthMode('forgot-password'); setErrors({}); }}
-              className="text-sm text-muted-foreground hover:text-primary font-medium transition-colors">
-              Forgot password?
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2.5">
-            <button type="button" onClick={() => setAuthMode('otp-request')}
-              className="h-11 rounded-xl border border-border bg-surface hover:bg-surface-2 text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
-              <Mail className="h-4 w-4 text-primary" />
+          {/* Alternate methods */}
+          <div className="mt-5 grid grid-cols-2 gap-2.5">
+            <button type="button" onClick={() => setAuthMode('otp-request')} className={secondaryBtn}>
+              <Mail className="h-4 w-4 text-muted-foreground" />
               Email code
             </button>
-            <button type="button" onClick={() => setAuthMode('phone-request')}
-              className="h-11 rounded-xl border border-border bg-surface hover:bg-surface-2 text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
-              <Phone className="h-4 w-4 text-primary" />
+            <button type="button" onClick={() => setAuthMode('phone-request')} className={secondaryBtn}>
+              <Phone className="h-4 w-4 text-muted-foreground" />
               Phone
             </button>
           </div>
-        </form>
+
+          <p className="mt-7 text-center text-sm text-muted-foreground">
+            Don't have an account?{' '}
+            <button type="button" onClick={() => switchTab('signup')} className="font-semibold text-primary transition-colors hover:underline">
+              Sign up
+            </button>
+          </p>
+        </>
       ) : (
-        <form onSubmit={handleSignUp} className="space-y-4">
-          <div className="flex flex-col items-center gap-2">
-            <Label className="text-sm font-medium self-start">Profile photo <span className="text-destructive">*</span></Label>
+        <>
+          <form onSubmit={handleSignUp} className="mt-7 space-y-4">
+            {/* Profile photo */}
+            <div className="flex items-center gap-4 py-1">
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={loading}
+                title="Choose a profile photo"
+                aria-label="Choose a profile photo"
+                className="relative shrink-0"
+              >
+                <div className={cn(
+                  'flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-surface-2 ring-1 transition-colors duration-150',
+                  errors.avatar ? 'ring-destructive/70' : avatarPreview ? 'ring-primary/60' : 'ring-border'
+                )}>
+                  {avatarPreview ? (
+                    <img src={avatarPreview} alt="Profile preview" className="h-full w-full object-cover" />
+                  ) : (
+                    <User className="h-8 w-8 text-muted-foreground/70" />
+                  )}
+                </div>
+              </button>
+
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  Profile photo <span className="text-destructive">*</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={loading}
+                  className="self-start text-sm font-semibold text-primary transition-colors hover:underline"
+                >
+                  {avatarPreview ? 'Change photo' : 'Add profile photo'}
+                </button>
+                {avatarPreview ? (
+                  <button
+                    type="button"
+                    onClick={() => { setAvatarFile(null); setAvatarPreview(null); }}
+                    className="self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    Remove photo
+                  </button>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Your photo is required to join. Up to 5MB.</p>
+                )}
+                {errors.avatar && <p className="text-xs text-destructive">{errors.avatar}</p>}
+              </div>
+
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarSelect}
+                disabled={loading}
+              />
+            </div>
+
+            <Field label={<>Display name <span className="font-normal text-muted-foreground">(optional)</span></>} htmlFor="signup-name" error={errors.displayName && touchedFields.displayName ? errors.displayName : null}>
+              <Input
+                ref={nameInputRef}
+                id="signup-name"
+                type="text"
+                placeholder="What should we call you?"
+                autoComplete="name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                onBlur={() => setTouchedFields(p => ({ ...p, displayName: true }))}
+                className={field}
+                disabled={loading}
+              />
+            </Field>
+
+            <Field label="Email" htmlFor="signup-email" error={errors.email && touchedFields.email ? errors.email : null}>
+              <Input
+                ref={emailInputRef}
+                id="signup-email"
+                type="email"
+                placeholder="name@example.com"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onBlur={() => setTouchedFields(p => ({ ...p, email: true }))}
+                className={cn(field, errors.email && 'border-destructive')}
+                disabled={loading}
+                aria-invalid={!!errors.email}
+              />
+              {email && touchedFields.email && !errors.email && (
+                <p className="flex items-center gap-1 pt-0.5 text-xs text-success">
+                  <Check className="h-3 w-3" /> Looks good!
+                </p>
+              )}
+            </Field>
+
+            <Field label="Password" htmlFor="signup-password" error={errors.password && touchedFields.password ? errors.password : null}>
+              <PasswordInput
+                id="signup-password"
+                inputRef={passwordInputRef}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Create a strong password"
+                show={showPassword}
+                onToggle={() => setShowPassword(v => !v)}
+                disabled={loading}
+                autoComplete="new-password"
+                error={!!errors.password}
+              />
+              <PasswordStrengthMeter password={password} />
+            </Field>
+
+            <Button type="submit" className={primaryBtn} disabled={loading}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {loading ? 'Creating account…' : 'Create account'}
+            </Button>
+
             <button
               type="button"
-              onClick={() => avatarInputRef.current?.click()}
-              disabled={loading}
-              className="relative group"
-              title="Choose a profile photo"
+              onClick={() => setAuthMode('phone-request')}
+              className="flex w-full items-center justify-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
-              <div className={cn(
-                'h-24 w-24 rounded-full overflow-hidden border-2 border-dashed transition-colors flex items-center justify-center',
-                errors.avatar ? 'border-destructive' : avatarPreview ? 'border-primary' : 'border-border group-hover:border-primary/50 bg-surface'
-              )}>
-                {avatarPreview ? (
-                  <img src={avatarPreview} alt="Profile preview" className="h-full w-full object-cover" />
-                ) : (
-                  <User className="h-8 w-8 text-muted-foreground" />
-                )}
-              </div>
-              <div className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full bg-primary text-white flex items-center justify-center shadow-md">
-                <Camera className="h-4 w-4" />
-              </div>
+              <Phone className="h-4 w-4" /> Sign up with phone
             </button>
-            <input
-              ref={avatarInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleAvatarSelect}
-              disabled={loading}
-            />
-            <p className="text-xs text-muted-foreground">
-              {avatarPreview ? (
-                <button type="button" onClick={() => { setAvatarFile(null); setAvatarPreview(null); }} className="text-xs text-muted-foreground underline hover:text-foreground transition-colors">
-                  Remove photo
-                </button>
-              ) : (
-                'Your photo is required to join'
-              )}
-            </p>
-            {errors.avatar && (
-              <p className="text-xs text-destructive flex items-center gap-1"><X className="h-3 w-3" /> {errors.avatar}</p>
-            )}
-          </div>
+          </form>
 
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Display name <span className="text-muted-foreground font-normal">(optional)</span></Label>
-            <div className="relative">
-              <Users className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input ref={nameInputRef} type="text" placeholder="What should we call you?" value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)} onBlur={() => setTouchedFields(p => ({ ...p, displayName: true }))}
-                className={cn(inputField, 'pl-10')}
-                disabled={loading} />
-            </div>
-            {errors.displayName && touchedFields.displayName && (
-              <p className="text-xs text-destructive flex items-center gap-1"><X className="h-3 w-3" /> {errors.displayName}</p>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Email</Label>
-            <div className="relative">
-              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input ref={emailInputRef} type="email" placeholder="name@example.com" value={email}
-                onChange={(e) => setEmail(e.target.value)} onBlur={() => setTouchedFields(p => ({ ...p, email: true }))}
-                className={cn(inputField, 'pl-10', errors.email && 'border-destructive')}
-                disabled={loading} />
-            </div>
-            {errors.email && touchedFields.email ? (
-              <p className="text-xs text-destructive flex items-center gap-1"><X className="h-3 w-3" /> {errors.email}</p>
-            ) : email && touchedFields.email && !errors.email ? (
-              <p className="text-xs text-success flex items-center gap-1"><Check className="h-3 w-3" /> Looks good!</p>
-            ) : null}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Password</Label>
-            <div className="relative">
-              <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input ref={passwordInputRef} type={showPassword ? 'text' : 'password'} placeholder="Create a strong password" value={password}
-                onChange={(e) => setPassword(e.target.value)} onBlur={() => setTouchedFields(p => ({ ...p, password: true }))}
-                className={cn(inputField, 'pl-10 pr-11', errors.password && 'border-destructive')}
-                disabled={loading} />
-              <button type="button" onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1.5">
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-
-            {password && (
-              <div className="space-y-2 pt-1">
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1 flex-1">
-                    {[1, 2, 3, 4, 5].map(i => (
-                      <div key={i}
-                        className={cn('h-1.5 flex-1 rounded-full transition-colors',
-                          getPasswordStrength(password).score >= i
-                            ? getPasswordStrength(password).color
-                            : 'bg-surface-3')} />
-                    ))}
-                  </div>
-                  <span className={cn('text-xs font-medium min-w-[70px] text-right',
-                    getPasswordStrength(password).score >= 4 ? 'text-success'
-                      : getPasswordStrength(password).score >= 2 ? 'text-warning'
-                      : 'text-destructive')}>
-                    {getPasswordStrength(password).label}
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    { check: password.length >= 6, text: '6+ chars' },
-                    { check: /[A-Z]/.test(password), text: 'Uppercase' },
-                    { check: /[0-9]/.test(password), text: 'Number' },
-                    { check: /[^A-Za-z0-9]/.test(password), text: 'Symbol' },
-                  ].map(req => (
-                    <span key={req.text}
-                      className={cn('text-[11px] px-2 py-0.5 rounded-full border font-medium transition-colors',
-                        req.check ? 'border-success/40 text-success bg-surface-2' : 'border-border text-muted-foreground')}>
-                      {req.check ? <Check className="h-2.5 w-2.5 inline mr-0.5" /> : null}{req.text}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {errors.password && touchedFields.password && (
-              <p className="text-xs text-destructive flex items-center gap-1"><X className="h-3 w-3" /> {errors.password}</p>
-            )}
-          </div>
-
-          <Button type="submit" className={cn(primaryBtn, 'w-full')} disabled={loading}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {loading ? 'Creating account…' : 'Create Account'}
-          </Button>
-
-          <button type="button" onClick={() => setAuthMode('phone-request')}
-            className="w-full h-12 rounded-xl border border-border bg-surface hover:bg-surface-2 text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
-            <Phone className="h-4 w-4 text-primary" />
-            Sign up with Phone
-          </button>
-        </form>
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            Already have an account?{' '}
+            <button type="button" onClick={() => switchTab('login')} className="font-semibold text-primary transition-colors hover:underline">
+              Log in
+            </button>
+          </p>
+        </>
       )}
     </div>
   );
 
   return (
-    <div className="min-h-dvh lg:flex bg-background">
-      {/* Desktop hero panel */}
-      <div className="hidden lg:flex lg:w-[44%] lg:max-w-[640px] flex-col shrink-0 bg-gradient-to-b from-primary/[0.09] via-background to-accent/[0.06] border-r border-border/60">
-        <div className="px-10 pt-9">
-          <BrandLogo className="h-11" />
-        </div>
+    <div className="min-h-dvh bg-background lg:flex">
+      {/* Desktop editorial visual panel */}
+      <aside className="relative hidden overflow-hidden bg-[#0d0d12] lg:block lg:w-[56%]">
+        <img
+          src={HERO_IMAGE}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 h-full w-full object-cover object-[center_35%] opacity-95 saturate-[0.92]"
+        />
+        <div className="absolute inset-0 bg-black/30" />
+        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/70 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-t from-black/95 via-black/45 to-transparent" />
 
-        <div className="flex-1 flex flex-col justify-center px-10 py-8">
-          <h1 className="text-[2.9rem] leading-[1.06] font-black tracking-tight">
-            Post. Chat.<br /><span className="text-primary">Reel.</span>
-          </h1>
-          <p className="mt-5 text-lg text-muted-foreground leading-relaxed max-w-md">
-            Twibsers is where you and your people hang out — share moments, drop reels and keep the conversation going.
-          </p>
+        <div className="relative z-10 flex h-full flex-col justify-between p-8 sm:p-10 xl:p-12">
+          <BrandLogo className="h-9" />
 
-          <ul className="mt-9 space-y-5 max-w-md">
-            <li className="flex items-center gap-3.5">
-              <span className="h-11 w-11 shrink-0 rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20 flex items-center justify-center">
-                <ImageIcon className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold">Share your moments</p>
-                <p className="text-sm text-muted-foreground">Photos and reels that tell your story.</p>
-              </div>
-            </li>
-            <li className="flex items-center gap-3.5">
-              <span className="h-11 w-11 shrink-0 rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20 flex items-center justify-center">
-                <MessageCircle className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold">Right where your friends are</p>
-                <p className="text-sm text-muted-foreground">Like, comment and chat in real time.</p>
-              </div>
-            </li>
-            <li className="flex items-center gap-3.5">
-              <span className="h-11 w-11 shrink-0 rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20 flex items-center justify-center">
-                <Zap className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold">Discover your space</p>
-                <p className="text-sm text-muted-foreground">Stories, groups and interests made for you.</p>
-              </div>
-            </li>
-            <li className="flex items-center gap-3.5">
-              <span className="h-11 w-11 shrink-0 rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20 flex items-center justify-center">
-                <ShieldCheck className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold">Private by default</p>
-                <p className="text-sm text-muted-foreground">Your account and your audience, fully in your control.</p>
-              </div>
-            </li>
-          </ul>
-        </div>
+          <div>
+            <div className="mb-5 flex gap-1.5" aria-hidden>
+              <span className="h-[3px] w-9 rounded-full bg-white/90" />
+              <span className="h-[3px] w-9 rounded-full bg-white/25" />
+              <span className="h-[3px] w-9 rounded-full bg-white/25" />
+            </div>
+            <h1 className="max-w-md text-[2rem] font-semibold leading-[1.08] tracking-tight text-white xl:text-[2.35rem]">
+              Your world,<br />
+              <span className="text-white/55">in one place.</span>
+            </h1>
+            <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-white/70">
+              Share the moments, people and conversations that matter.
+            </p>
 
-        <div className="border-t border-border/60 px-10 py-6">
-          <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
-            Join <span className="font-semibold text-foreground">thousands of people</span> already sharing their world on Twibsers.
-          </p>
+            <div className="mt-7 flex items-center gap-3">
+              <span className="h-px w-10 bg-primary" aria-hidden />
+              <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-white/45">
+                © {new Date().getFullYear()} Twibsers
+              </span>
+            </div>
+          </div>
         </div>
-      </div>
+      </aside>
 
       {/* Auth column */}
-      <div className="flex-1 min-w-0 flex flex-col items-center justify-center px-4 sm:px-6 py-10 lg:py-14">
-        <div className="w-full max-w-[420px]">
-          {/* Mobile brand header */}
-          <div className="lg:hidden flex flex-col items-center mb-8">
-            <BrandLogo className="h-12" />
-            <p className="mt-3 text-center text-sm text-muted-foreground max-w-[300px] leading-relaxed">
-              Post. Chat. Reel. — your people are here.
+      <main className="flex min-h-dvh flex-1 flex-col lg:min-h-0">
+        {/* Mobile photo header */}
+        <div className="relative h-36 overflow-hidden bg-black sm:h-44 lg:hidden">
+          <img
+            src={HERO_IMAGE}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 h-full w-full scale-105 object-cover object-[center_25%]"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-black/30 to-black/30" />
+          <div className="absolute inset-x-0 bottom-0 px-5 pb-4">
+            <p className="text-[15px] font-semibold text-white">
+              Your world,<span className="font-normal text-white/55"> in one place.</span>
             </p>
+            <p className="mt-0.5 text-xs text-white/60">Share the moments, people and conversations that matter.</p>
           </div>
+        </div>
 
-          <div className="relative bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/25 overflow-hidden">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent" />
+        <div className="flex flex-1 flex-col items-center justify-center px-4 py-10 sm:px-6 lg:px-10 lg:py-16">
+          <div className="w-full max-w-[420px]">
+            {/* Mobile brand mark */}
+            <div className="mb-8 flex justify-center lg:hidden">
+              <BrandLogo className="h-9" />
+            </div>
+
             {(authMode === 'otp-request' || authMode === 'otp-verify') && renderOtpFlow()}
             {(authMode === 'phone-request' || authMode === 'phone-verify') && renderPhoneFlow()}
             {authMode === 'forgot-password' && renderForgotPasswordFlow()}
             {authMode === 'reset-password' && renderResetPasswordFlow()}
             {authMode === 'login' && renderAuthForm()}
+
+            <p className="mt-6 text-center text-[11px] leading-relaxed text-muted-foreground/70 sm:text-xs">
+              By continuing you agree to our{' '}
+              <a href="/terms" className="font-medium text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground">
+                Terms
+              </a>
+              {' '}and{' '}
+              <a href="/privacy" className="font-medium text-muted-foreground underline decoration-border underline-offset-2 transition-colors hover:text-foreground">
+                Privacy Policy
+              </a>.
+            </p>
           </div>
-
-          {(authMode === 'login' || authMode === 'signup') && (
-            <div className="mt-3.5 bg-card border border-border rounded-2xl p-4 text-center text-sm text-muted-foreground">
-              {activeTab === 'login' ? (
-                <>
-                  Don't have an account?{' '}
-                  <button type="button" onClick={() => switchTab('signup')} className="text-primary font-semibold hover:underline">Sign up</button>
-                </>
-              ) : (
-                <>
-                  Already have an account?{' '}
-                  <button type="button" onClick={() => switchTab('login')} className="text-primary font-semibold hover:underline">Log in</button>
-                </>
-              )}
-            </div>
-          )}
-
-          <p className="text-center text-xs text-muted-foreground mt-5 leading-relaxed">
-            By continuing you agree to our{' '}
-            <a href="/terms" className="text-primary font-medium hover:underline">Terms</a>
-            {' '}and{' '}
-            <a href="/privacy" className="text-primary font-medium hover:underline">Privacy Policy</a>.
-          </p>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

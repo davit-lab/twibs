@@ -17,6 +17,7 @@ export default function Index() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isRefreshingFeed, setIsRefreshingFeed] = useState(false);
+  const [activeFeedType, setActiveFeedType] = useState<'all' | 'following' | 'interests'>('all');
 
   // When the create dialog navigates here to compose a post, focus the composer
   useEffect(() => {
@@ -71,16 +72,19 @@ export default function Index() {
         >
           <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[minmax(0,600px)_1fr] gap-8 px-4 pb-24 lg:pb-8">
             <div className="mx-auto w-full max-w-xl">
-              <div className="border-b border-border">
-                <StoriesBar />
-              </div>
-              <div className="p-4 border-b border-border">
-                <PostComposer onPostCreated={handlePostCreated} />
-              </div>
-              <Feed
-                refreshTrigger={refreshTrigger}
-                onRefreshComplete={() => setIsRefreshingFeed(false)}
-              />
+<div className="border-b border-border">
+                  <StoriesBar />
+                </div>
+                {activeFeedType !== 'interests' && (
+                  <div className="p-4 border-b border-border">
+                    <PostComposer onPostCreated={handlePostCreated} />
+                  </div>
+                )}
+                <Feed
+                  refreshTrigger={refreshTrigger}
+                  onRefreshComplete={() => setIsRefreshingFeed(false)}
+                  onFeedTypeChange={setActiveFeedType}
+                />
             </div>
 
             <aside className="hidden lg:block pt-2">

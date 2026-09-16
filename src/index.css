@@ -573,9 +573,6 @@
   transition: stroke-dashoffset 420ms cubic-bezier(.2,.9,.2,1), stroke 280ms ease, filter 300ms ease;
   will-change: stroke-dashoffset, stroke, filter;
 }
-.progress-ring--gradient { /* fallback color when using gradient stroke */
-  color: hsl(var(--primary));
-}
 .progress-ring__fg.text-amber-500 { color: rgba(250, 204, 21, 1); }
 .progress-ring__fg.text-destructive { color: hsl(var(--destructive)); }
 .progress-ring .tabular-nums { font-variant-numeric: tabular-nums; }

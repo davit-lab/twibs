@@ -15,12 +15,14 @@ interface CountryCodeSelectorProps {
   value: string;
   onChange: (country: Country) => void;
   disabled?: boolean;
+  className?: string;
 }
 
 export default function CountryCodeSelector({
   value,
   onChange,
   disabled = false,
+  className,
 }: CountryCodeSelectorProps) {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -65,7 +67,7 @@ export default function CountryCodeSelector({
           role="combobox"
           aria-expanded={open}
           disabled={disabled}
-          className="w-[120px] justify-between px-3 font-normal"
+          className={cn('w-[120px] justify-between px-3 font-normal', className)}
         >
           <span className="flex items-center gap-2">
             <span className="text-lg">{selectedCountry?.flag}</span>

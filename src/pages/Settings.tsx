@@ -33,7 +33,7 @@ import {
   LogOut, Trash2, Key, AlertTriangle, Check, Mail, Upload,
   UserX, ChevronRight, PlayCircle,
   MessageSquare, Accessibility, BadgeCheck, Heart,
-  Sparkles, ShieldCheck, KeyRound, Megaphone,
+  Sparkles, ShieldCheck, KeyRound, Megaphone, Target,
   Info, HelpCircle, LifeBuoy, FileText, CalendarDays, Database,
   Type, SlidersHorizontal, BellOff, ExternalLink, CheckCircle2, MoonStar, Ban, BookMarked,
   RotateCcw, Ghost
@@ -137,7 +137,7 @@ const NAV_GROUPS: { label: string; items: { id: SettingsSection; label: string; 
     label: 'Profile',
     items: [
       { id: 'account', label: 'Account', icon: User },
-      { id: 'interests', label: 'Interests', icon: Sparkles },
+      { id: 'interests', label: 'Interests', icon: Target },
       { id: 'professional', label: 'Professional', icon: Megaphone },
     ],
   },

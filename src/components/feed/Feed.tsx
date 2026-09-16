@@ -73,6 +73,7 @@ interface FeedProps {
   userId?: string;
   refreshTrigger?: number;
   onRefreshComplete?: () => void;
+  onFeedTypeChange?: (type: FeedType) => void;
 }
 
 const POST_SELECT = `
@@ -103,7 +104,7 @@ const POST_SELECT = `
   )
 `;
 
-export default function Feed({ userId, refreshTrigger, onRefreshComplete }: FeedProps) {
+export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeedTypeChange }: FeedProps) {
   const { user } = useAuth();
   const { data: mutedIds = [] } = useMutedUsers();
   const { data: hiddenPostIds = [] } = useHiddenFeedPosts();
@@ -124,6 +125,10 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete }: Feed
   const PAGE_SIZE = 10;
   const segmentedRef = useRef<HTMLDivElement | null>(null);
   const showFeedTabs = !userId && user;
+
+  useEffect(() => {
+    onFeedTypeChange?.(feedType);
+  }, [feedType, onFeedTypeChange]);
 
   // Catch Me Up: show a summary when the user hasn't opened the app in 3+ days.
   useEffect(() => {

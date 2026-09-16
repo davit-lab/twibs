@@ -39,6 +39,7 @@ import {
   Bot,
   ExternalLink,
   Pencil,
+  MoreHorizontal,
 } from 'lucide-react';
 import {
   Dialog,
@@ -78,6 +79,10 @@ interface PostComposerProps {
 const MAX_MEDIA = 4;
 const MAX_CHARS = 5000;
 const DRAFT_KEY = 'post-draft-v1';
+
+const TOOL_BUTTON =
+  'inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/10 disabled:opacity-40 sm:h-9 sm:w-9';
+const TOOL_ICON = 'h-[18px] w-[18px] sm:h-5 sm:w-5';
 
 const visibilityOptions = [
   { value: 'public', label: 'Everyone', icon: Globe, description: 'Anyone can see' },
@@ -405,7 +410,7 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
         ? "border-primary/25 bg-background shadow-xl shadow-primary/10 ring-4 ring-primary/[0.06]"
         : "border-transparent hover:border-border/70 hover:bg-muted/30"
     )}>
-      <div className="flex gap-3 p-4">
+      <div className="flex gap-3 p-3 sm:p-4">
         <Avatar className="h-11 w-11 flex-shrink-0 ring-2 ring-primary/20">
           <AvatarImage src={profile?.avatar_url || undefined} />
           <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white text-sm font-medium">
@@ -420,7 +425,7 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
             value={content}
             onChange={(e) => setContent(e.target.value)}
             onFocus={() => setIsFocused(true)}
-            className="min-h-[44px] border-0 bg-transparent resize-none focus-visible:ring-0 p-0 text-[15px] placeholder:text-muted-foreground/60 overflow-hidden"
+            className="min-h-[40px] sm:min-h-[44px] border-0 bg-transparent resize-none focus-visible:ring-0 p-0 text-sm sm:text-[15px] placeholder:text-muted-foreground/60 overflow-hidden"
             rows={1}
           />
 
@@ -528,8 +533,8 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
 
           {/* Actions Bar */}
           {showActions && (
-            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/40">
-              <div className="flex items-center gap-0.5">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-x-1.5 gap-y-1 pt-3 border-t border-border/40">
+              <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -543,18 +548,18 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
                   onClick={() => fileInputRef.current?.click()}
                   disabled={mediaFiles.length >= MAX_MEDIA || isSubmitting}
                   title="Add photo or video"
-                  className="p-2.5 rounded-full text-primary hover:bg-primary/10 transition-colors disabled:opacity-40"
+                  className={cn(TOOL_BUTTON)}
                 >
-                  <ImageIcon className="h-5 w-5" />
+                  <ImageIcon className={TOOL_ICON} />
                 </button>
                 <button
                   type="button"
                   onClick={() => setCameraOpen(true)}
                   disabled={mediaFiles.length >= MAX_MEDIA || isSubmitting}
                   title="Take photo or record video"
-                  className="p-2.5 rounded-full text-primary hover:bg-primary/10 transition-colors disabled:opacity-40"
+                  className={cn(TOOL_BUTTON)}
                 >
-                  <Camera className="h-5 w-5" />
+                  <Camera className={TOOL_ICON} />
                 </button>
                 <div className="relative">
                   <button
@@ -562,9 +567,9 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
                     onClick={() => { setShowGifPicker(v => !v); setShowEmojiPicker(false); }}
                     disabled={isSubmitting}
                     title="Add GIF"
-                    className="p-2.5 rounded-full text-primary hover:bg-primary/10 transition-colors disabled:opacity-40"
+                    className={cn(TOOL_BUTTON)}
                   >
-                    <Film className="h-5 w-5" />
+                    <Film className={TOOL_ICON} />
                   </button>
                   {showGifPicker && (
                     <GifPicker
@@ -580,9 +585,9 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
                     onClick={() => { setShowEmojiPicker(v => !v); setShowGifPicker(false); }}
                     disabled={isSubmitting}
                     title="Add emoji"
-                    className="p-2.5 rounded-full text-primary hover:bg-primary/10 transition-colors disabled:opacity-40"
+                    className={cn(TOOL_BUTTON)}
                   >
-                    <Smile className="h-5 w-5" />
+                    <Smile className={TOOL_ICON} />
                   </button>
                   {showEmojiPicker && (
                     <EmojiPicker
@@ -596,20 +601,57 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
                   )}
                 </div>
 
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      title="More options"
+                      aria-label="More options"
+                      className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary sm:hidden"
+                    >
+                      <MoreHorizontal className="h-[18px] w-[18px]" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" side="top" sideOffset={8} className="w-60 rounded-xl">
+                    <DropdownMenuItem
+                      onClick={() => setExpiresIn24h(v => !v)}
+                      className="gap-2.5 py-2.5"
+                    >
+                      <Timer className={cn("h-4 w-4", expiresIn24h ? "text-primary" : "text-muted-foreground")} />
+                      <div className="flex-1">
+                        <p className="font-medium text-sm">Post expires in 24 hours</p>
+                        <p className="text-xs text-muted-foreground">Disappears from your profile</p>
+                      </div>
+                      {expiresIn24h && <Check className="h-4 w-4 text-primary" />}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => { setContextDraft(contextMeta); setContextOpen(true); }}
+                      className="gap-2.5 py-2.5"
+                    >
+                      <Info className={cn("h-4 w-4", Object.keys(contextMeta).length > 0 ? "text-primary" : "text-muted-foreground")} />
+                      <div className="flex-1">
+                        <p className="font-medium text-sm">Add context</p>
+                        <p className="text-xs text-muted-foreground">Share more about your post</p>
+                      </div>
+                      {Object.keys(contextMeta).length > 0 && <Check className="h-4 w-4 text-primary" />}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
                 <button
                   type="button"
                   onClick={() => setExpiresIn24h(v => !v)}
                   disabled={isSubmitting}
                   title="Post expires from your profile in 24 hours"
                   className={cn(
-                    "flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[13px] font-medium transition-colors",
+                    "hidden sm:inline-flex flex-shrink-0 items-center gap-1 whitespace-nowrap rounded-full h-8 sm:h-9 px-2.5 text-[13px] font-medium transition-colors",
                     expiresIn24h
                       ? "bg-primary/15 text-primary"
                       : "text-muted-foreground hover:bg-accent/10 hover:text-accent"
                   )}
                 >
                   <Timer className={cn("h-4 w-4", expiresIn24h && "fill-primary/20")} />
-                  <span className="hidden sm:inline">{expiresIn24h ? 'Expires in 24h' : 'Temporary'}</span>
+                  <span>{expiresIn24h ? 'Expires in 24h' : 'Temporary'}</span>
                 </button>
 
                 <button
@@ -618,20 +660,25 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
                   disabled={isSubmitting}
                   title="Add context to your post"
                   className={cn(
-                    "flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[13px] font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors",
+                    "hidden sm:inline-flex flex-shrink-0 items-center gap-1 whitespace-nowrap rounded-full h-8 sm:h-9 px-2.5 text-[13px] font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors",
                     Object.keys(contextMeta).length > 0 && "text-primary bg-primary/10"
                   )}
                 >
                   <Info className="h-4 w-4" />
-                  <span className="hidden sm:inline">Context</span>
+                  <span>Context</span>
                 </button>
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm text-primary hover:bg-primary/10 transition-colors">
+                    <button
+                      type="button"
+                      title={`Audience: ${selectedVisibility.label}`}
+                      aria-label={`Audience: ${selectedVisibility.label}`}
+                      className="inline-flex h-8 sm:h-9 flex-shrink-0 items-center gap-1 rounded-full px-2 sm:px-3 text-primary transition-colors hover:bg-primary/10"
+                    >
                       <selectedVisibility.icon className="h-4 w-4" />
                       <span className="hidden sm:inline text-[13px]">{selectedVisibility.label}</span>
-                      <ChevronDown className="h-3 w-3" />
+                      <ChevronDown className="hidden sm:inline h-3 w-3" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-52 rounded-xl">
@@ -655,16 +702,9 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
                 </DropdownMenu>
               </div>
 
-              <div className="flex items-center gap-3">
-                <div className="relative w-8 h-8 progress-ring">
-                  <svg className="w-8 h-8 -rotate-90" viewBox="0 0 32 32" aria-hidden>
-                    <defs>
-                      <linearGradient id="post-progress-grad" x1="0%" x2="100%">
-                        <stop offset="0%" stopColor="hsl(var(--primary))" />
-                        <stop offset="100%" stopColor="hsl(var(--accent))" />
-                      </linearGradient>
-                    </defs>
-
+              <div className="ml-auto flex flex-shrink-0 items-center gap-1 sm:gap-1.5">
+                <div className="relative h-7 w-7 sm:h-8 sm:w-8 progress-ring">
+                  <svg className="h-7 w-7 sm:h-8 sm:w-8 -rotate-90" viewBox="0 0 32 32" aria-hidden>
                     <circle
                       cx="16"
                       cy="16"
@@ -680,6 +720,7 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
                       cy="16"
                       r="13.5"
                       fill="none"
+                      stroke="currentColor"
                       strokeWidth="3.5"
                       strokeLinecap="round"
                       strokeDasharray={2 * Math.PI * 13.5}
@@ -690,9 +731,8 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
                           ? "text-destructive"
                           : charCount > MAX_CHARS - 200
                           ? "text-amber-500"
-                          : "progress-ring--gradient"
+                          : "text-primary"
                       )}
-                      stroke={isOverLimit || charCount > MAX_CHARS - 200 ? 'currentColor' : 'url(#post-progress-grad)'}
                     />
                   </svg>
                   {charCount > MAX_CHARS - 200 && (
@@ -708,7 +748,7 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
                   onClick={handleSubmit}
                   disabled={!canPost}
                   className={cn(
-                    "rounded-full h-9 px-5 font-semibold transition-all duration-300",
+                    "rounded-full h-8 px-3.5 flex-shrink-0 font-semibold transition-all duration-300 sm:h-9 sm:px-4",
                     justPosted && "bg-primary text-white"
                   )}
                 >

@@ -57,17 +57,12 @@ export default function NotificationDropdown({ className }: NotificationDropdown
         className="w-[360px] max-w-[calc(100vw-1.5rem)] p-0 rounded-3xl border-border/60 shadow-2xl shadow-black/20 bg-popover overflow-hidden"
       >
         {/* Header */}
-        <div className="px-4 pt-4 pb-3">
+        <div className="border-b border-border/60 px-4 pb-3 pt-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <span className="relative flex h-2.5 w-2.5">
-                {unreadCount > 0 && (
-                  <>
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-60" />
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-destructive" />
-                  </>
-                )}
-              </span>
+              {unreadCount > 0 && (
+                <span aria-hidden="true" className="h-2 w-2 rounded-full bg-primary" />
+              )}
               <h3 className="text-[15px] font-bold tracking-tight">
                 Notifications
               </h3>
@@ -92,44 +87,50 @@ export default function NotificationDropdown({ className }: NotificationDropdown
         </div>
 
         {/* Filter tabs */}
-        <div className="px-4 pb-2.5">
-          <div className="flex items-center gap-1 p-1 bg-surface-2 rounded-full">
+        <div className="border-b border-border/60 px-4">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => setFilter('all')}
               className={cn(
-                'flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200',
-                filter === 'all'
-                  ? 'bg-foreground text-background shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
+                'relative whitespace-nowrap px-3 py-2.5 text-[13px] font-semibold transition-colors',
+                filter === 'all' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
               )}
             >
               All
               {notifications.length > 0 && (
-                <span className={cn(
-                  'text-[10px] font-bold min-w-[15px] h-4 px-1 rounded-full flex items-center justify-center tabular-nums',
-                  filter === 'all' ? 'bg-background/20 text-background' : 'bg-surface-3 text-muted-foreground'
-                )}>
+                <span
+                  className={cn(
+                    'ml-1.5 text-[11px] tabular-nums',
+                    filter === 'all' ? 'text-primary' : 'text-muted-foreground/50'
+                  )}
+                >
                   {notifications.length}
                 </span>
+              )}
+              {filter === 'all' && (
+                <span aria-hidden="true" className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-primary" />
               )}
             </button>
             <button
               onClick={() => setFilter('unread')}
               className={cn(
-                'flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200',
-                filter === 'unread'
-                  ? 'bg-foreground text-background shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
+                'relative whitespace-nowrap px-3 py-2.5 text-[13px] font-semibold transition-colors',
+                filter === 'unread' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
               )}
             >
               Unread
               {unreadCount > 0 && (
-                <span className={cn(
-                  'text-[10px] font-bold min-w-[15px] h-4 px-1 rounded-full flex items-center justify-center tabular-nums',
-                  filter === 'unread' ? 'bg-background/20 text-background' : 'bg-surface-3 text-muted-foreground'
-                )}>
+                <span
+                  className={cn(
+                    'ml-1.5 text-[11px] tabular-nums',
+                    filter === 'unread' ? 'text-primary' : 'text-muted-foreground/50'
+                  )}
+                >
                   {unreadCount}
                 </span>
+              )}
+              {filter === 'unread' && (
+                <span aria-hidden="true" className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-primary" />
               )}
             </button>
           </div>
@@ -152,15 +153,18 @@ export default function NotificationDropdown({ className }: NotificationDropdown
           ) : shown.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
               <div className="relative mb-5">
-                <div className="w-16 h-16 rounded-2xl bg-surface-2 flex items-center justify-center">
-                  <Bell className="h-7 w-7 text-muted-foreground/60" strokeWidth={1.5} />
-                </div>
-                <span className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow-md shadow-emerald-500/25 ring-2 ring-popover">
-                  <CheckCheck className="h-3.5 w-3.5 text-white" />
-                </span>
+                <img
+                  src="/imigelogo.png"
+                  alt="Twibsers"
+                  className="h-9 w-auto object-contain opacity-90"
+                />
+                <span
+                  aria-hidden="true"
+                  className="absolute -right-2 -top-1 h-2.5 w-2.5 rounded-full bg-[hsl(var(--primary))]"
+                />
               </div>
               <p className="text-sm font-bold">You're all caught up</p>
-              <p className="text-xs text-muted-foreground mt-1 max-w-[200px]">
+              <p className="text-xs text-muted-foreground mt-1 max-w-[220px]">
                 {filter === 'unread'
                   ? 'No unread notifications right now.'
                   : 'New activity will appear here.'}
