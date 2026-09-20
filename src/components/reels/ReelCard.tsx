@@ -77,6 +77,11 @@ export default function ReelCard({
   const pressStartRef = useRef<{ x: number; y: number } | null>(null);
   const longPressActiveRef = useRef(false);
   const heartCleanupTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  const onViewIncrementRef = useRef(onViewIncrement);
+
+  useEffect(() => {
+    onViewIncrementRef.current = onViewIncrement;
+  }, [onViewIncrement]);
 
   useEffect(() => {
     if (!user || !reel.user_id || user.id === reel.user_id) return;
@@ -116,18 +121,16 @@ export default function ReelCard({
     const video = videoRef.current;
     if (!video) return;
     if (isActive) {
-      video.muted = true;
-      video.play().catch(() => {});
       if (!lastActiveRef.current) {
         lastActiveRef.current = true;
-        onViewIncrement();
+        onViewIncrementRef.current();
       }
     } else {
       video.pause();
       video.currentTime = 0;
       lastActiveRef.current = false;
     }
-  }, [isActive, onViewIncrement]);
+  }, [isActive]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -290,7 +293,7 @@ export default function ReelCard({
         src={reel.video_url}
         className="absolute inset-0 h-full w-full object-cover"
         loop
-        muted
+        muted={isMuted}
         playsInline
         autoPlay={false}
         preload={preload}

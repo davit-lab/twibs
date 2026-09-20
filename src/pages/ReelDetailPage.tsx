@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useReelSaves, Reel } from '@/hooks/useReels';
+import { persistReelLike, useReelSaves, Reel } from '@/hooks/useReels';
 import { useStories } from '@/hooks/useStories';
 import { useToast } from '@/hooks/use-toast';
 import ReelCard from '@/components/reels/ReelCard';
@@ -29,8 +29,7 @@ export default function ReelDetailPage() {
   const [paused, setPaused] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [showShare, setShowShare] = useState(false);
-  const [isLiked, setIsLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(0);
+  const likePendingRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,8 +78,6 @@ export default function ReelDetailPage() {
             },
             is_liked: likedSet.has(data.id),
           } as Reel);
-          setIsLiked(likedSet.has(data.id));
-          setLikeCount(data.like_count ?? 0);
         }
       } catch (e) {
         console.error('Error fetching reel:', e);
@@ -96,7 +93,7 @@ export default function ReelDetailPage() {
   const incrementView = useCallback(async () => {
     if (!reelId) return;
     try {
-      await supabase.rpc('increment_reel_views' as any, { reel_id_input: reelId });
+      await supabase.rpc('increment_reel_views', { reel_id_input: reelId });
     } catch {
       // silent
     }
@@ -112,21 +109,32 @@ export default function ReelDetailPage() {
       return;
     }
     if (!reel) return;
+    if (likePendingRef.current) return;
+    likePendingRef.current = true;
+    const previous = { isLiked: Boolean(reel.is_liked), likeCount: reel.like_count };
+    const shouldLike = !previous.isLiked;
+    setReel((current) => current && current.id === reel.id ? {
+      ...current,
+      is_liked: shouldLike,
+      like_count: Math.max(0, current.like_count + (shouldLike ? 1 : -1)),
+    } : current);
     try {
-      if (isLiked) {
-        const { error } = await supabase.from('reel_likes').delete().eq('reel_id', reel.id).eq('user_id', user.id);
-        if (error) throw error;
-        setIsLiked(false);
-        setLikeCount(c => Math.max(0, c - 1));
-      } else {
-        const { error } = await supabase.from('reel_likes').insert({ reel_id: reel.id, user_id: user.id });
-        if (error && !error.message?.includes('duplicate key')) throw error;
-        setIsLiked(true);
-        setLikeCount(c => c + 1);
-      }
+      const result = await persistReelLike(reel.id, user.id, shouldLike);
+      setReel((current) => current && current.id === reel.id ? {
+        ...current,
+        is_liked: result.isLiked,
+        like_count: result.likeCount,
+      } : current);
     } catch (e) {
       console.error('Error liking reel:', e);
+      setReel((current) => current && current.id === reel.id ? {
+        ...current,
+        is_liked: previous.isLiked,
+        like_count: previous.likeCount,
+      } : current);
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to update like' });
+    } finally {
+      likePendingRef.current = false;
     }
   };
 

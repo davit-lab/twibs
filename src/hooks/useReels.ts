@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import { useToast } from '@/hooks/use-toast';
-import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { InfiniteData, useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export interface ReelOverlay {
   type: 'poll' | 'quiz' | 'qna' | 'library';
@@ -72,6 +72,7 @@ export interface UploadReelOptions {
 }
 
 type ReelCursor = { created_at: string; id: string } | { seen: string[]; offset: number } | null;
+type ReelPage = { reels: Reel[]; nextCursor: ReelCursor };
 
 const HOUR_MS = 3_600_000;
 const FORYOU_CANDIDATE_LIMIT = 600;
@@ -369,12 +370,67 @@ async function fetchReelsPage({
   return { reels, nextCursor };
 }
 
+interface ReelLikeResult {
+  isLiked: boolean;
+  likeCount: number;
+}
+
+// The unique (reel_id, user_id) constraint is the database authority. An
+// idempotent upsert makes a stale "like" safe, and reading the triggered count
+// afterwards lets the client reconcile without refetching the entire feed.
+export async function persistReelLike(
+  reelId: string,
+  userId: string,
+  shouldLike: boolean,
+): Promise<ReelLikeResult> {
+  if (shouldLike) {
+    const { error } = await supabase
+      .from('reel_likes')
+      .upsert({ reel_id: reelId, user_id: userId }, { onConflict: 'reel_id,user_id', ignoreDuplicates: true });
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from('reel_likes')
+      .delete()
+      .eq('reel_id', reelId)
+      .eq('user_id', userId);
+    if (error) throw error;
+  }
+
+  const { data, error } = await supabase
+    .from('reels')
+    .select('like_count')
+    .eq('id', reelId)
+    .single();
+  if (error) throw error;
+
+  return { isLiked: shouldLike, likeCount: data.like_count ?? 0 };
+}
+
+function updateCachedReel(
+  queryClient: ReturnType<typeof useQueryClient>,
+  reelId: string,
+  update: (reel: Reel) => Reel,
+) {
+  queryClient.setQueriesData<InfiniteData<ReelPage>>({ queryKey: ['reels'] }, (cached) => {
+    if (!cached) return cached;
+    return {
+      ...cached,
+      pages: cached.pages.map((page) => ({
+        ...page,
+        reels: page.reels.map((reel) => reel.id === reelId ? update(reel) : reel),
+      })),
+    };
+  });
+}
+
 export function useReels(feedType: ReelsFeedType = 'foryou', targetUserId?: string | null) {
   const { user } = useAuth();
   const { isEnabled } = useAppSettings();
   const { toast } = useToast();
   const [currentIndex, setCurrentIndex] = useState(0);
   const queryClient = useQueryClient();
+  const pendingLikeIdsRef = useRef(new Set<string>());
 
   const queryKey = ['reels', feedType, user?.id ?? null, targetUserId ?? null];
 
@@ -402,24 +458,44 @@ export function useReels(feedType: ReelsFeedType = 'foryou', targetUserId?: stri
       toast({ variant: 'destructive', title: 'Sign in required', description: 'Please sign in to like reels.' });
       return;
     }
-    const liked = reels.find(r => r.id === reelId);
-    if (!liked) return;
+    const reel = reels.find(r => r.id === reelId);
+    if (!reel) return;
+    // A double tap or a second action-button click can arrive before the feed
+    // refreshes. Only allow one mutation for a reel at a time.
+    if (pendingLikeIdsRef.current.has(reelId)) return;
+    pendingLikeIdsRef.current.add(reelId);
+    const previous = { isLiked: Boolean(reel.is_liked), likeCount: reel.like_count };
+    const shouldLike = !previous.isLiked;
+
+    updateCachedReel(queryClient, reelId, (current) => ({
+      ...current,
+      is_liked: shouldLike,
+      like_count: Math.max(0, current.like_count + (shouldLike ? 1 : -1)),
+    }));
 
     try {
-      if (liked.is_liked) {
-        await supabase.from('reel_likes').delete().eq('reel_id', reelId).eq('user_id', user.id);
-      } else {
-        await supabase.from('reel_likes').insert({ reel_id: reelId, user_id: user.id });
-      }
-      await queryClient.invalidateQueries({ queryKey: ['reels'] });
+      const result = await persistReelLike(reelId, user.id, shouldLike);
+      updateCachedReel(queryClient, reelId, (current) => ({
+        ...current,
+        is_liked: result.isLiked,
+        like_count: result.likeCount,
+      }));
     } catch (error) {
       console.error('Error liking reel:', error);
+      updateCachedReel(queryClient, reelId, (current) => ({
+        ...current,
+        is_liked: previous.isLiked,
+        like_count: previous.likeCount,
+      }));
+      toast({ variant: 'destructive', title: 'Could not update like', description: 'Please try again.' });
+    } finally {
+      pendingLikeIdsRef.current.delete(reelId);
     }
   }, [user, reels, queryClient, toast]);
 
   const incrementView = useCallback(async (reelId: string) => {
     try {
-      const { error } = await supabase.rpc('increment_reel_views' as any, { reel_id_input: reelId });
+      const { error } = await supabase.rpc('increment_reel_views', { reel_id_input: reelId });
       if (error) {
         const current = reels.find(r => r.id === reelId);
         if (current) {
@@ -502,7 +578,9 @@ export function useReels(feedType: ReelsFeedType = 'foryou', targetUserId?: stri
     reels,
     loading: infinite.isLoading,
     refreshing: infinite.isFetching,
-    error: infinite.error ? (infinite.error as any).message ?? String(infinite.error) : null,
+    error: infinite.error
+      ? (infinite.error instanceof Error ? infinite.error.message : String(infinite.error))
+      : null,
     fetchNextPage: infinite.fetchNextPage,
     hasNextPage: infinite.hasNextPage,
     isFetchingNextPage: infinite.isFetchingNextPage,
@@ -600,14 +678,14 @@ export function useReelSaves() {
       });
       return { previous };
     },
-    onError: (error: any, _reelId, context) => {
+    onError: (error, _reelId, context) => {
       if (context?.previous) {
         queryClient.setQueryData(['reel-saves', user?.id], context.previous);
       }
       toast({
         variant: 'destructive',
         title: 'Failed to update saved reels',
-        description: error?.message || 'Please try again.',
+        description: error instanceof Error ? error.message : 'Please try again.',
       });
     },
     onSettled: () => {
