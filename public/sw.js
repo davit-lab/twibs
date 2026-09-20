@@ -1,5 +1,5 @@
 /* Twibsers service worker — app shell cache for offline access */
-const CACHE = 'twibsers-shell-v2';
+const CACHE = 'twibsers-shell-v3';
 const SHELL = ['/', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -21,6 +21,11 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
 
   if (request.method !== 'GET') return;
+  // Third-party images (OpenLibrary, Supabase Storage, Unsplash, etc.) must be
+  // fetched by the browser directly. Handling them here can turn otherwise
+  // valid no-cors image responses into ERR_FAILED in production.
+  if (new URL(request.url).origin !== self.location.origin) return;
+
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -39,7 +44,7 @@ self.addEventListener('fetch', (event) => {
       (cached) =>
         cached ||
         fetch(request).then((response) => {
-          if (response.ok && new URL(request.url).origin === location.origin) {
+          if (response.ok) {
             const copy = response.clone();
             caches.open(CACHE).then((cache) => cache.put(request, copy));
           }

@@ -70,7 +70,9 @@ export const STORIES = [
 export const REELS = [
   {
     img: u('photo-1514525253161-7a46d19cd819', 700),
-    thumb: usq('photo-1521129989659-a83eee488004', 144),
+    // The previous Unsplash asset now responds with a non-image payload in
+    // Chromium, which is blocked by ORB in production.
+    thumb: IMG.avatarPerson,
     handle: '@nino',
     caption: 'Stage lights hit different',
   },
