@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom';
+import { RankIcon } from '@radix-ui/react-icons';
 import { TrendingUp, Users } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useLeaderboard } from '@/hooks/useReadingStats';
 import { displayInitials } from '@/lib/library-content';
 import { cn } from '@/lib/utils';
-import { ShimmerBar } from '@/components/streak/StreakLoading';
+import { formatMinutes } from './utils';
 
 function formatMinutes(totalMinutes: number): string {
   const hours = Math.floor(totalMinutes / 60);
@@ -25,10 +27,10 @@ export default function LeaderboardCard() {
   const { data, isLoading } = useLeaderboard();
 
   return (
-    <div className="rounded-xl border border-border/60 bg-card p-5">
-      <div className="mb-4 flex items-center gap-2.5">
+    <div className="space-y-3">
+      <div className="flex items-center gap-2.5">
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/50">
-          <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
         </span>
         <div>
           <h3 className="text-sm font-bold leading-tight">Reading leaderboard</h3>
@@ -39,7 +41,7 @@ export default function LeaderboardCard() {
       {isLoading ? (
         <div className="space-y-2.5">
           {[1, 2, 3, 4, 5].map((i) => (
-            <ShimmerBar key={i} className="h-11 w-full" delay={i * 0.05} />
+            <Skeleton key={i} className="h-12 w-full rounded-xl" />
           ))}
         </div>
       ) : !data || data.length === 0 ? (
@@ -51,7 +53,7 @@ export default function LeaderboardCard() {
           </p>
         </div>
       ) : (
-        <div className="space-y-0.5">
+        <div className="space-y-1">
           {data.map((entry: LeaderboardEntry, index: number) => (
             <Link
               key={entry.user_id}

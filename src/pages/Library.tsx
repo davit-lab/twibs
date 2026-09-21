@@ -703,10 +703,17 @@ export default function Library() {
 
           {/* ===== Streak ===== */}
           {activeTab === 'streak' && user && (
-            <div className="space-y-6">
-              <div className="mx-auto max-w-xl">
-                <ReadingStreakCard />
+            <div className="mx-auto max-w-3xl space-y-6">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Reading</p>
+                <h2 className="mt-1 text-3xl font-bold tracking-tight md:text-4xl">
+                  Your reading rhythm
+                </h2>
+                <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
+                  A view of your reading history, milestones, and progress over time.
+                </p>
               </div>
+              <ReadingStreakCard />
               <div className="grid gap-4 md:grid-cols-2">
                 <LearningProgress />
                 <LeaderboardCard />

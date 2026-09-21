@@ -220,7 +220,7 @@ export default function CallOverlay({
 
           {/* Screen share preview (when sharing) */}
           {callState.isScreenSharing && callState.screenStream && (
-            <div className="absolute top-20 left-6 w-64 h-36 rounded-2xl overflow-hidden bg-black/50 border border-white/10 border border-white/10 ">
+            <div className="absolute top-20 left-6 w-64 h-36 rounded-2xl overflow-hidden bg-black/50 border border-white/10">
               <video
                 ref={screenVideoRef}
                 autoPlay

@@ -98,7 +98,7 @@ export function useLeaderboard() {
     queryKey: ['reading-leaderboard'],
     queryFn: async (): Promise<LeaderboardEntry[] | null> => {
       try {
-        const { data, error } = await (supabase.rpc as any)('get_reading_leaderboard', { row_limit: 10 });
+        const { data, error } = await (supabase.rpc as (fn: string, args: { row_limit: number }) => Promise<{ user_id: string; username: string | null; display_name: string | null; avatar_url: string | null; total_minutes: number; reading_days: number }[]>)('get_reading_leaderboard', { row_limit: 10 });
         if (error) throw error;
         return (data || []) as unknown as LeaderboardEntry[];
       } catch (err) {

@@ -101,6 +101,7 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
   const activeSessionRef = useRef<CallSession | null>(null);
   const screenSharingRef = useRef(false);
   const toggleScreenShareRef = useRef<() => Promise<boolean>>(async () => false);
+  const isScreenSharingPendingRef = useRef(false);
   const isCleaningUpRef = useRef(false);
   const mountedRef = useRef(true);
   const remoteAnswerAppliedRef = useRef(false);
@@ -570,12 +571,72 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
     return false;
   };
 
-  const toggleScreenShare = async () => {
-    const pc = peerConnectionRef.current;
-    if (!pc) return false;
+  const toggleScreenShare = useCallback(async () => {
+    if (isScreenSharingPendingRef.current) return false;
+    if (screenSharingRef.current) return toggleScreenShareRef.current();
 
-    if (screenSharingRef.current) {
-      screenSharingRef.current = false;
+    isScreenSharingPendingRef.current = true;
+
+    try {
+      const pc = peerConnectionRef.current;
+      if (!pc) return false;
+
+      let screenStream: MediaStream;
+      try {
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+          audio: false,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Screen share unavailable';
+        if (mountedRef.current) {
+          setCallState(prev => ({ ...prev, error: msg }));
+        }
+        return false;
+      }
+
+      screenStreamRef.current = screenStream;
+      const screenTrack = screenStream.getVideoTracks()[0];
+      const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
+
+      if (videoSender) {
+        await videoSender.replaceTrack(screenTrack);
+      }
+
+      screenSharingRef.current = true;
+
+      screenTrack.onended = () => {
+        screenSharingRef.current = false;
+        screenStreamRef.current = null;
+        screenTrack.onended = null;
+        if (mountedRef.current) {
+          setCallState(prev => ({ ...prev, screenStream: null, isScreenSharing: false }));
+        }
+        const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender && cameraTrack) {
+          sender.replaceTrack(cameraTrack).catch(() => {});
+        }
+      };
+
+      if (mountedRef.current) {
+        setCallState(prev => ({ ...prev, screenStream, isScreenSharing: true, error: null }));
+      }
+      return true;
+    } finally {
+      isScreenSharingPendingRef.current = false;
+    }
+  }, [peerConnectionRef]);
+
+  const toggleScreenShareStop = useCallback(async () => {
+    if (isScreenSharingPendingRef.current) return false;
+    if (!screenSharingRef.current) return false;
+
+    isScreenSharingPendingRef.current = true;
+
+    try {
+      const pc = peerConnectionRef.current;
+      if (!pc) return false;
 
       if (screenStreamRef.current) {
         screenStreamRef.current.getTracks().forEach(track => {
@@ -591,43 +652,19 @@ export function useWebRTC(conversationId: string | null, otherUserId: string | n
         await videoSender.replaceTrack(cameraTrack);
       }
 
+      screenSharingRef.current = false;
       screenStreamRef.current = null;
+
       if (mountedRef.current) {
         setCallState(prev => ({ ...prev, screenStream: null, isScreenSharing: false }));
       }
-      return false;
-    }
-
-    try {
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
-        audio: false,
-      });
-
-      screenStreamRef.current = screenStream;
-      const screenTrack = screenStream.getVideoTracks()[0];
-      const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
-
-      if (videoSender) {
-        await videoSender.replaceTrack(screenTrack);
-      }
-
-      screenSharingRef.current = true;
-      screenTrack.onended = () => {
-        toggleScreenShareRef.current();
-      };
-
-      if (mountedRef.current) {
-        setCallState(prev => ({ ...prev, screenStream, isScreenSharing: true }));
-      }
       return true;
-    } catch (error) {
-      console.error('[WebRTC] Failed to start screen share:', error);
-      return false;
+    } finally {
+      isScreenSharingPendingRef.current = false;
     }
-  };
+  }, [peerConnectionRef]);
 
-  toggleScreenShareRef.current = toggleScreenShare;
+  toggleScreenShareRef.current = screenSharingRef.current ? toggleScreenShareStop : toggleScreenShare;
 
   const retryCall = async () => {
     const session = activeSessionRef.current;
