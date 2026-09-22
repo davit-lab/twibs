@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { SystemSettingsProvider, useAppSettings } from '@/contexts/SystemSettingsContext';
-import GlobalCallProvider from '@/components/calling/GlobalCallProvider';
+import { CallProvider } from '@/components/calling/CallProvider';
 import PreferencesBootstrap from '@/components/PreferencesBootstrap';
 import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
@@ -75,7 +75,7 @@ class ErrorBoundary extends Component<
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: any) {
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('[ErrorBoundary]', error, errorInfo);
   }
 
@@ -163,115 +163,117 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <SystemSettingsProvider>
-              <GlobalCallProvider />
-              <PreferencesBootstrap />
-              <Suspense fallback={<PageLoader />}>
-                <MaintenanceGate>
-                  <Routes>
-                    <Route path="/" element={<Index />} />
-                    <Route path="/auth" element={<Auth />} />
-                    <Route path="/profile/:username" element={<Profile />} />
-                    <Route
-                      path="/settings"
-                      element={
-                        <ProtectedRoute>
-                          <Settings />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route path="/explore" element={<Explore />} />
-                    <Route path="/interests" element={<Interests />} />
-                    <Route
-                      path="/messages"
-                      element={
-                        <ProtectedRoute>
-                          <Messages />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/notifications"
-                      element={
-                        <ProtectedRoute>
-                          <Notifications />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route path="/library" element={<Library />} />
-                    <Route path="/library/item/:itemId" element={<LibraryItemDetail />} />
-                    <Route path="/library/book/:bookId" element={<BookDetail />} />
-                    <Route
-                      path="/library/book/:bookId/edit"
-                      element={
-                        <ProtectedRoute>
-                          <BookEditor />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route path="/library/book/:bookId/read/:chapterId" element={<ChapterReader />} />
-                    <Route path="/pricing" element={<Pricing />} />
-                    <Route
-                      path="/admin"
-                      element={
-                        <AdminRoute>
-                          <AdminGate>
-                            <Admin />
-                          </AdminGate>
-                        </AdminRoute>
-                      }
-                    />
-                    {/* Live TV route removed */}
-                    <Route path="/groups" element={<Groups />} />
-                    <Route path="/groups/:slug" element={<GroupDetail />} />
-                    <Route path="/reels" element={<Reels />} />
-                    <Route path="/reels/:reelId" element={<ReelDetail />} />
-                    <Route path="/post/:postId" element={<PostShare />} />
-                    <Route
-                      path="/onboarding/interests"
-                      element={
-                        <ProtectedRoute>
-                          <OnboardingInterests />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/ads"
-                      element={
-                        <ProtectedRoute>
-                          <AdsCampaigns />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/ads/new"
-                      element={
-                        <ProtectedRoute>
-                          <AdsNewCampaign />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/ads/campaigns/:campaignId"
-                      element={
-                        <ProtectedRoute>
-                          <CampaignDetail />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/ads/boost/:postId"
-                      element={
-                        <ProtectedRoute>
-                          <AdsBoostPost />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route path="/terms" element={<Terms />} />
-                    <Route path="/privacy" element={<Privacy />} />
-                    <Route path="/community-guidelines" element={<CommunityGuidelines />} />
-                    <Route path="*" element={<NotFound />} />
-                  </Routes>
-                </MaintenanceGate>              </Suspense>
+              <CallProvider>
+                <PreferencesBootstrap />
+                <Suspense fallback={<PageLoader />}>
+                  <MaintenanceGate>
+                    <Routes>
+                      <Route path="/" element={<Index />} />
+                      <Route path="/auth" element={<Auth />} />
+                      <Route path="/profile/:username" element={<Profile />} />
+                      <Route
+                        path="/settings"
+                        element={
+                          <ProtectedRoute>
+                            <Settings />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route path="/explore" element={<Explore />} />
+                      <Route path="/interests" element={<Interests />} />
+                      <Route
+                        path="/messages"
+                        element={
+                          <ProtectedRoute>
+                            <Messages />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/notifications"
+                        element={
+                          <ProtectedRoute>
+                            <Notifications />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route path="/library" element={<Library />} />
+                      <Route path="/library/item/:itemId" element={<LibraryItemDetail />} />
+                      <Route path="/library/book/:bookId" element={<BookDetail />} />
+                      <Route
+                        path="/library/book/:bookId/edit"
+                        element={
+                          <ProtectedRoute>
+                            <BookEditor />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route path="/library/book/:bookId/read/:chapterId" element={<ChapterReader />} />
+                      <Route path="/pricing" element={<Pricing />} />
+                      <Route
+                        path="/admin"
+                        element={
+                          <AdminRoute>
+                            <AdminGate>
+                              <Admin />
+                            </AdminGate>
+                          </AdminRoute>
+                        }
+                      />
+                      {/* Live TV route removed */}
+                      <Route path="/groups" element={<Groups />} />
+                      <Route path="/groups/:slug" element={<GroupDetail />} />
+                      <Route path="/reels" element={<Reels />} />
+                      <Route path="/reels/:reelId" element={<ReelDetail />} />
+                      <Route path="/post/:postId" element={<PostShare />} />
+                      <Route
+                        path="/onboarding/interests"
+                        element={
+                          <ProtectedRoute>
+                            <OnboardingInterests />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/ads"
+                        element={
+                          <ProtectedRoute>
+                            <AdsCampaigns />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/ads/new"
+                        element={
+                          <ProtectedRoute>
+                            <AdsNewCampaign />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/ads/campaigns/:campaignId"
+                        element={
+                          <ProtectedRoute>
+                            <CampaignDetail />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/ads/boost/:postId"
+                        element={
+                          <ProtectedRoute>
+                            <AdsBoostPost />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route path="/terms" element={<Terms />} />
+                      <Route path="/privacy" element={<Privacy />} />
+                      <Route path="/community-guidelines" element={<CommunityGuidelines />} />
+                      <Route path="*" element={<NotFound />} />
+                    </Routes>
+                  </MaintenanceGate>
+                </Suspense>
+              </CallProvider>
             </SystemSettingsProvider>
           </AuthProvider>
         </BrowserRouter>

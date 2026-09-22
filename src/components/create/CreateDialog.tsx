@@ -58,7 +58,11 @@ export default function CreateDialog({ open, onOpenChange }: CreateDialogProps) 
     setCameraOpen(false);
     setUploading(true);
     try {
-      await uploadStory(file, result.caption, result.music, result.duration);
+      await uploadStory(file, {
+        caption: result.caption ?? undefined,
+        music: result.music ?? undefined,
+        duration: result.duration,
+      });
     } catch (error: unknown) {
       toast({
         variant: 'destructive',

@@ -17,6 +17,8 @@ import {
 import { format, isToday, isYesterday } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
+import { useCall } from '@/components/calling/callContext';
+import { PeerProfile } from '@/lib/callTypes';
 
 interface CallHistoryProps {
   onClose?: () => void;
@@ -25,6 +27,7 @@ interface CallHistoryProps {
 export default function CallHistory({ onClose }: CallHistoryProps) {
   const { calls, loading, deleteCall } = useCallHistory();
   const navigate = useNavigate();
+  const call = useCall();
 
   const getInitials = (name: string) => {
     return name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
@@ -69,6 +72,12 @@ export default function CallHistory({ onClose }: CallHistoryProps) {
         return 'Missed';
       case 'declined':
         return call.direction === 'incoming' ? 'Declined' : 'No answer';
+      case 'cancelled':
+        return call.direction === 'outgoing' ? 'Cancelled' : 'Missed';
+      case 'busy':
+        return 'Busy';
+      case 'failed':
+        return 'Failed';
       case 'ended':
         return formatDuration(call.duration) || 'Completed';
       case 'accepted':
@@ -82,6 +91,18 @@ export default function CallHistory({ onClose }: CallHistoryProps) {
 
   const handleCallClick = (call: CallHistoryItem) => {
     navigate(`/messages?conv=${call.conversation_id}`);
+    onClose?.();
+  };
+
+  const callAgain = (item: CallHistoryItem, type: 'audio' | 'video') => {
+    if (!item.otherUser || call.isCallInProgress) return;
+    const profile: PeerProfile = {
+      user_id: item.otherUser.user_id,
+      display_name: item.otherUser.display_name,
+      username: item.otherUser.username,
+      avatar_url: item.otherUser.avatar_url,
+    };
+    void call.startCall(item.conversation_id, item.otherUser.user_id, type, profile);
     onClose?.();
   };
 
@@ -197,10 +218,32 @@ export default function CallHistory({ onClose }: CallHistoryProps) {
                 </div>
 
                 {/* Time & actions */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground">
                     {formatCallTime(call.created_at)}
                   </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      callAgain(call, 'audio');
+                    }}
+                  >
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      callAgain(call, 'video');
+                    }}
+                  >
+                    <Video className="h-4 w-4 text-muted-foreground" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"

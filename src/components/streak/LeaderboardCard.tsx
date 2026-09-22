@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import { RankIcon } from '@radix-ui/react-icons';
 import { TrendingUp, Users } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -7,12 +6,6 @@ import { useLeaderboard } from '@/hooks/useReadingStats';
 import { displayInitials } from '@/lib/library-content';
 import { cn } from '@/lib/utils';
 import { formatMinutes } from './utils';
-
-function formatMinutes(totalMinutes: number): string {
-  const hours = Math.floor(totalMinutes / 60);
-  const mins = totalMinutes % 60;
-  return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
-}
 
 interface LeaderboardEntry {
   user_id: string;

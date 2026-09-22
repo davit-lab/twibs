@@ -4,7 +4,6 @@ import { useMessageReads } from '@/hooks/useMessageReads';
 import { useMessageReactions } from '@/hooks/useMessageReactions';
 import { useCallBlocks } from '@/hooks/useCallBlocks';
 import { useAuth } from '@/contexts/AuthContext';
-import { useWebRTC, CallSession } from '@/hooks/useWebRTC';
 import { useConversations, Conversation } from '@/hooks/useConversations';
 import { getWallpaperBackground } from '@/lib/chatWallpapers';
 import WallpaperPickerDialog from './WallpaperPickerDialog';
@@ -13,7 +12,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import AttachmentBubble, { formatDuration, downloadUrl } from './AttachmentBubble';
 import { useLiveLocation } from '@/hooks/useLiveLocation';
@@ -43,22 +41,9 @@ import {
 import { 
   Send, 
   Loader2, 
-  ArrowLeft, 
   Check, 
-  Maximize2, 
-  Minimize2,
-  Phone,
-  Video,
   MoreVertical,
   Smile,
-  PhoneOff,
-  User,
-  Users,
-  Bell,
-  BellOff,
-  LogOut,
-  Shield,
-  Palette,
   ImagePlus,
   Paperclip,
   Mic,
@@ -72,17 +57,16 @@ import {
   Pencil,
   Trash2,
   MapPin,
-  Search,
   Pin,
   PinOff,
   Forward,
   CalendarClock,
   ArrowDown,
-  Clock3,
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { cn } from '@/lib/utils';
-import CallOverlay from './CallOverlay';
+import { useCall } from '@/components/calling/callContext';
+import { PeerProfile } from '@/lib/callTypes';
 import EmojiPicker from './EmojiPicker';
 import GifPicker from './GifPicker';
 import MessageReactionPicker from './MessageReactionPicker';
@@ -93,6 +77,8 @@ import MessageSearchPanel from './MessageSearchPanel';
 import ForwardMessageDialog from './ForwardMessageDialog';
 import ScheduleMessageDialog from './ScheduleMessageDialog';
 import ScheduledMessagesDialog from './ScheduledMessagesDialog';
+import ChatHeader from './ChatHeader';
+import ConversationInfoPanel from './ConversationInfoPanel';
 
 interface MessageThreadProps {
   conversationId: string;
@@ -106,8 +92,6 @@ interface MessageThreadProps {
   otherUserId?: string | null;
   onBack?: () => void;
   lastReadAt?: string | null;
-  pendingAnswerCall?: CallSession | null;
-  onCallAnswered?: () => void;
   initialDraft?: string;
   draftNonce?: string;
 }
@@ -129,8 +113,6 @@ export default function MessageThread({
   otherUserId,
   onBack,
   lastReadAt,
-  pendingAnswerCall,
-  onCallAnswered,
   initialDraft,
   draftNonce,
 }: MessageThreadProps) {
@@ -141,7 +123,7 @@ export default function MessageThread({
   const liveLocation = useLiveLocation(conversationId);
   const { blockUser, unblockUser, isUserBlocked } = useCallBlocks();
   const { toggleMute, leaveConversation, deleteConversation } = useConversations();
-  const { callState, startCall, answerCall, endCall, toggleAudio, toggleVideo, toggleScreenShare, retryCall } = useWebRTC(conversationId, otherUserId);
+  const call = useCall();
 
   const wallpaper = conversation?.chat_wallpaper || null;
   const wallpaperBackground = getWallpaperBackground(wallpaper);
@@ -184,6 +166,7 @@ export default function MessageThread({
   const [mapDialogOpen, setMapDialogOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [infoPanelOpen, setInfoPanelOpen] = useState(false);
   const [forwardTarget, setForwardTarget] = useState<Message | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduledListOpen, setScheduledListOpen] = useState(false);
@@ -205,14 +188,32 @@ export default function MessageThread({
   const { toast } = useToast();
 
   const handleStartCall = async (type: 'audio' | 'video') => {
-    if (callState.session || callState.isConnecting) return;
-
-    const result = await startCall(type);
-    if (!result.ok) {
+    if (call.isCallInProgress) {
+      return; // full call screen / mini player already visible; end it first
+    }
+    if (!otherUserId || !otherUser) {
       toast({
         variant: 'destructive',
         title: 'Call failed',
-        description: result.error || 'Could not start the call.',
+        description: 'Could not start the call.',
+      });
+      return;
+    }
+
+    const profile: PeerProfile = {
+      user_id: otherUserId,
+      display_name: otherUser.display_name,
+      username: otherUser.username,
+      avatar_url: otherUser.avatar_url,
+    };
+
+    try {
+      await call.startCall(conversationId, otherUserId, type, profile);
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Call failed',
+        description: error instanceof Error ? error.message : 'Could not start the call.',
       });
     }
   };
@@ -227,6 +228,7 @@ export default function MessageThread({
     setNewMessage('');
     setEditingMessageId(null);
     setSearchOpen(false);
+    setInfoPanelOpen(false);
     setForwardTarget(null);
     setNewMessagesSinceScroll(false);
     setIsNearBottom(true);
@@ -336,8 +338,11 @@ export default function MessageThread({
     onBack?.();
   };
 
-  const activeCallType = callState.session?.call_type || null;
-  const isInCall = callState.session && callState.session.status !== 'ended' && callState.session.status !== 'declined';
+  const activeCallType =
+    call.session?.conversation_id === conversationId && call.isCallInProgress
+      ? (call.session.call_type as 'audio' | 'video')
+      : null;
+  const isInCall = !!activeCallType;
 
   const isGifUrl = (content: string) => {
     const trimmed = content.trim();
@@ -544,20 +549,6 @@ export default function MessageThread({
   useEffect(() => {
     markAsRead();
   }, [conversationId]);
-
-  useEffect(() => {
-    if (pendingAnswerCall && pendingAnswerCall.conversation_id === conversationId) {
-      const handleAnswer = async () => {
-        try {
-          await answerCall(pendingAnswerCall);
-        } catch (error) {
-          console.error('Failed to answer call:', error);
-        }
-        onCallAnswered?.();
-      };
-      handleAnswer();
-    }
-  }, [pendingAnswerCall, conversationId]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -802,18 +793,28 @@ export default function MessageThread({
 
   return (
     <>
-      {isInCall && activeCallType && (
-        <CallOverlay 
-          type={activeCallType} 
-          user={otherUser || { display_name: displayName, username: otherUser?.username || '', avatar_url: avatarUrl || null }} 
-          callState={callState}
-          onEnd={endCall}
-          onToggleAudio={toggleAudio}
-          onToggleVideo={toggleVideo}
-          onToggleScreenShare={toggleScreenShare}
-          onRetry={retryCall}
-        />
-      )}
+      <ConversationInfoPanel
+        open={infoPanelOpen}
+        onClose={() => setInfoPanelOpen(false)}
+        displayName={displayName}
+        avatarUrl={avatarUrl}
+        isGroup={isGroup}
+        isCommunity={isCommunity}
+        isOnline={isOnline}
+        presenceStatus={presenceStatus}
+        muted={muted}
+        isBlocked={isBlocked}
+        isConversationOwner={isConversationOwner}
+        participantCount={conversation?.participant_count}
+        onToggleMute={handleToggleMute}
+        onToggleBlock={handleToggleBlock}
+        onLeave={handleLeave}
+        onDeleteConversation={handleDeleteConversation}
+        onViewProfile={() => { if (otherUser?.username) window.open(`/profile/${otherUser.username}`, '_blank'); }}
+        onWallpaperOpen={() => setWallpaperOpen(true)}
+        onScheduleOpen={openScheduleDialog}
+        getInitials={getInitials}
+      />
 
       <WallpaperPickerDialog
         open={wallpaperOpen}
@@ -907,201 +908,51 @@ export default function MessageThread({
               className="absolute inset-0"
               style={{ background: wallpaperBackground }}
             />
-            <div aria-hidden className="absolute inset-0 bg-white/25 dark:bg-black/40" />
+            {/* Restrained readability scrim — only the top (header) and bottom
+                (composer) bands are darkened so the photo stays visible. */}
+            <div
+              aria-hidden
+              className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/35"
+            />
+            <div
+              aria-hidden
+              className="absolute inset-0 shadow-[inset_0_0_140px_rgba(0,0,0,0.28)]"
+            />
           </>
         )}
         {/* Header */}
-        <div className="h-[70px] px-4 md:px-6 flex items-center gap-3 border-b border-border/50 bg-card/70 backdrop-blur-xl flex-shrink-0 z-10">
-          {onBack && !isExtended && (
-            <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden h-9 w-9 rounded-full">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-          )}
-
-          <div className="relative">
-            <Avatar className="h-10 w-10 rounded-full ring-2 ring-primary/15">
-              <AvatarImage src={avatarUrl || undefined} />
-              <AvatarFallback className="rounded-full bg-gradient-to-br from-primary to-primary/60 text-white text-sm font-bold">
-                {isGroup ? <Users className="h-4 w-4" /> : getInitials(displayName)}
-              </AvatarFallback>
-            </Avatar>
-            {!isGroup && (
-              <span className={cn(
-                'absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background',
-                isOnline ? 'bg-success' : 'bg-muted-foreground/40'
-              )} />
-            )}
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-sm truncate flex items-center gap-1.5">
-              {displayName}
-              {isCommunity && (
-                <span className="text-[10px] font-bold text-primary bg-primary/10 rounded-full px-1.5 py-0.5">
-                  Community
-                </span>
-              )}
-            </h3>
-            <span className={cn(
-              'text-xs flex items-center gap-1.5 truncate',
-              isGroup ? 'text-muted-foreground' : isOnline ? 'text-success' : 'text-muted-foreground'
-            )}>
-              {isGroup ? (
-                <>{conversation?.participant_count || 0} members</>
-              ) : (
-                <>
-                  {isOnline && <span className="w-1.5 h-1.5 rounded-full bg-success flex-shrink-0" />}
-                  {presenceStatus}
-                </>
-              )}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1">
-            <button
-              className={cn('icon-btn', searchOpen && 'text-primary')}
-              onClick={() => setSearchOpen(!searchOpen)}
-              title="Search in chat"
-            >
-              <Search className="h-4 w-4" />
-            </button>
-            <button
-              className={cn('icon-btn', wallpaper && 'text-primary')}
-              onClick={() => setWallpaperOpen(true)}
-              title="Chat wallpaper"
-            >
-              <Palette className="h-4 w-4" />
-            </button>
-            {!isGroup && canCall && (
-              <>
-                <button className="icon-btn" onClick={() => handleStartCall('audio')}>
-                  <Phone className="h-4 w-4" />
-                </button>
-                <button className="icon-btn" onClick={() => handleStartCall('video')}>
-                  <Video className="h-4 w-4" />
-                </button>
-              </>
-            )}
-            {!isGroup && !canCall && otherUserId && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1 opacity-50">
-                    <button className="icon-btn" disabled>
-                      <Phone className="h-4 w-4" />
-                    </button>
-                    <button className="icon-btn" disabled>
-                      <Video className="h-4 w-4" />
-                    </button>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs">{callBlockReason}</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="icon-btn">
-                  <MoreVertical className="h-4 w-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                {isGroup ? (
-                  <>
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger>
-                        <Users className="h-4 w-4 mr-2" />
-                        Members ({conversation?.participant_count || 0})
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent className="w-64">
-                        <div className="p-1">
-                          {(conversation?.participants || []).map((participant) => (
-                            <div key={participant.user_id} className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-muted/50">
-                              <Avatar className="h-8 w-8 rounded-full">
-                                <AvatarImage src={participant.profiles?.avatar_url || undefined} />
-                                <AvatarFallback className="rounded-full bg-gradient-to-br from-primary to-primary/60 text-white text-xs font-bold">
-                                  {getInitials(participant.profiles?.display_name || 'U')}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate">
-                                  {participant.profiles?.display_name || 'User'}
-                                </p>
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {participant.role === 'owner' ? 'Owner' : participant.role === 'admin' ? 'Admin' : 'Member'}
-                                </p>
-                              </div>
-                              {participant.role === 'owner' && <Shield className="h-3.5 w-3.5 text-primary" />}
-                            </div>
-                          ))}
-                        </div>
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                    <DropdownMenuItem onClick={() => setIsExtended(!isExtended)}>
-                      {isExtended ? <Minimize2 className="h-4 w-4 mr-2" /> : <Maximize2 className="h-4 w-4 mr-2" />}
-                      {isExtended ? 'Exit Fullscreen' : 'Fullscreen'}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setScheduledListOpen(true)}>
-                      <Clock3 className="h-4 w-4 mr-2" />
-                      Scheduled messages
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleToggleMute}>
-                      {muted ? <BellOff className="h-4 w-4 mr-2" /> : <Bell className="h-4 w-4 mr-2" />}
-                      {muted ? 'Unmute notifications' : 'Mute notifications'}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    {isConversationOwner && (
-                      <>
-                        <DropdownMenuItem
-                          onClick={() => setConfirmDeleteOpen(true)}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete {isCommunity ? 'community' : 'group'}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                      </>
-                    )}
-                    <DropdownMenuItem onClick={handleLeave} className="text-destructive focus:text-destructive">
-                      <LogOut className="h-4 w-4 mr-2" />
-                      Leave {isCommunity ? 'community' : 'group'}
-                    </DropdownMenuItem>
-                  </>
-                ) : (
-                  <>
-                    <DropdownMenuItem onClick={() => window.open(`/profile/${otherUser?.username}`, '_blank')}>
-                      <User className="h-4 w-4 mr-2" />
-                      View Profile
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setIsExtended(!isExtended)}>
-                      {isExtended ? <Minimize2 className="h-4 w-4 mr-2" /> : <Maximize2 className="h-4 w-4 mr-2" />}
-                      {isExtended ? 'Exit Fullscreen' : 'Fullscreen'}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setScheduledListOpen(true)}>
-                      <Clock3 className="h-4 w-4 mr-2" />
-                      Scheduled messages
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleToggleBlock} className={isBlocked ? "text-success" : "text-destructive"}>
-                      {isBlocked ? (
-                        <>
-                          <Phone className="h-4 w-4 mr-2" />
-                          Unblock Calls
-                        </>
-                      ) : (
-                        <>
-                          <PhoneOff className="h-4 w-4 mr-2" />
-                          Block Calls
-                        </>
-                      )}
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
+        <ChatHeader
+          displayName={displayName}
+          avatarUrl={avatarUrl}
+          isGroup={isGroup}
+          isCommunity={isCommunity}
+          isOnline={isOnline}
+          presenceStatus={presenceStatus}
+          participantCount={conversation?.participant_count}
+          onBack={onBack}
+          searchOpen={searchOpen}
+          onSearchToggle={setSearchOpen}
+          isInCall={isInCall}
+          activeCallType={activeCallType}
+          canCall={canCall}
+          callBlockReason={callBlockReason || ''}
+          onStartCall={handleStartCall}
+          muted={muted}
+          isBlocked={isBlocked}
+          isConversationOwner={isConversationOwner}
+          onToggleMute={handleToggleMute}
+          onToggleBlock={handleToggleBlock}
+          onLeave={handleLeave}
+          onDeleteConversation={handleDeleteConversation}
+          onViewProfile={() => { if (otherUser?.username) window.open(`/profile/${otherUser.username}`, '_blank'); }}
+          onScheduleOpen={openScheduleDialog}
+          onWallpaperOpen={() => setWallpaperOpen(true)}
+          hasWallpaper={!!wallpaper}
+          infoPanelOpen={infoPanelOpen}
+          onInfoPanelToggle={() => setInfoPanelOpen(!infoPanelOpen)}
+          getInitials={getInitials}
+          conversation={conversation}
+        />
 
         {/* Messages area */}
         <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-6 space-y-1 scrollbar-thin relative">

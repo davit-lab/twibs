@@ -1,0 +1,174 @@
+/* =========================================================
+   MOBILE BOTTOM NAV — CLOUD ACTIVE INDICATOR
+   Soft organic shape + sliding/swinging motion
+   ========================================================= */
+
+.mobile-nav {
+  position: relative;
+}
+
+/* The moving cloud */
+.mobile-nav__cloud {
+  position: absolute;
+
+  left: 0;
+  top: 50%;
+
+  width: 58px;
+  height: 46px;
+
+  transform:
+    translateX(var(--cloud-x))
+    translateY(-50%);
+
+  pointer-events: none;
+  z-index: 1;
+
+  /* Organic cloud shape instead of a pill */
+  border-radius:
+    48% 52% 45% 55%
+    /
+    52% 44% 56% 48%;
+
+  background: hsl(240 5% 18%);
+
+  border: 1px solid hsl(240 5% 25%);
+
+  box-shadow:
+    0 5px 14px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+
+  /*
+    Important:
+    transform-origin is what makes the movement
+    feel like the cloud has weight.
+  */
+  transform-origin: 50% 55%;
+
+  transition:
+    transform 560ms cubic-bezier(.16, 1.25, .35, 1),
+    border-radius 300ms ease;
+}
+
+
+/* Subtle soft inner highlight */
+.mobile-nav__cloud::before {
+  content: "";
+
+  position: absolute;
+
+  inset: 5px 7px auto 7px;
+
+  height: 11px;
+
+  border-radius: 50%;
+
+  background: rgba(255, 255, 255, 0.035);
+
+  filter: blur(3px);
+
+  pointer-events: none;
+}
+
+
+/* =========================================================
+   NAV ITEMS
+   ========================================================= */
+
+.mobile-nav__item {
+  position: relative;
+  z-index: 2;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  width: 58px;
+  height: 50px;
+
+  gap: 3px;
+
+  color: hsl(240 4% 52%);
+
+  text-decoration: none;
+
+  transition:
+    color 220ms ease,
+    transform 260ms cubic-bezier(.22, 1, .36, 1);
+}
+
+
+/* Active */
+.mobile-nav__item.is-active {
+  color: hsl(0 0% 98%);
+}
+
+
+/* Icon */
+.mobile-nav__item svg {
+  width: 20px;
+  height: 20px;
+
+  transform: translateY(0) scale(1);
+
+  transition:
+    transform 320ms cubic-bezier(.22, 1, .36, 1);
+}
+
+
+/* Active icon rises slightly */
+.mobile-nav__item.is-active svg {
+  transform: translateY(-1px) scale(1.08);
+}
+
+
+/* Label */
+.mobile-nav__item span {
+  font-size: 10px;
+  font-weight: 600;
+
+  line-height: 12px;
+
+  transition:
+    opacity 180ms ease,
+    transform 300ms cubic-bezier(.22, 1, .36, 1);
+}
+
+
+/* =========================================================
+   PRESS / TOUCH
+   ========================================================= */
+
+.mobile-nav__item:active {
+  transform: scale(.91);
+}
+
+.mobile-nav__item:active svg {
+  transform: scale(.98);
+}
+
+
+/* =========================================================
+   ACCESSIBILITY
+   ========================================================= */
+
+.mobile-nav__item:focus-visible {
+  outline: none;
+
+  border-radius: 12px;
+
+  box-shadow:
+    0 0 0 2px hsl(240 5% 10%),
+    0 0 0 4px hsl(0 0% 70% / .25);
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-nav__cloud,
+  .mobile-nav__item,
+  .mobile-nav__item svg,
+  .mobile-nav__item span {
+    transition: none;
+  }
+}

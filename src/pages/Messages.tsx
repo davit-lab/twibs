@@ -10,7 +10,6 @@ import CallHistory from '@/components/messaging/CallHistory';
 import NewChatDialog from '@/components/messaging/NewChatDialog';
 import { MessageSquare, Phone } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { CallSession } from '@/hooks/useWebRTC';
 
 interface OtherUser {
   display_name: string;
@@ -33,7 +32,6 @@ export default function Messages() {
   
   const selectedConvId = searchParams.get('conv');
   const newUserId = searchParams.get('new');
-  const answerCallId = searchParams.get('answer');
   const draft = searchParams.get('draft');
   const draftNonce = searchParams.get('nonce');
   const [activeTab, setActiveTab] = useState<'messages' | 'calls'>('messages');
@@ -41,31 +39,10 @@ export default function Messages() {
   const [otherUser, setOtherUser] = useState<OtherUser | null>(null);
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
   const [lastReadAt, setLastReadAt] = useState<string | null>(null);
-  const [pendingAnswerCall, setPendingAnswerCall] = useState<CallSession | null>(null);
   const [showNewChat, setShowNewChat] = useState(false);
 
   const selectedConversation: Conversation | undefined =
     conversations.find(c => c.id === selectedConvId) || undefined;
-
-  // Handle answering call from global provider via URL param
-  useEffect(() => {
-    if (answerCallId && selectedConvId) {
-      const fetchCallSession = async () => {
-        const { data } = await supabase
-          .from('call_sessions')
-          .select('*')
-          .eq('id', answerCallId)
-          .single();
-        
-        if (data) {
-          setPendingAnswerCall(data as unknown as CallSession);
-        }
-        
-        setSearchParams({ conv: selectedConvId });
-      };
-      fetchCallSession();
-    }
-  }, [answerCallId, selectedConvId]);
 
   // Handle starting new conversation from profile page
   useEffect(() => {
@@ -254,8 +231,6 @@ export default function Messages() {
               otherUserId={otherUserId}
               onBack={handleBack}
               lastReadAt={lastReadAt}
-              pendingAnswerCall={pendingAnswerCall}
-              onCallAnswered={() => setPendingAnswerCall(null)}
               initialDraft={draft || undefined}
               draftNonce={draftNonce || undefined}
             />

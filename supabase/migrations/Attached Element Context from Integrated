@@ -1,0 +1,125 @@
+Attached Element Context from Integrated Browser
+
+Element: div.absolute.inset-0.bg-gradient-to-t.from-background.via-black/30.to-black/30
+
+URL: http://localhost:8080/auth
+
+HTML Path: div#root > div.min-h-dvh.bg-background.lg:flex > main.flex.min-h-dvh.flex-1.flex-col.lg:min-h-0 > div.relative.h-36.overflow-hidden.bg-black.sm:h-44.lg:hidden > div.absolute.inset-0.bg-gradient-to-t.from-background.via-black/30.to-black/30
+
+Outer HTML:
+```html
+<div class="absolute inset-0 bg-gradient-to-t from-background via-black/30 to-black/30"></div>
+```
+
+Dimensions:
+- top: -42px
+- left: 0px
+- width: 450px
+- height: 144px
+
+CSS:
+```css
+*, ::before, ::after { --tw-border-spacing-x: 0;
+  --tw-border-spacing-y: 0;
+  --tw-translate-x: 0;
+  --tw-translate-y: 0;
+  --tw-rotate: 0;
+  --tw-skew-x: 0;
+  --tw-skew-y: 0;
+  --tw-scale-x: 1;
+  --tw-scale-y: 1;
+  --tw-pan-x:  ;
+  --tw-pan-y:  ;
+  --tw-pinch-zoom:  ;
+  --tw-scroll-snap-strictness: proximity;
+  --tw-gradient-from-position:  ;
+  --tw-gradient-via-position:  ;
+  --tw-gradient-to-position:  ;
+  --tw-ordinal:  ;
+  --tw-slashed-zero:  ;
+  --tw-numeric-figure:  ;
+  --tw-numeric-spacing:  ;
+  --tw-numeric-fraction:  ;
+  --tw-ring-inset:  ;
+  --tw-ring-offset-width: 0px;
+  --tw-ring-offset-color: #fff;
+  --tw-ring-color: rgb(59 130 246 / 0.5);
+  --tw-ring-offset-shadow: 0 0 #0000;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-shadow: 0 0 #0000;
+  --tw-shadow-colored: 0 0 #0000;
+  --tw-blur:  ;
+  --tw-brightness:  ;
+  --tw-contrast:  ;
+  --tw-grayscale:  ;
+  --tw-hue-rotate:  ;
+  --tw-invert:  ;
+  --tw-saturate:  ;
+  --tw-sepia:  ;
+  --tw-drop-shadow:  ;
+  --tw-backdrop-blur:  ;
+  --tw-backdrop-brightness:  ;
+  --tw-backdrop-contrast:  ;
+  --tw-backdrop-grayscale:  ;
+  --tw-backdrop-hue-rotate:  ;
+  --tw-backdrop-invert:  ;
+  --tw-backdrop-opacity:  ;
+  --tw-backdrop-saturate:  ;
+  --tw-backdrop-sepia:  ;
+  --tw-contain-size:  ;
+  --tw-contain-layout:  ;
+  --tw-contain-paint:  ;
+  --tw-contain-style:  ; }
+*, ::before, ::after { box-sizing: border-box; /* 1 */
+  border-width: 0; /* 2 */
+  border-style: solid; /* 2 */
+  border-color: #e5e7eb; /* 2 */ }
+* { border-color: hsl(var(--border)); }
+.absolute { position: absolute; }
+.inset-0 { inset: 0px; }
+.bg-gradient-to-t { background-image: linear-gradient(to top, var(--tw-gradient-stops)); }
+.from-background { --tw-gradient-from: hsl(var(--background)) var(--tw-gradient-from-position);
+  --tw-gradient-to: hsl(var(--background) / 0) var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+.via-black\/30 { --tw-gradient-to: rgb(0 0 0 / 0)  var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), rgb(0 0 0 / 0.3) var(--tw-gradient-via-position), var(--tw-gradient-to); }
+.to-black\/30 { --tw-gradient-to: rgb(0 0 0 / 0.3) var(--tw-gradient-to-position); }
+
+/* Pseudo-elements */
+::before, ::after { --tw-content: ''; }
+
+/* Inherited */
+body { color: hsl(var(--foreground)) }
+html, :host { line-height: 1.5; tab-size: 4 }
+html { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif }
+
+/* Resolved values */
+border: 0px solid rgb(39, 39, 42);
+background-image: linear-gradient(to top, rgb(9, 9, 11), rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3));
+bottom: 0px;
+box-sizing: border-box;
+color: rgb(250, 250, 250);
+display: block;
+font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+font-feature-settings: normal;
+height: 144px;
+left: 0px;
+line-height: 24px;
+position: absolute;
+right: 0px;
+tab-size: 4;
+top: 0px;
+unicode-bidi: isolate /*UA*/;
+width: 450px;
+
+/* CSS variables */
+--border: 240 3.7% 15.9%;
+--tw-gradient-stops: hsl(240 10% 3.9%) , rgb(0 0 0 / 0.3) , rgb(0 0 0 / 0.3) ;
+--background: 240 10% 3.9%;
+--tw-gradient-from: hsl(240 10% 3.9%) ;
+--tw-gradient-to: rgb(0 0 0 / 0.3) ;
+--tw-gradient-via-position: ;
+--tw-gradient-to-position: ;
+--foreground: 0 0% 98%;
+--tw-gradient-from-position: ;
+```

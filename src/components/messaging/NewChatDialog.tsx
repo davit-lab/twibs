@@ -5,7 +5,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Check, Loader2, Plus, Search, Users, Hash, KeyRound, X, PartyPopper, ArrowRight } from 'lucide-react';
+import { Check, Loader2, Plus, Search, Users, Hash, KeyRound, X, PartyPopper, ArrowRight, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 // AvatarCollage preview removed
 

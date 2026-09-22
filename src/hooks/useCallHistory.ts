@@ -8,7 +8,7 @@ export interface CallHistoryItem {
   caller_id: string;
   receiver_id: string;
   call_type: 'audio' | 'video';
-  status: 'ringing' | 'accepted' | 'declined' | 'ended' | 'missed';
+  status: 'ringing' | 'accepted' | 'declined' | 'ended' | 'missed' | 'cancelled' | 'busy' | 'failed';
   started_at: string | null;
   ended_at: string | null;
   created_at: string;

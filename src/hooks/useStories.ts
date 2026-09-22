@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import { useToast } from '@/hooks/use-toast';
 import type { FeedAd } from '@/lib/ads';
+import { STORY_MAX_DURATION, parseOverlays, type StoryOverlay } from '@/lib/stories';
 
 export interface Story {
   id: string;
@@ -11,6 +12,7 @@ export interface Story {
   media_url: string;
   media_type: 'image' | 'video';
   caption: string | null;
+  overlays: StoryOverlay[];
   duration: number;
   view_count: number;
   like_count: number;
@@ -25,6 +27,7 @@ export interface Story {
   };
   is_viewed?: boolean;
   is_liked?: boolean;
+  reaction?: string | null;
 }
 
 export interface StoryViewerProfile {
@@ -52,13 +55,29 @@ interface UseStoriesOptions {
   enabled?: boolean;
 }
 
+export type StoryUploadPhase = 'preparing' | 'uploading' | 'publishing' | 'done';
+
+export interface StoryUploadState {
+  phase: StoryUploadPhase;
+  progress: number; // 0..1
+}
+
+export interface UploadStoryOptions {
+  caption?: string;
+  music?: { name: string; url: string | null };
+  duration?: number;
+  media_type?: 'image' | 'video';
+  overlays?: StoryOverlay[];
+  onProgress?: (state: StoryUploadState) => void;
+}
+
 /**
- * All story ids are passed through .in() so we only ever run 2 extra queries
- * (like counts + my likes) regardless of how many stories are loaded.
+ * All story ids are passed through .in() so we only ever run 3 extra queries
+ * (like counts + my likes/reactions) regardless of how many stories are loaded.
  */
 async function attachLikes(stories: Story[], userId: string | null): Promise<Story[]> {
   if (stories.length === 0) return stories;
-  const ids = stories.map(s => s.id);
+  const ids = stories.map((s) => s.id);
 
   const { data: likeRows } = await supabase
     .from('story_likes')
@@ -70,21 +89,37 @@ async function attachLikes(stories: Story[], userId: string | null): Promise<Sto
     counts.set(row.story_id, (counts.get(row.story_id) || 0) + 1);
   }
 
-  let mine = new Set<string>();
+  let mine = new Map<string, string>();
   if (userId) {
-    const { data: myLikes } = await supabase
+    // `reaction` column is added by the stories-redesign migration; until the
+    // generated types are refreshed it won't be known to supabase-js.
+    const res = (await supabase
       .from('story_likes')
-      .select('story_id')
+      .select('story_id, reaction')
       .eq('user_id', userId)
-      .in('story_id', ids);
-    mine = new Set((myLikes || []).map(r => r.story_id));
+      .in('story_id', ids)) as unknown as {
+      data: { story_id: string; reaction: string | null }[] | null;
+      error: Error | null;
+    };
+    if (res.error) throw res.error;
+    mine = new Map((res.data || []).map((r) => [r.story_id, r.reaction ?? 'like']));
   }
 
-  return stories.map(story => ({
+  return stories.map((story) => ({
     ...story,
     like_count: counts.get(story.id) ?? story.like_count ?? 0,
     is_liked: mine.has(story.id),
+    reaction: mine.get(story.id) ?? null,
   }));
+}
+
+function enrichStoryRow(row: Record<string, unknown>): Story {
+  return {
+    ...row,
+    media_type: (row.media_type as 'image' | 'video') ?? 'image',
+    like_count: row.like_count ?? 0,
+    overlays: parseOverlays(row.overlays),
+  } as Story;
 }
 
 export function useStories(options: UseStoriesOptions = {}) {
@@ -95,13 +130,13 @@ export function useStories(options: UseStoriesOptions = {}) {
   const [groupedStories, setGroupedStories] = useState<GroupedStories[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadState, setUploadState] = useState<StoryUploadState>({ phase: 'publishing', progress: 0 });
   const enabled = options.enabled ?? true;
   const lastProfileUserId = useRef<string | undefined>(undefined);
   const fetchTokenRef = useRef(0);
 
   const fetchStories = useCallback(async () => {
-    // Not enabled (e.g. profile target hasn't loaded yet): show nothing so we
-    // never flash the current user's own (feed) stories on a profile page.
     if (enabled === false) {
       fetchTokenRef.current++;
       lastProfileUserId.current = undefined;
@@ -119,8 +154,6 @@ export function useStories(options: UseStoriesOptions = {}) {
     try {
       // If viewing a specific profile, show that user's stories
       if (options.profileUserId) {
-        // Target user changed: drop the previous user's stories immediately so
-        // we never show stale (or our own) stories while refetching.
         if (lastProfileUserId.current !== options.profileUserId) {
           lastProfileUserId.current = options.profileUserId;
           setStories([]);
@@ -137,14 +170,12 @@ export function useStories(options: UseStoriesOptions = {}) {
         if (fetchTokenRef.current !== token) return;
         if (error) throw error;
 
-        // Fetch profile
         const { data: profiles } = await supabase
           .from('profiles')
           .select('user_id, username, display_name, avatar_url')
           .eq('user_id', options.profileUserId);
         if (fetchTokenRef.current !== token) return;
 
-        // Fetch user's viewed stories
         let viewedStoryIds: string[] = [];
         if (user) {
           const { data: views } = await supabase
@@ -152,34 +183,34 @@ export function useStories(options: UseStoriesOptions = {}) {
             .select('story_id')
             .eq('viewer_id', user.id);
           if (fetchTokenRef.current !== token) return;
-          viewedStoryIds = (views || []).map(v => v.story_id);
+          viewedStoryIds = (views || []).map((v) => v.story_id);
         }
 
-        const profileMap = new Map(profiles?.map(p => [p.user_id, p]));
-        let enrichedStories = (storiesData || []).map(story => ({
-          ...story,
-          media_type: story.media_type as 'image' | 'video',
-          like_count: story.like_count ?? 0,
-          profile: profileMap.get(story.user_id),
-          is_viewed: viewedStoryIds.includes(story.id),
-        })) as Story[];
+        const profileMap = new Map(profiles?.map((p) => [p.user_id, p]));
+        let enrichedStories = (storiesData || []).map((row) => {
+          const story = enrichStoryRow(row);
+          story.profile = profileMap.get(story.user_id);
+          story.is_viewed = viewedStoryIds.includes(story.id);
+          return story;
+        });
 
         enrichedStories = await attachLikes(enrichedStories, user?.id ?? null);
         if (fetchTokenRef.current !== token) return;
 
         setStories(enrichedStories);
 
-        // Group for profile view
         if (enrichedStories.length > 0 && options.profileUserId) {
           const profile = profileMap.get(options.profileUserId);
-          setGroupedStories([{
-            user_id: options.profileUserId,
-            username: profile?.username || 'unknown',
-            display_name: profile?.display_name || 'Unknown',
-            avatar_url: profile?.avatar_url || null,
-            stories: enrichedStories,
-            has_unviewed: enrichedStories.some(s => !s.is_viewed),
-          }]);
+          setGroupedStories([
+            {
+              user_id: options.profileUserId,
+              username: profile?.username || 'unknown',
+              display_name: profile?.display_name || 'Unknown',
+              avatar_url: profile?.avatar_url || null,
+              stories: enrichedStories,
+              has_unviewed: enrichedStories.some((s) => !s.is_viewed),
+            },
+          ]);
         } else {
           setGroupedStories([]);
         }
@@ -188,7 +219,7 @@ export function useStories(options: UseStoriesOptions = {}) {
         return;
       }
 
-      // For feed view: Only show stories from people the user follows + their own
+      // For feed view: only show stories from people the user follows + their own
       if (!user) {
         setStories([]);
         setGroupedStories([]);
@@ -196,7 +227,6 @@ export function useStories(options: UseStoriesOptions = {}) {
         return;
       }
 
-      // Get list of users the current user follows
       const { data: followsData, error: followsError } = await supabase
         .from('follows')
         .select('following_id')
@@ -205,9 +235,7 @@ export function useStories(options: UseStoriesOptions = {}) {
       if (fetchTokenRef.current !== token) return;
       if (followsError) throw followsError;
 
-      const followingIds = (followsData || []).map(f => f.following_id);
-
-      // Include current user's own stories
+      const followingIds = (followsData || []).map((f) => f.following_id);
       const allowedUserIds = [...followingIds, user.id];
 
       if (allowedUserIds.length === 0) {
@@ -227,8 +255,7 @@ export function useStories(options: UseStoriesOptions = {}) {
       if (fetchTokenRef.current !== token) return;
       if (error) throw error;
 
-      // Fetch profiles
-      const userIds = [...new Set((storiesData || []).map(s => s.user_id))];
+      const userIds = [...new Set((storiesData || []).map((s) => s.user_id))];
       let profiles: { user_id: string; username: string; display_name: string | null; avatar_url: string | null }[] | null = [];
       if (userIds.length > 0) {
         const { data, error: profilesError } = await supabase
@@ -240,32 +267,29 @@ export function useStories(options: UseStoriesOptions = {}) {
         profiles = data;
       }
 
-      // Fetch user's viewed stories
       const { data: views, error: viewsError } = await supabase
         .from('story_views')
         .select('story_id')
         .eq('viewer_id', user.id);
       if (fetchTokenRef.current !== token) return;
       if (viewsError) throw viewsError;
-      const viewedStoryIds = (views || []).map(v => v.story_id);
+      const viewedStoryIds = (views || []).map((v) => v.story_id);
 
-      const profileMap = new Map(profiles?.map(p => [p.user_id, p]));
-      let enrichedStories = (storiesData || []).map(story => ({
-        ...story,
-        media_type: story.media_type as 'image' | 'video',
-        like_count: story.like_count ?? 0,
-        profile: profileMap.get(story.user_id),
-        is_viewed: viewedStoryIds.includes(story.id),
-      })) as Story[];
+      const profileMap = new Map(profiles?.map((p) => [p.user_id, p]));
+      let enrichedStories = (storiesData || []).map((row) => {
+        const story = enrichStoryRow(row);
+        story.profile = profileMap.get(story.user_id);
+        story.is_viewed = viewedStoryIds.includes(story.id);
+        return story;
+      });
 
       enrichedStories = await attachLikes(enrichedStories, user.id);
       if (fetchTokenRef.current !== token) return;
 
       setStories(enrichedStories);
 
-      // Group stories by user
-      const grouped = userIds.map(userId => {
-        const userStories = enrichedStories.filter(s => s.user_id === userId);
+      const grouped = userIds.map((userId) => {
+        const userStories = enrichedStories.filter((s) => s.user_id === userId);
         const profile = profileMap.get(userId);
         return {
           user_id: userId,
@@ -273,11 +297,10 @@ export function useStories(options: UseStoriesOptions = {}) {
           display_name: profile?.display_name || 'Unknown',
           avatar_url: profile?.avatar_url || null,
           stories: userStories,
-          has_unviewed: userStories.some(s => !s.is_viewed),
+          has_unviewed: userStories.some((s) => !s.is_viewed),
         };
       });
 
-      // Sort: current user first, then users with unviewed stories
       grouped.sort((a, b) => {
         if (a.user_id === user?.id) return -1;
         if (b.user_id === user?.id) return 1;
@@ -307,58 +330,101 @@ export function useStories(options: UseStoriesOptions = {}) {
         .from('story_views')
         .upsert({ story_id: storyId, viewer_id: user.id }, { onConflict: 'story_id,viewer_id' });
 
-      setStories(prev => prev.map(s =>
-        s.id === storyId ? { ...s, is_viewed: true } : s
-      ));
+      setStories((prev) => prev.map((s) => (s.id === storyId ? { ...s, is_viewed: true } : s)));
     } catch (error) {
       console.error('Error recording story view:', error);
     }
   };
 
-  const uploadStory = async (file: File, caption?: string, music?: { name: string; url: string | null }, duration?: number) => {
+  // -------------------------------------------------------------------------
+  // Uploading
+  // -------------------------------------------------------------------------
+
+  function uploadFileWithProgress(url: string, file: File, onProgress: (f: number) => void): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', url);
+      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress(Math.min(0.92, e.loaded / e.total));
+      };
+      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error('Upload failed')));
+      xhr.onerror = () => reject(new Error('Upload failed — check your connection.'));
+      xhr.send(file);
+    });
+  }
+
+  const uploadStory = async (file: File, opts: UploadStoryOptions = {}) => {
     if (!user) throw new Error('Not authenticated');
     if (!isEnabled('story_posting_enabled')) throw new Error('Story posting is currently disabled by the admin.');
 
-    const fileExt = file.name.split('.').pop();
+    const tick = (state: StoryUploadState) => {
+      setUploadState(state);
+      opts.onProgress?.(state);
+    };
+
+    const mediaType = opts.media_type ?? (file.type.startsWith('video/') ? 'video' : 'image');
+    const fileExt = (file.name.split('.').pop() || (mediaType === 'video' ? 'mp4' : 'jpg')).toLowerCase();
     const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-    const mediaType = file.type.startsWith('video/') ? 'video' : 'image';
 
-    // Upload to storage
-    const { error: uploadError } = await supabase.storage
-      .from('stories')
-      .upload(fileName, file);
+    setUploading(true);
+    try {
+      tick({ phase: 'preparing', progress: 0 });
 
-    if (uploadError) throw uploadError;
+      // Try a signed URL (real byte progress). Fall back to the regular upload
+      // API if signed upload is disabled on the bucket.
+      const signed = await supabase.storage.from('stories').createSignedUploadUrl(fileName);
+      if (!signed.error && signed.data?.signedUrl) {
+        await uploadFileWithProgress(signed.data.signedUrl, file, (p) => tick({ phase: 'uploading', progress: p }));
+      } else {
+        let uploadProgress = 0;
+        // simulate progress ticks so the UI never appears frozen
+        const pulse = window.setInterval(() => {
+          uploadProgress = Math.min(0.9, uploadProgress + 0.08);
+          tick({ phase: 'uploading', progress: uploadProgress });
+        }, 220);
+        const { error: uploadError } = await supabase.storage.from('stories').upload(fileName, file);
+        window.clearInterval(pulse);
+        if (uploadError) throw uploadError;
+      }
 
-    const { data: urlData } = supabase.storage
-      .from('stories')
-      .getPublicUrl(fileName);
+      tick({ phase: 'publishing', progress: 0.98 });
 
-    // Create story record
-    const { data, error: insertError } = await supabase
-      .from('stories')
-      .insert({
-        user_id: user.id,
-        media_url: urlData.publicUrl,
-        media_type: mediaType,
-        caption: caption?.trim() ? caption.trim() : null,
-        duration: mediaType === 'video' ? (duration ?? 15) : 5,
-        music_url: music?.url ?? null,
-        music_name: music?.name ?? null,
-        like_count: 0,
-      })
-      .select()
-      .single();
+      const { data: urlData } = supabase.storage.from('stories').getPublicUrl(fileName);
 
-    if (insertError) throw insertError;
+      const { data, error: insertError } = await supabase
+        .from('stories')
+        .insert({
+          user_id: user.id,
+          media_url: urlData.publicUrl,
+          media_type: mediaType,
+          caption: opts.caption?.trim() ? opts.caption.trim() : null,
+          duration: mediaType === 'video' ? Math.min(opts.duration ?? STORY_MAX_DURATION, STORY_MAX_DURATION) : 5,
+          music_url: opts.music?.url ?? null,
+          music_name: opts.music?.name ?? null,
+          overlays: opts.overlays ?? [],
+          like_count: 0,
+        })
+        .select()
+        .single();
 
-    toast({
-      title: 'Story posted!',
-      description: 'Your story is now visible to your followers for 24 hours.',
-    });
+      if (insertError) throw insertError;
 
-    await fetchStories();
-    return data;
+      tick({ phase: 'done', progress: 1 });
+
+      toast({
+        title: 'Story published',
+        description: 'Your story is live for your followers for the next 24 hours.',
+      });
+
+      await fetchStories();
+      return data as Story;
+    } catch (err) {
+      tick({ phase: 'publishing', progress: 1 });
+      throw err;
+    } finally {
+      setUploading(false);
+    }
   };
 
   const deleteStory = async (storyId: string) => {
@@ -373,83 +439,130 @@ export function useStories(options: UseStoriesOptions = {}) {
 
       if (error) throw error;
 
-      setStories(prev => prev.filter(s => s.id !== storyId));
-      setGroupedStories(prev =>
-        prev
-          .map(g => ({ ...g, stories: g.stories.filter(s => s.id !== storyId) }))
-          .filter(g => g.stories.length > 0)
-      );
-      toast({
-        title: 'Story deleted',
-        description: 'Your story has been removed.',
-      });
+      const remove = (s: Story) => s.id !== storyId;
+      setStories((prev) => prev.filter(remove));
+      setGroupedStories((prev) => prev.map((g) => ({ ...g, stories: g.stories.filter(remove) })).filter((g) => g.stories.length > 0));
+      toast({ title: 'Story deleted', description: 'Your story has been removed.' });
     } catch (error) {
       console.error('Error deleting story:', error);
     }
   };
 
-  const toggleStoryLike = useCallback(async (storyId: string) => {
-    if (!user) return;
+  // -------------------------------------------------------------------------
+  // Reactions (hearts + quick reactions)
+  // -------------------------------------------------------------------------
 
-    const target = stories.find(s => s.id === storyId);
-    const wasLiked = !!target?.is_liked;
-    const newCount = Math.max(0, (target?.like_count ?? 0) + (wasLiked ? -1 : 1));
+  const patchState = (storyId: string, patch: (s: Story) => Story) => {
+    setStories((prev) => prev.map((s) => (s.id === storyId ? patch(s) : s)));
+    setGroupedStories((prev) =>
+      prev.map((g) => ({ ...g, stories: g.stories.map((s) => (s.id === storyId ? patch(s) : s)) })),
+    );
+  };
 
-    const patch = (s: Story): Story =>
-      s.id === storyId ? { ...s, is_liked: !wasLiked, like_count: newCount } : s;
+  const toggleStoryLike = useCallback(
+    async (storyId: string) => {
+      if (!user) return;
 
-    setStories(prev => prev.map(patch));
-    setGroupedStories(prev => prev.map(g => ({ ...g, stories: g.stories.map(patch) })));
+      const target = stories.find((s) => s.id === storyId);
+      const wasLiked = !!target?.is_liked;
+      const newCount = Math.max(0, (target?.like_count ?? 0) + (wasLiked ? -1 : 1));
 
-    try {
-      if (wasLiked) {
-        const { error } = await supabase
-          .from('story_likes')
-          .delete()
-          .eq('story_id', storyId)
-          .eq('user_id', user.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('story_likes')
-          .upsert({ story_id: storyId, user_id: user.id }, { onConflict: 'story_id,user_id' });
-        if (error) throw error;
+      patchState(storyId, (s) => ({ ...s, is_liked: !wasLiked, like_count: newCount, reaction: wasLiked ? null : 'like' }));
+
+      try {
+        if (wasLiked) {
+          const { error } = await supabase
+            .from('story_likes')
+            .delete()
+            .eq('story_id', storyId)
+            .eq('user_id', user.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('story_likes')
+            .upsert({ story_id: storyId, user_id: user.id, reaction: 'like' }, { onConflict: 'story_id,user_id' });
+          if (error) throw error;
+        }
+      } catch (error) {
+        console.error('Error toggling story like:', error);
+        patchState(storyId, (s) => ({
+          ...s,
+          is_liked: wasLiked,
+          like_count: target?.like_count ?? s.like_count,
+          reaction: target?.reaction ?? null,
+        }));
       }
-    } catch (error) {
-      console.error('Error toggling story like:', error);
-      const revert = (s: Story): Story =>
-        s.id === storyId ? { ...s, is_liked: wasLiked, like_count: target?.like_count ?? newCount } : s;
-      setStories(prev => prev.map(revert));
-      setGroupedStories(prev => prev.map(g => ({ ...g, stories: g.stories.map(revert) })));
-    }
-  }, [user, stories]);
+    },
+    [user, stories],
+  );
 
-  const sendStoryReply = useCallback(async (storyOwnerId: string, content: string) => {
-    if (!user) throw new Error('Not authenticated');
-    if (!isEnabled('direct_messages_enabled')) throw new Error('Direct messages are currently disabled by the admin.');
+  const setStoryReaction = useCallback(
+    async (storyId: string, reaction: string) => {
+      if (!user) return;
 
-    const text = content.trim().slice(0, 1000);
-    if (!text) throw new Error('Reply cannot be empty');
+      const target = stories.find((s) => s.id === storyId);
+      const wasLiked = !!target?.is_liked;
+      const same = target?.reaction === reaction;
+      const remove = wasLiked && same;
+      const newCount = Math.max(0, (target?.like_count ?? 0) + (remove ? -1 : wasLiked ? 0 : 1));
 
-    // Replies are delivered as a direct message to the story owner.
-    const { data: conversationId, error: convError } = await supabase.rpc('get_or_create_dm_conversation', {
-      other_user_id: storyOwnerId,
-    });
-    if (convError) throw convError;
-    if (!conversationId) throw new Error('Could not open a conversation with this user.');
+      patchState(storyId, (s) => ({
+        ...s,
+        is_liked: remove ? false : true,
+        like_count: newCount,
+        reaction: remove ? null : reaction,
+      }));
 
-    const { error } = await supabase
-      .from('messages')
-      .insert({
+      try {
+        if (remove) {
+          const { error } = await supabase.from('story_likes').delete().eq('story_id', storyId).eq('user_id', user.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('story_likes')
+            .upsert({ story_id: storyId, user_id: user.id, reaction }, { onConflict: 'story_id,user_id' });
+          if (error) throw error;
+        }
+      } catch (error) {
+        console.error('Error reacting to story:', error);
+        patchState(storyId, (s) => ({
+          ...s,
+          is_liked: wasLiked,
+          like_count: target?.like_count ?? s.like_count,
+          reaction: target?.reaction ?? null,
+        }));
+      }
+    },
+    [user, stories],
+  );
+
+  const sendStoryReply = useCallback(
+    async (storyOwnerId: string, content: string) => {
+      if (!user) throw new Error('Not authenticated');
+      if (!isEnabled('direct_messages_enabled')) throw new Error('Direct messages are currently disabled by the admin.');
+
+      const text = content.trim().slice(0, 1000);
+      if (!text) throw new Error('Reply cannot be empty');
+
+      // Replies are delivered as a direct message to the story owner.
+      const { data: conversationId, error: convError } = await supabase.rpc('get_or_create_dm_conversation', {
+        other_user_id: storyOwnerId,
+      });
+      if (convError) throw convError;
+      if (!conversationId) throw new Error('Could not open a conversation with this user.');
+
+      const { error } = await supabase.from('messages').insert({
         conversation_id: conversationId,
         sender_id: user.id,
         content: text,
         effect: null,
         client_id: crypto.randomUUID(),
       });
-    if (error) throw error;
-    return conversationId;
-  }, [user, isEnabled]);
+      if (error) throw error;
+      return conversationId;
+    },
+    [user, isEnabled],
+  );
 
   const fetchStoryViewers = useCallback(async (storyId: string): Promise<StoryViewerProfile[]> => {
     const { data: views, error } = await supabase
@@ -461,14 +574,14 @@ export function useStories(options: UseStoriesOptions = {}) {
     if (error) throw error;
     if (!views || views.length === 0) return [];
 
-    const viewerIds = views.map(v => v.viewer_id);
+    const viewerIds = views.map((v) => v.viewer_id);
     const { data: profiles } = await supabase
       .from('profiles')
       .select('user_id, username, display_name, avatar_url')
       .in('user_id', viewerIds);
 
-    const profileMap = new Map((profiles || []).map(p => [p.user_id, p]));
-    return views.map(v => ({
+    const profileMap = new Map((profiles || []).map((p) => [p.user_id, p]));
+    return views.map((v) => ({
       viewer_id: v.viewer_id,
       viewed_at: v.viewed_at,
       username: profileMap.get(v.viewer_id)?.username || 'unknown',
@@ -482,10 +595,13 @@ export function useStories(options: UseStoriesOptions = {}) {
     groupedStories,
     loading,
     error,
+    uploading,
+    uploadState,
     viewStory,
     uploadStory,
     deleteStory,
     toggleStoryLike,
+    setStoryReaction,
     sendStoryReply,
     fetchStoryViewers,
     refetch: fetchStories,

@@ -1,0 +1,133 @@
+Attached Element Context from Integrated Browser
+
+Element: svg.h-16.w-20.-translate-y-1.overflow-visible.drop-shadow-[0_5px_14px_rgba(124,58,237,0.45)]
+
+URL: http://localhost:8081/
+
+HTML Path: div#root > div.bg-background.min-h-screen > nav.lg:hidden.fixed.bottom-0.left-0.right-0.z-50.px-4.pb-[calc(env(safe-area-inset-bottom,0px)+12px)].pt-2.pointer-events-none > div.pointer-events-auto.mx-auto.max-w-[430px].rounded-full.bg-background/75.backdrop-blur-xl.border.border-border/60.shadow-lg.shadow-black/10.flex.items-center.justify-around.h-16.px-2.relative > div.relative.flex.items-center > div.absolute.inset-0.z-0.flex.items-center.justify-center > svg.h-16.w-20.-translate-y-1.overflow-visible.drop-shadow-[0_5px_14px_rgba(124,58,237,0.45)]
+
+Outer HTML:
+```html
+<svg viewBox="0 0 96 80" class="h-16 w-20 -translate-y-1 overflow-visible drop-shadow-[0_5px_14px_rgba(124,58,237,0.45)]" aria-hidden="true"><defs><linearGradient id="nav-cloud-grad" x1="0" y1="0" x2="96" y2="80" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#a78bfa"></stop><stop offset="50%" stop-color="hsl(var(--primary))"></stop><stop offset="100%" stop-color="#4f46e5"></stop></linearGradient></defs><g fill="url(#nav-cloud-grad)"><rect x="4" y="46" width="74" height="28" rx="14"></rect><circle cx="24" cy="40" r="16"></circle><circle cx="44" cy="30" r="19"></circle><circle cx="66" cy="37" r="17"></circle><circle cx="82" cy="48" r="12"></circle></g></svg>
+```
+
+Dimensions:
+- top: 322px
+- left: 43px
+- width: 67px
+- height: 56px
+
+CSS:
+```css
+*, ::before, ::after { --tw-border-spacing-x: 0;
+  --tw-border-spacing-y: 0;
+  --tw-translate-x: 0;
+  --tw-translate-y: 0;
+  --tw-rotate: 0;
+  --tw-skew-x: 0;
+  --tw-skew-y: 0;
+  --tw-scale-x: 1;
+  --tw-scale-y: 1;
+  --tw-pan-x:  ;
+  --tw-pan-y:  ;
+  --tw-pinch-zoom:  ;
+  --tw-scroll-snap-strictness: proximity;
+  --tw-gradient-from-position:  ;
+  --tw-gradient-via-position:  ;
+  --tw-gradient-to-position:  ;
+  --tw-ordinal:  ;
+  --tw-slashed-zero:  ;
+  --tw-numeric-figure:  ;
+  --tw-numeric-spacing:  ;
+  --tw-numeric-fraction:  ;
+  --tw-ring-inset:  ;
+  --tw-ring-offset-width: 0px;
+  --tw-ring-offset-color: #fff;
+  --tw-ring-color: rgb(59 130 246 / 0.5);
+  --tw-ring-offset-shadow: 0 0 #0000;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-shadow: 0 0 #0000;
+  --tw-shadow-colored: 0 0 #0000;
+  --tw-blur:  ;
+  --tw-brightness:  ;
+  --tw-contrast:  ;
+  --tw-grayscale:  ;
+  --tw-hue-rotate:  ;
+  --tw-invert:  ;
+  --tw-saturate:  ;
+  --tw-sepia:  ;
+  --tw-drop-shadow:  ;
+  --tw-backdrop-blur:  ;
+  --tw-backdrop-brightness:  ;
+  --tw-backdrop-contrast:  ;
+  --tw-backdrop-grayscale:  ;
+  --tw-backdrop-hue-rotate:  ;
+  --tw-backdrop-invert:  ;
+  --tw-backdrop-opacity:  ;
+  --tw-backdrop-saturate:  ;
+  --tw-backdrop-sepia:  ;
+  --tw-contain-size:  ;
+  --tw-contain-layout:  ;
+  --tw-contain-paint:  ;
+  --tw-contain-style:  ; }
+*, ::before, ::after { box-sizing: border-box; /* 1 */
+  border-width: 0; /* 2 */
+  border-style: solid; /* 2 */
+  border-color: #e5e7eb; /* 2 */ }
+* { border-color: hsl(var(--border)); }
+img, svg, video, canvas, audio, iframe, embed, object { display: block; /* 1 */
+  vertical-align: middle; /* 2 */ }
+.h-16 { height: 4rem; }
+.w-20 { width: 5rem; }
+.-translate-y-1 { --tw-translate-y: -0.25rem;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y)); }
+.overflow-visible { overflow: visible; }
+.drop-shadow-\[0_5px_14px_rgba\(124\2c 58\2c 237\2c 0\.45\)\] { --tw-drop-shadow: drop-shadow(0 5px 14px rgba(124,58,237,0.45));
+  filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow); }
+
+/* Pseudo-elements */
+::before, ::after { --tw-content: ''; }
+
+/* Inherited */
+body { color: hsl(var(--foreground)) }
+html, :host { line-height: 1.5; tab-size: 4 }
+html { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif }
+
+/* Resolved values */
+border: 0px solid rgb(39, 39, 42);
+box-sizing: border-box;
+color: rgb(250, 250, 250);
+display: block;
+filter: drop-shadow(rgba(124, 58, 237, 0.45) 0px 5px 14px);
+font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+font-feature-settings: normal;
+height: 55.9961px;
+line-height: 21px;
+overflow-clip-margin: content-box /*UA*/;
+overflow-x: visible;
+overflow-y: visible;
+tab-size: 4;
+transform: matrix(1, 0, 0, 1, 0, -3.5);
+vertical-align: middle;
+width: 67.1875px;
+
+/* CSS variables */
+--border: 240 3.7% 15.9%;
+--tw-sepia: ;
+--tw-brightness: ;
+--tw-hue-rotate: ;
+--tw-scale-y: 1;
+--tw-drop-shadow: drop-shadow(0 5px 14px rgba(124,58,237,0.45));
+--tw-translate-y: -0.25rem;
+--tw-rotate: 0;
+--tw-contrast: ;
+--tw-skew-x: 0;
+--tw-translate-x: 0;
+--tw-saturate: ;
+--tw-grayscale: ;
+--tw-scale-x: 1;
+--tw-skew-y: 0;
+--tw-blur: ;
+--tw-invert: ;
+--foreground: 0 0% 98%;
+```

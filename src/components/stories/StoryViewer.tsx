@@ -14,10 +14,13 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
+import { blockCallOverlay, unblockCallOverlay } from '@/lib/callOverlayLayers';
 import { formatDistanceToNow, formatDistanceToNowStrict } from 'date-fns';
 import { recordAdEvent, useAdImpression } from '@/hooks/useAdTracking';
 import { useToast } from '@/hooks/use-toast';
 import type { GroupedStories, StoryViewerProfile } from '@/hooks/useStories';
+import { storyMediaFilterStyle } from '@/lib/stories';
+import StoryOverlayRenderer from '@/components/stories/StoryOverlayRenderer';
 
 interface StoryViewerProps {
   open: boolean;
@@ -29,11 +32,23 @@ interface StoryViewerProps {
   onDelete: (storyId: string) => void;
   onFetchViewers: (storyId: string) => Promise<StoryViewerProfile[]>;
   onToggleLike: (storyId: string) => void;
+  onReact?: (storyId: string, reaction: string) => void;
   onSendReply: (storyOwnerId: string, content: string) => Promise<unknown>;
 }
 
+const REACTIONS = ['😀', '😂', '😮', '🔥', '😍', '💜'];
+
+const REACTION_META: Record<string, { label: string; emoji: string }> = {
+  smile: { label: 'Laughing', emoji: '😂' },
+  love: { label: 'Love', emoji: '💜' },
+};
+
 function getInitials(name: string) {
   return name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
+}
+
+function reactionLabel(reaction: string): string {
+  return REACTION_META[reaction]?.label ?? reaction ?? 'Like';
 }
 
 export default function StoryViewer({
@@ -46,6 +61,7 @@ export default function StoryViewer({
   onDelete,
   onFetchViewers,
   onToggleLike,
+  onReact,
   onSendReply,
 }: StoryViewerProps) {
   const [groupIndex, setGroupIndex] = useState(initialGroupIndex);
@@ -55,6 +71,8 @@ export default function StoryViewer({
   const [musicMuted, setMusicMuted] = useState(false);
   const [videoProgress, setVideoProgress] = useState(0);
   const [mediaLoading, setMediaLoading] = useState(true);
+  const [dragY, setDragY] = useState(0);
+  const [likeBurst, setLikeBurst] = useState<string | null>(null);
   const [viewersOpen, setViewersOpen] = useState(false);
   const [viewers, setViewers] = useState<StoryViewerProfile[]>([]);
   const [viewersLoading, setViewersLoading] = useState(false);
@@ -62,8 +80,8 @@ export default function StoryViewer({
   const [sendingReply, setSendingReply] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const touchStartX = useRef<number | null>(null);
-  const pressStart = useRef<{ x: number; t: number; rect: DOMRect } | null>(null);
+  const pressStart = useRef<{ x: number; y: number; t: number; rect: DOMRect } | null>(null);
+  const lastTap = useRef<{ id: string; t: number } | null>(null);
   const adMediaRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -75,6 +93,9 @@ export default function StoryViewer({
   const currentAd = currentGroup?.ad ?? null;
   const isLiked = !!currentStory?.is_liked;
   const likeCount = currentStory?.like_count ?? 0;
+  const currentReaction = currentStory?.reaction ?? null;
+  const overlays = currentStory?.overlays ?? [];
+  const mediaFilter = storyMediaFilterStyle(overlays);
 
   useAdImpression(adMediaRef, open ? currentAd : null, !!currentAd, 'stories');
 
@@ -109,12 +130,21 @@ export default function StoryViewer({
     setPaused(false);
     setVideoProgress(0);
     setMediaLoading(true);
+    setDragY(0);
+    setLikeBurst(null);
   }, []);
 
   useEffect(() => {
     if (!open) return;
     resetTo(initialGroupIndex, 0);
   }, [open, initialGroupIndex, resetTo]);
+
+  // Full-screen viewer takes priority over the minimized call overlay.
+  useEffect(() => {
+    if (!open) return;
+    blockCallOverlay();
+    return () => unblockCallOverlay();
+  }, [open]);
 
   const markViewed = useCallback((storyId: string) => {
     onView(storyId);
@@ -237,37 +267,81 @@ export default function StoryViewer({
     setDeleteConfirmOpen(true);
   }, []);
 
-  // Media interactions: hold to pause, tap / swipe to navigate
+  const beforeMediaUnload = useCallback(() => {
+    setMediaLoading(true);
+  }, []);
+
+  // Media interactions: hold to pause, tap / swipe / double-tap / swipe-down
   const handleMediaPointerDown = useCallback((e: React.PointerEvent) => {
     pressStart.current = {
       x: e.clientX,
+      y: e.clientY,
       t: performance.now(),
       rect: e.currentTarget.getBoundingClientRect(),
     };
     setPaused(true);
   }, []);
 
+  const handleMediaPointerMove = useCallback((e: React.PointerEvent) => {
+    const start = pressStart.current;
+    if (!start) return;
+    const dy = e.clientY - start.y;
+    if (dy > 8 && Math.abs(dy) > Math.abs(e.clientX - start.x)) {
+      setDragY(Math.min(220, dy * 1.4));
+    }
+  }, []);
+
   const handleMediaPointerUp = useCallback((e: React.PointerEvent) => {
     const start = pressStart.current;
     pressStart.current = null;
+    setDragY(0);
     setPaused(false);
     if (!start) return;
     const dt = performance.now() - start.t;
     const dx = e.clientX - start.x;
-    if (Math.abs(dx) > 45) {
+    const dy = e.clientY - start.y;
+
+    // Swipe down to close
+    if (dy > 90 && Math.abs(dy) > Math.abs(dx) * 1.2 && dt < 900) {
+      onOpenChange(false);
+      return;
+    }
+    // Horizontal swipe navigates
+    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) {
       if (dx < 0) handleNext(); else handlePrev();
       return;
     }
+    // Tap navigation by thirds
     if (dt < 260) {
       const rect = start.rect;
       const x = e.clientX - rect.left;
-      if (x < rect.width / 3) handlePrev();
-      else if (x > (rect.width * 2) / 3) handleNext();
+      if (x < rect.width / 3) {
+        handlePrev();
+        return;
+      }
+      if (x > (rect.width * 2) / 3) {
+        handleNext();
+        return;
+      }
+      // Center tap: double-tap to like
+      if (!isOwnStory && !currentAd && currentStoryId) {
+        const now = performance.now();
+        const prev = lastTap.current;
+        if (prev && prev.id === currentStoryId && now - prev.t < 320) {
+          lastTap.current = null;
+          onToggleLike(currentStoryId);
+          setLikeBurst(now.toString());
+          window.setTimeout(() => setLikeBurst(null), 700);
+        } else {
+          lastTap.current = { id: currentStoryId, t: now };
+        }
+      }
     }
-  }, [handleNext, handlePrev]);
+  }, [handleNext, handlePrev, isOwnStory, currentAd, currentStoryId, onToggleLike, onOpenChange]);
 
   const handleMediaPointerCancel = useCallback(() => {
     pressStart.current = null;
+    setDragY(0);
     setPaused(false);
   }, []);
 
@@ -306,6 +380,18 @@ export default function StoryViewer({
     }
   };
 
+  const handleReact = (reaction: string) => {
+    if (!currentStoryId || isOwnStory || !onReact) return;
+    onReact(currentStoryId, reaction);
+  };
+
+  const handleReactTab = (reaction: string) => (e: { key: string; preventDefault: () => void }) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleReact(reaction);
+    }
+  };
+
   const activeSegment = (story: typeof currentGroup.stories[number], i: number) => {
     if (i > storyIndex) {
       return <div className="h-full w-0 rounded-full" />;
@@ -338,6 +424,9 @@ export default function StoryViewer({
     : currentGroup?.user_id === currentUserId
       ? 'Your story'
       : currentGroup?.display_name ?? '';
+
+  const windowStyle = { transform: dragY ? `translateY(${dragY}px)` : undefined };
+  const closeHintVisible = dragY > 40;
 
   return (
     <>
@@ -391,11 +480,17 @@ export default function StoryViewer({
                         variant="ghost"
                         size="icon"
                         onClick={() => setViewersOpen(true)}
-                        title="View story views"
-                        className="h-8 w-8 rounded-full text-white hover:bg-white/15 gap-1 !px-2"
+                        title="View story stats"
+                        className="h-8 rounded-full text-white hover:bg-white/15 gap-1 !px-2"
                       >
                         <Eye className="h-[18px] w-[18px]" />
                         <span className="text-xs font-semibold tabular-nums">{currentStory.view_count ?? 0}</span>
+                        {likeCount > 0 && (
+                          <span className="flex items-center gap-1 text-xs font-semibold tabular-nums">
+                            <Heart className="h-3.5 w-3.5 fill-red-500 text-red-500" />
+                            {likeCount}
+                          </span>
+                        )}
                       </Button>
                     )}
                     {currentStory.media_type === 'video' && (
@@ -436,33 +531,26 @@ export default function StoryViewer({
                 <div
                   ref={adMediaRef}
                   className="absolute inset-0 z-10"
-                  style={{ touchAction: 'pan-y' }}
-                  onTouchStart={e => { touchStartX.current = e.touches[0].clientX; }}
-                  onTouchEnd={e => {
-                    if (touchStartX.current == null) return;
-                    const dx = e.changedTouches[0].clientX - touchStartX.current;
-                    touchStartX.current = null;
-                    if (Math.abs(dx) > 45) {
-                      if (dx < 0) handleNext(); else handlePrev();
-                    }
-                  }}
+                  style={{ touchAction: 'pan-y', transition: dragY ? 'none' : 'transform 0.25s ease-out', transform: dragY ? `translateY(${dragY}px)` : undefined }}
                   onPointerDown={handleMediaPointerDown}
+                  onPointerMove={handleMediaPointerMove}
                   onPointerUp={handleMediaPointerUp}
                   onPointerCancel={handleMediaPointerCancel}
                 >
-                  <div className="relative w-full h-full">
+                  <div className="relative w-full h-full" style={windowStyle}>
                     {currentStory.media_type === 'video' ? (
                       <video
                         key={currentStory.id}
                         ref={videoRef}
                         src={currentStory.media_url}
                         className="absolute inset-0 w-full h-full object-contain story-enter"
+                        style={mediaFilter}
                         autoPlay
                         loop={false}
                         muted={muted || !!currentStory.music_url}
                         playsInline
                         onLoadedMetadata={e => { e.currentTarget.currentTime = 0; setMediaLoading(false); }}
-                        onWaiting={() => setMediaLoading(true)}
+                        onWaiting={beforeMediaUnload}
                         onCanPlay={() => setMediaLoading(false)}
                         onEnded={handleNext}
                         onTimeUpdate={e => {
@@ -476,9 +564,32 @@ export default function StoryViewer({
                         src={currentStory.media_url}
                         alt=""
                         className="absolute inset-0 w-full h-full object-contain story-enter"
+                        style={mediaFilter}
                         onLoad={() => setMediaLoading(false)}
                         draggable={false}
                       />
+                    )}
+
+                    {/* Creative overlays */}
+                    {overlays.length > 0 && (
+                      <StoryOverlayRenderer
+                        key={`${currentStory.id}-overlays`}
+                        overlays={overlays}
+                        className="z-[15]"
+                      />
+                    )}
+
+                    {/* Double-tap burst */}
+                    {likeBurst && (
+                      <div key={likeBurst} className="absolute inset-0 z-[18] flex items-center justify-center pointer-events-none">
+                        <Heart className="h-24 w-24 fill-red-500 text-red-500 story-burst" />
+                      </div>
+                    )}
+
+                    {closeHintVisible && (
+                      <div className="absolute inset-x-0 top-[max(env(safe-area-inset-top,0px),40px)] z-[19] flex justify-center pointer-events-none">
+                        <span className="rounded-full bg-black/60 px-3 py-1 text-[11px] text-white/80">Release to close</span>
+                      </div>
                     )}
 
                     {/* Scrims for legibility only */}
@@ -495,7 +606,7 @@ export default function StoryViewer({
 
                 {/* ─── Caption / music ─── */}
                 {(currentStory.caption || currentStory.music_url) && (
-                  <div className="absolute inset-x-4 bottom-28 z-20 flex flex-col items-center gap-2 pointer-events-none">
+                  <div className="absolute inset-x-4 bottom-[calc(env(safe-area-inset-bottom,0px)+84px)] z-20 flex flex-col items-center gap-2 pointer-events-none">
                     {currentStory.music_url && (
                       <>
                         <audio
@@ -560,29 +671,70 @@ export default function StoryViewer({
                   </div>
                 )}
 
-                {/* ─── Bottom: like + reply ─── */}
+                {/* ─── Bottom: reactions + like + reply ─── */}
                 {!currentAd && !mediaLoading && (
-                  <div className="absolute bottom-0 left-0 right-0 z-30 px-4 pb-[calc(env(safe-area-inset-bottom,0px)+12px)]">
-                    <div className="mx-auto flex w-full items-center gap-3 max-w-md">
-                      <button
-                        type="button"
-                        onClick={handleToggleLike}
-                        onKeyDown={handleToggleLikeTab}
-                        className="flex items-center gap-1.5 rounded-full bg-black/45 border border-white/15 px-2.5 py-1.5 transition-colors hover:bg-black/60"
-                        aria-label={isLiked ? 'Unlike this story' : 'Like this story'}
-                        aria-pressed={isLiked}
-                      >
-                        <Heart
-                          key={`${currentStory.id}-${isLiked}`}
-                          className={cn(
-                            'h-5 w-5 transition-colors',
-                            isLiked ? 'fill-red-500 text-red-500 story-like-pop' : 'text-white'
+                  <div className="absolute bottom-0 left-0 right-0 z-30 px-4 pb-[calc(env(safe-area-inset-bottom,0px)+10px)]">
+                    {!isOwnStory && onReact && (
+                      <div className="mx-auto mb-2 flex w-full max-w-md items-center justify-center gap-0.5 rounded-full bg-black/45 px-2 py-1.5 ring-1 ring-white/10">
+                        {REACTIONS.map(emoji => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => handleReact(emoji)}
+                            onKeyDown={handleReactTab(emoji)}
+                            aria-label={`React ${emoji}`}
+                            className={cn(
+                              'flex h-8 w-8 items-center justify-center rounded-full text-lg transition hover:scale-110 hover:bg-white/15',
+                              currentReaction === emoji && 'bg-violet-500/25 ring-1 ring-violet-400',
+                            )}
+                          >
+                            <span className="translate-y-px">{emoji}</span>
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={handleToggleLike}
+                          onKeyDown={handleToggleLikeTab}
+                          aria-label={isLiked ? `Remove reaction (${reactionLabel(currentReaction ?? 'like')})` : 'Like this story'}
+                          aria-pressed={isLiked}
+                          className="flex h-8 items-center gap-1 rounded-full px-1.5 text-lg transition hover:bg-white/15"
+                        >
+                          <Heart
+                            key={`${currentStory.id}-${isLiked}`}
+                            className={cn(
+                              'h-5 w-5 transition-colors',
+                              isLiked ? 'fill-red-500 text-red-500 story-like-pop' : 'text-white/90',
+                            )}
+                          />
+                          {likeCount > 0 && (
+                            <span className="text-xs font-semibold tabular-nums text-white">{likeCount}</span>
                           )}
-                        />
-                        {likeCount > 0 && (
-                          <span className="text-xs font-semibold tabular-nums text-white">{likeCount}</span>
-                        )}
-                      </button>
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="mx-auto flex w-full items-center gap-3 max-w-md">
+                      {!isOwnStory && !onReact && (
+                        <button
+                          type="button"
+                          onClick={handleToggleLike}
+                          onKeyDown={handleToggleLikeTab}
+                          className="flex items-center gap-1.5 rounded-full bg-black/45 border border-white/15 px-2.5 py-1.5 transition-colors hover:bg-black/60"
+                          aria-label={isLiked ? 'Unlike this story' : 'Like this story'}
+                          aria-pressed={isLiked}
+                        >
+                          <Heart
+                            key={`${currentStory.id}-${isLiked}`}
+                            className={cn(
+                              'h-5 w-5 transition-colors',
+                              isLiked ? 'fill-red-500 text-red-500 story-like-pop' : 'text-white'
+                            )}
+                          />
+                          {likeCount > 0 && (
+                            <span className="text-xs font-semibold tabular-nums text-white">{likeCount}</span>
+                          )}
+                        </button>
+                      )}
 
                       <div className="flex-1 flex items-center gap-1.5 bg-black/45 border border-white/15 rounded-full pl-4 pr-1.5 py-1.5">
                         <input
@@ -759,6 +911,15 @@ export default function StoryViewer({
         }
         .story-like-pop {
           animation: story-like-pop 0.2s ease-out;
+        }
+        @keyframes story-burst {
+          0% { transform: scale(0.3); opacity: 0; }
+          25% { transform: scale(1.15); opacity: 1; }
+          60% { transform: scale(1); opacity: 1; }
+          100% { transform: scale(1.25); opacity: 0; }
+        }
+        .story-burst {
+          animation: story-burst 0.7s ease-out forwards;
         }
         @keyframes eq-a { 0%, 100% { height: 30%; } 50% { height: 95%; } }
         @keyframes eq-b { 0%, 100% { height: 80%; } 50% { height: 25%; } }

@@ -6,6 +6,7 @@ import { useCamera } from '@/hooks/useCamera';
 import { pickMediaRecorderMimeType } from '@/lib/media-filters';
 import FilterEditor, { MediaEditorResult, MediaEditorMedia } from '@/components/media/FilterEditor';
 import { cn } from '@/lib/utils';
+import { blockCallOverlay, unblockCallOverlay } from '@/lib/callOverlayLayers';
 import { X, FlipHorizontal2, Zap, ZapOff, ImagePlus, Camera, Video, Loader2, Circle } from 'lucide-react';
 
 interface CameraModalProps {
@@ -19,6 +20,8 @@ interface CameraModalProps {
 
 const MAX_VIDEO_DEFAULT = 30;
 
+const TARGET_RATIO = 9 / 16;
+
 function CropView({ file, type, onBack, onConfirm }: { file: File | null; type: 'image' | 'video'; onBack: () => void; onConfirm: (f: File) => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -30,8 +33,6 @@ function CropView({ file, type, onBack, onConfirm }: { file: File | null; type: 
   const [mediaNatural, setMediaNatural] = useState<{ w: number; h: number } | null>(null);
   const [containerSize, setContainerSize] = useState<{ w: number; h: number } | null>(null);
   const url = file ? URL.createObjectURL(file) : null;
-
-  const TARGET_RATIO = 9 / 16;
 
   const handleMediaLoad = useCallback(() => {
     const natural = type === 'image'
@@ -220,6 +221,7 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
       stop();
       return;
     }
+    blockCallOverlay();
     setStep('camera');
     setCaptureMode(startMode);
     setMedia(null);
@@ -228,6 +230,7 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
     return () => {
       cleanupRecorder();
       stop();
+      unblockCallOverlay();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -241,6 +244,14 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
     setPendingFile(file);
     setPendingType(file.type.startsWith('video/') ? 'video' : 'image');
     setStep('crop');
+  };
+
+  // Videos skip the crop step entirely: re-encoding a video in a canvas here
+  // produced ~100ms clips. Real video trim happens in the story editor, and a
+  // 9:16 visual crop is applied live via object-cover.
+  const enterResult = (file: File) => {
+    if (file.type.startsWith('video/')) enterEdit(file);
+    else enterCrop(file);
   };
 
   const enterEdit = (file: File) => {
@@ -316,7 +327,7 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
       if (blob.size > 0) {
         const file = new File([blob], `video-${Date.now()}.${ext}`, { type: mimeType });
         setPendingDuration(duration);
-        enterCrop(file);
+        enterEdit(file);
       }
     };
     recorder.start(100);
@@ -365,7 +376,7 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
       return;
     }
     setPendingDuration(undefined);
-    enterCrop(file);
+    enterResult(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -555,7 +566,9 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
               onBack={() => {
                 URL.revokeObjectURL(media.url);
                 setMedia(null);
-                setStep('crop');
+                // Images can still be re-adjusted in crop; videos go straight
+                // back to the camera.
+                setStep(media.type === 'video' ? 'camera' : 'crop');
               }}
               onClose={handleClose}
               onDone={(result) => {

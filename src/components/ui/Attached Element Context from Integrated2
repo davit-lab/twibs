@@ -1,0 +1,120 @@
+Attached Element Context from Integrated Browser
+
+Element: p.text-xs.font-bold.uppercase.tracking-[0.16em].text-primary
+
+URL: http://localhost:8081/settings?section=professional
+
+HTML Path: div#root > div.bg-background.min-h-screen > main.min-h-screen.lg:ml-[80px] > div.max-w-6xl.mx-auto.px-4.py-8.pb-28.lg:pb-10 > div.mb-8 > div.flex.flex-col.sm:flex-row.sm:items-end.sm:justify-between.gap-4 > div.min-w-0 > p.text-xs.font-bold.uppercase.tracking-[0.16em].text-primary
+
+Outer HTML:
+```html
+<p class="text-xs font-bold uppercase tracking-[0.16em] text-primary">Settings</p>
+```
+
+Dimensions:
+- top: 28px
+- left: 14px
+- width: 482px
+- height: 14px
+
+CSS:
+```css
+*, ::before, ::after { --tw-border-spacing-x: 0;
+  --tw-border-spacing-y: 0;
+  --tw-translate-x: 0;
+  --tw-translate-y: 0;
+  --tw-rotate: 0;
+  --tw-skew-x: 0;
+  --tw-skew-y: 0;
+  --tw-scale-x: 1;
+  --tw-scale-y: 1;
+  --tw-pan-x:  ;
+  --tw-pan-y:  ;
+  --tw-pinch-zoom:  ;
+  --tw-scroll-snap-strictness: proximity;
+  --tw-gradient-from-position:  ;
+  --tw-gradient-via-position:  ;
+  --tw-gradient-to-position:  ;
+  --tw-ordinal:  ;
+  --tw-slashed-zero:  ;
+  --tw-numeric-figure:  ;
+  --tw-numeric-spacing:  ;
+  --tw-numeric-fraction:  ;
+  --tw-ring-inset:  ;
+  --tw-ring-offset-width: 0px;
+  --tw-ring-offset-color: #fff;
+  --tw-ring-color: rgb(59 130 246 / 0.5);
+  --tw-ring-offset-shadow: 0 0 #0000;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-shadow: 0 0 #0000;
+  --tw-shadow-colored: 0 0 #0000;
+  --tw-blur:  ;
+  --tw-brightness:  ;
+  --tw-contrast:  ;
+  --tw-grayscale:  ;
+  --tw-hue-rotate:  ;
+  --tw-invert:  ;
+  --tw-saturate:  ;
+  --tw-sepia:  ;
+  --tw-drop-shadow:  ;
+  --tw-backdrop-blur:  ;
+  --tw-backdrop-brightness:  ;
+  --tw-backdrop-contrast:  ;
+  --tw-backdrop-grayscale:  ;
+  --tw-backdrop-hue-rotate:  ;
+  --tw-backdrop-invert:  ;
+  --tw-backdrop-opacity:  ;
+  --tw-backdrop-saturate:  ;
+  --tw-backdrop-sepia:  ;
+  --tw-contain-size:  ;
+  --tw-contain-layout:  ;
+  --tw-contain-paint:  ;
+  --tw-contain-style:  ; }
+*, ::before, ::after { box-sizing: border-box; /* 1 */
+  border-width: 0; /* 2 */
+  border-style: solid; /* 2 */
+  border-color: #e5e7eb; /* 2 */ }
+* { border-color: hsl(var(--border)); }
+blockquote, dl, dd, h1, h2, h3, h4, h5, h6, hr, figure, p, pre { margin: 0; }
+.text-xs { font-size: 0.75rem;
+  line-height: 1rem; }
+.font-bold { font-weight: 700; }
+.uppercase { text-transform: uppercase; }
+.tracking-\[0\.16em\] { letter-spacing: 0.16em; }
+.text-primary { color: hsl(var(--primary)); }
+
+/* Pseudo-elements */
+::before, ::after { --tw-content: ''; }
+
+/* Inherited */
+body { color: hsl(var(--foreground)) }
+html, :host { line-height: 1.5; tab-size: 4 }
+html { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif }
+
+/* Resolved values */
+margin: 0px;
+border: 0px solid rgb(39, 39, 42);
+box-sizing: border-box;
+color: rgb(60, 131, 246);
+display: block;
+font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+font-feature-settings: normal;
+font-size: 10.5px;
+font-weight: 700;
+height: 14.0039px;
+letter-spacing: 1.68px;
+line-height: 14px;
+margin-block-end: 0px /*UA*/;
+margin-block-start: 0px /*UA*/;
+margin-inline-end: 0px /*UA*/;
+margin-inline-start: 0px /*UA*/;
+tab-size: 4;
+text-transform: uppercase;
+unicode-bidi: isolate /*UA*/;
+width: 482.031px;
+
+/* CSS variables */
+--border: 240 3.7% 15.9%;
+--primary: 217 91% 60%;
+--foreground: 0 0% 98%;
+```

@@ -6,7 +6,7 @@ export interface PushNotificationPayload {
   body: string;
   icon?: string;
   tag?: string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
   requireInteraction?: boolean;
 }
 
@@ -57,7 +57,7 @@ export const showNotification = async (payload: PushNotificationPayload): Promis
 
     notification.onclick = () => {
       window.focus();
-      if (payload.data?.url) {
+      if (typeof payload.data?.url === 'string') {
         window.location.href = payload.data.url;
       }
       notification.close();
@@ -77,36 +77,9 @@ export const showIncomingCallNotification = async (
   conversationId: string,
   avatarUrl?: string | null
 ): Promise<Notification | null> => {
-  // Play a sound for incoming calls (browser notification sound)
-  try {
-    // Create an audio context for the ringtone effect
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.frequency.value = 440;
-    oscillator.type = 'sine';
-    gainNode.gain.value = 0.1;
-    
-    oscillator.start();
-    
-    // Ring pattern
-    setTimeout(() => {
-      gainNode.gain.value = 0;
-      setTimeout(() => {
-        gainNode.gain.value = 0.1;
-        setTimeout(() => {
-          oscillator.stop();
-        }, 200);
-      }, 100);
-    }, 200);
-  } catch (e) {
-    // Audio context may not be available
-  }
-
+  // NOTE: The in-app ringtone is played by the global CallAudioManager
+  // (src/lib/callAudio.ts) via the IncomingCallOverlay — never duplicate the
+  // audio here.
   return showNotification({
     title: `${callerName} is calling...`,
     body: `Incoming ${callType} call`,

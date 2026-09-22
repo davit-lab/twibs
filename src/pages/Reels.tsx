@@ -126,7 +126,7 @@ export default function Reels() {
       const response = await fetch(reel.thumbnail_url || reel.video_url);
       const blob = await response.blob();
       const file = new File([blob], 'reel-share.jpg', { type: 'image/jpeg' });
-      await uploadStory(file, `Check out this reel by @${reel.profile?.username}!`);
+      await uploadStory(file, { caption: `Check out this reel by @${reel.profile?.username}!` });
       toast({ title: 'Shared to your story' });
     } catch { toast({ variant: 'destructive', title: 'Failed to share' }); }
   };

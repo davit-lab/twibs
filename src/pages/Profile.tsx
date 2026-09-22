@@ -203,7 +203,7 @@ export default function Profile() {
   const { stats, loading: statsLoading } = useFollowStats(profileData?.user_id);
   const { mutuals, count: mutualCount, loading: mutualsLoading } = useMutualConnections(profileData?.user_id);
   const { data: isPremium } = usePremiumStatus(profileData?.user_id);
-  const { groupedStories, viewStory, uploadStory, deleteStory, fetchStoryViewers, toggleStoryLike, sendStoryReply } = useStories({
+  const { groupedStories, viewStory, uploadStory, deleteStory, fetchStoryViewers, toggleStoryLike, setStoryReaction, sendStoryReply } = useStories({
     profileUserId: profileData?.user_id,
     enabled: !!profileData,
   });
@@ -777,6 +777,7 @@ export default function Profile() {
         onDelete={deleteStory}
         onFetchViewers={fetchStoryViewers}
         onToggleLike={toggleStoryLike}
+        onReact={setStoryReaction}
         onSendReply={sendStoryReply}
       />
 

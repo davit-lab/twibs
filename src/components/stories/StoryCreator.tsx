@@ -1,283 +1,714 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Camera, Image as ImageIcon, Music, Type, X, Clapperboard, Loader2, ChevronRight } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import CameraModal from '@/components/media/CameraModal';
 import type { MediaEditorResult } from '@/components/media/FilterEditor';
-import { Loader2, X, ImagePlus, Film, Camera, Music } from 'lucide-react';
+import StoryEditor from '@/components/stories/StoryEditor';
+import StoryVideoTrimmer, { type TrimRange } from '@/components/stories/StoryVideoTrimmer';
+import StoryMusicPicker from '@/components/stories/StoryMusicPicker';
+import StoryOverlayRenderer from '@/components/stories/StoryOverlayRenderer';
+import type { MusicTrack } from '@/hooks/useMusicLibrary';
+import {
+  STORY_BACKGROUNDS,
+  STORY_MAX_DURATION,
+  STORY_MAX_FILE_SIZE,
+  STORY_IMAGE_DURATION,
+  bakeStoryBackground,
+  getVideoMeta,
+  trimVideo,
+  type StoryOverlay,
+} from '@/lib/stories';
+import { deleteStoryDraft, loadStoryDrafts, saveStoryDraftSafe, type StoryDraft } from '@/lib/storyDrafts';
+import { cn } from '@/lib/utils';
+import { blockCallOverlay, unblockCallOverlay } from '@/lib/callOverlayLayers';
+
+type Step = 'menu' | 'bg' | 'trim' | 'editor' | 'music' | 'publish';
 
 interface StoryCreatorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUpload: (
     file: File,
-    caption?: string,
-    music?: { name: string; url: string | null },
-    duration?: number,
+    options?: {
+      caption?: string;
+      music?: { name: string; url: string | null };
+      duration?: number;
+      media_type?: 'image' | 'video';
+      overlays?: StoryOverlay[];
+      onProgress?: (state: { phase: 'preparing' | 'uploading' | 'publishing' | 'done'; progress: number }) => void;
+    },
   ) => Promise<unknown>;
 }
 
-const MAX_SIZE = 50 * 1024 * 1024;
-
-interface MediaState {
+interface MediaSource {
   file: File;
-  type: 'image' | 'video';
   url: string;
+  type: 'image' | 'video';
+  duration: number; // real seconds (used for trimming); publish clamps to the story limit
+  isText: boolean;
+}
+
+function formatSize(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
 }
 
 export default function StoryCreator({ open, onOpenChange, onUpload }: StoryCreatorProps) {
-  const [media, setMedia] = useState<MediaState | null>(null);
+  const [step, setStep] = useState<Step>('menu');
+  const [media, setMedia] = useState<MediaSource | null>(null);
+  const [trimRange, setTrimRange] = useState<TrimRange | null>(null);
+  const [backgroundId, setBackgroundId] = useState<string>(STORY_BACKGROUNDS[0].id);
+  const [overlays, setOverlays] = useState<StoryOverlay[]>([]);
+  const [music, setMusic] = useState<MusicTrack | null>(null);
   const [caption, setCaption] = useState('');
-  const [music, setMusic] = useState<{ name: string; url: string | null } | null>(null);
-  const [duration, setDuration] = useState<number | undefined>(undefined);
+  const [drafts, setDrafts] = useState<StoryDraft[]>([]);
+  const [draftId, setDraftId] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [cameraMode, setCameraMode] = useState<'photo' | 'video'>('photo');
+  const [cameraStartMode, setCameraStartMode] = useState<'photo' | 'video'>('photo');
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const photoInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
+  const [progress, setProgress] = useState(0);
+  const [workingLabel, setWorkingLabel] = useState<string | null>(null);
+
+  const galleryRef = useRef<HTMLInputElement>(null);
   const prevOpenRef = useRef(false);
+  const autosaveTimer = useRef<number | null>(null);
+
+  // Object URLs are stable per draft across renders.
+  const draftUrls = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const draft of drafts) {
+      if (!map.has(draft.id)) map.set(draft.id, URL.createObjectURL(draft.blob));
+    }
+    return map;
+  }, [drafts]);
+
+  useEffect(() => {
+    return () => draftUrls.forEach((url) => URL.revokeObjectURL(url));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // lifecycle
+  // -------------------------------------------------------------------------
 
   const reset = () => {
+    if (media?.url) URL.revokeObjectURL(media.url);
     setMedia(null);
-    setCaption('');
+    setTrimRange(null);
+    setOverlays([]);
     setMusic(null);
-    setDuration(undefined);
+    setCaption('');
+    setBackgroundId(STORY_BACKGROUNDS[0].id);
+    setDraftId(null);
+    setStep('menu');
     setUploading(false);
-    setError(null);
-    setCameraOpen(false);
+    setProgress(0);
+    setUploadError(null);
+    setWorkingLabel(null);
   };
 
-  // Reset the draft only when the creator first opens — never on parent re-renders.
   useEffect(() => {
     if (open && !prevOpenRef.current) reset();
     prevOpenRef.current = open;
-  }, [open]);
+    if (open) {
+      blockCallOverlay();
+    } else {
+      unblockCallOverlay();
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleLibraryFile = (file: File) => {
+  useEffect(() => {
+    return () => {
+      unblockCallOverlay();
+      if (media?.url) URL.revokeObjectURL(media.url);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (open && step === 'menu') {
+      loadStoryDrafts()
+        .then(setDrafts)
+        .catch(() => setDrafts([]));
+    }
+  }, [open, step]);
+
+  // -------------------------------------------------------------------------
+  // autosave draft
+  // -------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (!media || uploading) return;
+    if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = window.setTimeout(() => {
+      saveStoryDraftSafe(
+        { blob: media.file, mediaType: media.type, overlays, music, caption },
+        draftId ?? undefined,
+      )
+        .then((saved) => {
+          if (saved) setDraftId(saved.id);
+        })
+        .catch(() => {});
+    }, 700);
+    return () => {
+      if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [media, overlays, music, caption, uploading]);
+
+  // -------------------------------------------------------------------------
+  // media intake
+  // -------------------------------------------------------------------------
+
+  const handleLibraryFile = async (file: File) => {
+    setUploadError(null);
     if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
-      setError('Please choose an image or video file.');
+      setUploadError('Please choose an image or video file.');
       return;
     }
-    if (file.size > MAX_SIZE) {
-      setError('Maximum file size is 50MB.');
+    if (file.size > STORY_MAX_FILE_SIZE) {
+      setUploadError(`Maximum file size is ${formatSize(STORY_MAX_FILE_SIZE)}.`);
       return;
     }
+
     const type: 'image' | 'video' = file.type.startsWith('video/') ? 'video' : 'image';
-    setMedia({ file, type, url: URL.createObjectURL(file) });
-    setDuration(type === 'video' ? 15 : undefined);
-    setError(null);
+
+    if (type === 'image') {
+      enterEditor({ file, url: URL.createObjectURL(file), type, duration: STORY_IMAGE_DURATION, isText: false });
+      return;
+    }
+
+    setWorkingLabel('Reading video…');
+    try {
+      const meta = await getVideoMeta(file);
+      const needsTrim = meta.duration > STORY_MAX_DURATION;
+      const url = URL.createObjectURL(file);
+      setMedia({ file, url, type: 'video', duration: meta.duration, isText: false });
+      if (needsTrim) {
+        setTrimRange({ start: 0, end: Math.min(STORY_MAX_DURATION, meta.duration) });
+        setStep('trim');
+      } else {
+        enterEditor({ file, url, type: 'video', duration: meta.duration, isText: false });
+      }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Could not read that video.');
+    } finally {
+      setWorkingLabel(null);
+    }
   };
 
-  const handleCameraDone = (file: File, result: MediaEditorResult) => {
+  const handleCameraDone = async (file: File, result: MediaEditorResult) => {
+    if (media?.url) URL.revokeObjectURL(media.url);
     setCameraOpen(false);
-    const type = result.kind;
-    setMedia({ file, type, url: URL.createObjectURL(file) });
-    setCaption(result.caption ?? '');
-    setMusic(result.music ?? null);
-    setDuration(result.duration);
-    setError(null);
+    setUploadError(null);
+    const type = result.kind === 'video' ? 'video' : 'image';
+    const url = URL.createObjectURL(file);
+    enterEditor({
+      file,
+      url,
+      type,
+      duration: type === 'video' ? (result.duration ?? STORY_MAX_DURATION) : STORY_IMAGE_DURATION,
+      isText: false,
+    });
   };
 
-  const retake = () => {
-    setCameraOpen(true);
-    setError(null);
+  const enterEditor = (next: MediaSource) => {
+    if (media?.url && media.url !== next.url) URL.revokeObjectURL(media.url);
+    setMedia(next);
+    setCaption('');
+    setOverlays([]);
+    setMusic(null);
+    setDraftId(null);
+    setStep('editor');
   };
+
+  const chooseBackground = async (id: string) => {
+    setBackgroundId(id);
+    const bg = STORY_BACKGROUNDS.find((b) => b.id === id) ?? STORY_BACKGROUNDS[0];
+    setWorkingLabel('Rendering background…');
+    try {
+      const file = await bakeStoryBackground(bg);
+      if (media?.url) URL.revokeObjectURL(media.url);
+      setMedia({ file, url: URL.createObjectURL(file), type: 'image', duration: STORY_IMAGE_DURATION, isText: true });
+      setStep('editor');
+    } catch {
+      setUploadError('Could not render the background.');
+    } finally {
+      setWorkingLabel(null);
+    }
+  };
+
+  const resumeDraft = (draft: StoryDraft) => {
+    const file = new File([draft.blob], `draft-${draft.id}`, { type: draft.blob.type });
+    if (media?.url) URL.revokeObjectURL(media.url);
+    setMedia({
+      file,
+      url: URL.createObjectURL(file),
+      type: draft.mediaType,
+      duration: draft.mediaType === 'video' ? STORY_MAX_DURATION : STORY_IMAGE_DURATION,
+      isText: false,
+    });
+    setOverlays(draft.overlays ?? []);
+    setMusic(draft.music ?? null);
+    setCaption(draft.caption ?? '');
+    setDraftId(draft.id);
+    setStep('editor');
+  };
+
+  const handleTrim = async () => {
+    if (!media || !trimRange) return;
+    setWorkingLabel('Trimming video…');
+    try {
+      const trimmed = await trimVideo(media.file, trimRange.start, trimRange.end, (f) => setProgress(Math.round(f * 100)));
+      if (!trimmed) {
+        setUploadError('This browser cannot trim video here, so we’ll post the full clip.');
+        setStep('editor');
+        return;
+      }
+      const meta = await getVideoMeta(trimmed);
+      const url = URL.createObjectURL(trimmed);
+      if (media.url) URL.revokeObjectURL(media.url);
+      setMedia({ file: trimmed, url, type: 'video', duration: meta.duration, isText: false });
+      setStep('editor');
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Could not trim this video.');
+    } finally {
+      setWorkingLabel(null);
+      window.setTimeout(() => setProgress(0), 400);
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // publish
+  // -------------------------------------------------------------------------
+
+  const publishDuration = (m: MediaSource) =>
+    m.type === 'video' ? Math.min(m.duration, STORY_MAX_DURATION) : STORY_IMAGE_DURATION;
 
   const share = async () => {
-    if (!media) return;
+    if (!media || uploading) return;
     setUploading(true);
-    setError(null);
+    setUploadError(null);
+    setProgress(0);
     try {
-      await onUpload(
-        media.file,
-        caption.trim() ? caption.trim() : undefined,
-        music ?? undefined,
-        // Pass through the camera's explicit duration (videos from the library
-        // default to 15s inside handleLibraryFile; images stay undefined -> 5s).
-        duration
-      );
+      await onUpload(media.file, {
+        caption: caption.trim() ? caption.trim() : undefined,
+        music: music && music.id !== 'none' && music.url ? { name: music.name, url: music.url } : undefined,
+        duration: publishDuration(media),
+        media_type: media.type,
+        overlays,
+        onProgress: (state) => setProgress(Math.round(state.progress * 100)),
+      });
+      if (draftId) deleteStoryDraft(draftId).catch(() => {});
       reset();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      setUploadError(err instanceof Error ? err.message : 'Could not publish your story. Try again.');
     } finally {
       setUploading(false);
     }
   };
 
   const handleClose = () => {
+    if (uploading) return;
     reset();
     onOpenChange(false);
   };
 
-  return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent
-        hideCloseButton
-        className="w-full h-[100dvh] sm:h-[92vh] sm:max-h-[880px] max-w-[430px] p-0 border-none overflow-hidden bg-[#07070c] sm:rounded-2xl sm:ring-1 sm:ring-border"
-      >
-        <DialogTitle className="sr-only">Create story</DialogTitle>
+  const content = (
+    <DialogContent
+      hideCloseButton
+      className={cn(
+        'w-full max-w-none border-0 bg-black p-0 text-white shadow-none',
+        'h-[100dvh] max-h-[100dvh] overflow-hidden rounded-none',
+        'sm:mx-auto sm:h-[96dvh] sm:max-h-[940px] sm:w-[min(96vw,1080px)] sm:rounded-2xl sm:ring-1 sm:ring-white/10',
+      )}
+    >
+      <DialogTitle className="sr-only">Create a story</DialogTitle>
 
-        <div className="relative flex flex-col h-full">
-          {/* Header */}
-          <div className="flex items-center justify-between px-3 pt-[max(env(safe-area-inset-top,0px),12px)] pb-1">
-            <Button
-              variant="ghost"
-              size="icon"
+      {/* ------------------------------ MENU ------------------------------ */}
+      {step === 'menu' && (
+        <div className="flex h-full flex-col pt-[max(env(safe-area-inset-top,0px),12px)] pb-[max(env(safe-area-inset-bottom,0px),16px)]">
+          <header className="flex items-center justify-between px-4">
+            <button
+              type="button"
               onClick={handleClose}
-              className="h-9 w-9 rounded-full bg-white/[0.06] text-white hover:bg-white/15"
-              aria-label="Close story creator"
+              aria-label="Close"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-900 hover:text-white"
             >
               <X className="h-5 w-5" />
-            </Button>
-            <span className="text-sm font-semibold text-white/90">New story</span>
-            <div className="w-9" />
+            </button>
+            <h2 className="text-base font-semibold tracking-tight text-white">New story</h2>
+            <span className="w-10" />
+          </header>
+
+          <div className="grid grid-cols-3 gap-2.5 px-4 pt-6">
+            <MenuItemButton
+              icon={<Camera className="h-6 w-6" />}
+              label="Photo"
+              hint="Camera"
+              onClick={() => {
+                setCameraStartMode('photo');
+                setCameraOpen(true);
+              }}
+            />
+            <MenuItemButton
+              icon={<Clapperboard className="h-6 w-6" />}
+              label="Video"
+              hint="Camera"
+              onClick={() => {
+                setCameraStartMode('video');
+                setCameraOpen(true);
+              }}
+            />
+            <MenuItemButton
+              icon={<ImageIcon className="h-6 w-6" />}
+              label="Gallery"
+              hint="Device"
+              onClick={() => galleryRef.current?.click()}
+            />
           </div>
 
-          {/* Preview (the primary environment) */}
-          <div className="flex-1 min-h-0 px-4 flex items-stretch justify-center pb-2">
-            {media ? (
-              <div className="relative w-full max-h-full self-center rounded-xl overflow-hidden bg-black" style={{ aspectRatio: '9 / 16', maxWidth: '100%' }}>
-                {media.type === 'image' ? (
-                  <img src={media.url} alt="Story preview" className="absolute inset-0 w-full h-full object-contain" draggable={false} />
-                ) : (
-                  <video src={media.url} className="absolute inset-0 w-full h-full object-contain" autoPlay muted loop playsInline />
-                )}
-              </div>
-            ) : (
-              <div
-                className="w-full max-h-full self-center rounded-xl border-2 border-dashed border-white/15 bg-white/[0.03]"
-                style={{ aspectRatio: '9 / 16', maxWidth: '100%' }}
-              >
-                <div className="flex flex-col items-center justify-center h-full gap-5 px-6">
-                  <div className="text-center">
-                    <p className="text-white text-base font-semibold">Add a photo or video</p>
-                    <p className="text-white/50 text-xs mt-1">Your story disappears after 24 hours</p>
-                  </div>
+          <button
+            type="button"
+            onClick={() => setStep('bg')}
+            className="mx-4 mt-3 flex items-center gap-4 rounded-2xl border border-white/10 bg-zinc-900/40 px-4 py-4 text-left transition hover:border-white/20 hover:bg-zinc-900"
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-600/20 text-violet-300">
+              <Type className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-white">Text story</span>
+              <span className="block text-xs text-zinc-500">A bold, editorial moment on a background</span>
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600" />
+          </button>
 
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => photoInputRef.current?.click()}
-                      className="flex flex-col items-center gap-2 w-24 py-4 rounded-2xl bg-surface-2 border border-border text-white hover:bg-surface-3 transition-colors"
-                    >
-                      <ImagePlus className="h-6 w-6 text-primary" />
-                      <span className="text-xs font-semibold">Photo</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => videoInputRef.current?.click()}
-                      className="flex flex-col items-center gap-2 w-24 py-4 rounded-2xl bg-surface-2 border border-border text-white hover:bg-surface-3 transition-colors"
-                    >
-                      <Film className="h-6 w-6 text-primary" />
-                      <span className="text-xs font-semibold">Video</span>
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2 w-full max-w-[240px]">
-                    <div className="h-px flex-1 bg-white/10" />
-                    <span className="text-[11px] text-white/40">or</span>
-                    <div className="h-px flex-1 bg-white/10" />
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    onClick={() => { setCameraMode('photo'); setCameraOpen(true); }}
-                    className="w-full max-w-[240px] rounded-full h-11 border-white/15 text-white hover:bg-white/10 hover:text-white"
+          {drafts.length > 0 && (
+            <div className="mt-6 px-4">
+              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Drafts</h3>
+              <div className="flex gap-2 overflow-x-auto pb-2 [scrollbar-width:thin]">
+                {drafts.slice(0, 8).map((draft) => (
+                  <button
+                    key={draft.id}
+                    type="button"
+                    onClick={() => resumeDraft(draft)}
+                    className="relative flex h-32 w-20 shrink-0 flex-col overflow-hidden rounded-xl ring-1 ring-white/10 transition hover:ring-violet-500/60"
                   >
-                    <Camera className="h-4 w-4 mr-2" />
-                    Take photo / record video
-                  </Button>
+                    {draft.mediaType === 'video' ? (
+                      <>
+                        <span className="absolute inset-0 flex items-center justify-center bg-zinc-900">
+                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60">
+                            <Clapperboard className="h-4 w-4 text-white" />
+                          </span>
+                        </span>
+                      </>
+                    ) : (
+                      <img src={draftUrls.get(draft.id)} alt="Draft preview" className="absolute inset-0 h-full w-full object-cover" />
+                    )}
+                    <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-1.5 pb-1 pt-5 text-left text-[10px] text-white/90">
+                      {draft.caption || (draft.mediaType === 'video' ? 'Video draft' : 'Draft')}
+                    </span>
+                    {draft.music && draft.music.id !== 'none' && (
+                      <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60">
+                        <Music className="h-3 w-3 text-violet-300" />
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {uploadError && <p className="mx-4 mt-4 text-center text-xs text-red-400">{uploadError}</p>}
+        </div>
+      )}
+
+      {/* ------------------------------ BACKGROUND ------------------------------ */}
+      {step === 'bg' && (
+        <div className="flex h-full flex-col pt-[max(env(safe-area-inset-top,0px),12px)]">
+          <header className="flex items-center justify-between px-3 pb-2">
+            <button
+              type="button"
+              onClick={() => setStep('menu')}
+              aria-label="Back"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-900 hover:text-white"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h2 className="text-base font-semibold text-white">Pick a background</h2>
+            <span className="w-10" />
+          </header>
+
+          <div className="grid grid-cols-3 gap-2.5 overflow-y-auto px-4 pt-3">
+            {STORY_BACKGROUNDS.map((bg) => (
+              <button
+                key={bg.id}
+                type="button"
+                onClick={() => chooseBackground(bg.id)}
+                className={cn(
+                  'group relative flex h-48 flex-col items-center justify-center gap-2 rounded-2xl ring-1 transition',
+                  backgroundId === bg.id ? 'ring-2 ring-violet-500' : 'ring-white/10 hover:ring-white/30',
+                )}
+                style={{ background: `linear-gradient(160deg, ${bg.from}, ${bg.to})` }}
+              >
+                <Type className="h-6 w-6 text-white/80" />
+                <span className="text-sm font-semibold text-white">{bg.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------ TRIM ------------------------------ */}
+      {step === 'trim' && media && (
+        <div className="flex h-full flex-col pt-[max(env(safe-area-inset-top,0px),12px)] pb-[max(env(safe-area-inset-bottom,0px),16px)]">
+          <header className="flex items-center justify-between px-3">
+            <button
+              type="button"
+              onClick={() => setStep('menu')}
+              aria-label="Back"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-900 hover:text-white"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h2 className="text-base font-semibold text-white">Trim your video</h2>
+            <span className="w-10" />
+          </header>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-4">
+            <div className="relative mx-auto aspect-[9/16] max-h-[56vh] overflow-hidden rounded-2xl bg-zinc-950 ring-1 ring-white/10">
+              <video src={media.url} className="absolute inset-0 h-full w-full object-cover" autoPlay loop muted playsInline />
+              {workingLabel && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                  <div className="flex flex-col items-center gap-3">
+                    <Loader2 className="h-7 w-7 animate-spin text-violet-400" />
+                    <span className="text-sm text-white">
+                      {workingLabel}
+                      {progress ? ` ${progress}%` : ''}
+                    </span>
+                  </div>
                 </div>
+              )}
+            </div>
+
+            <div className="mt-4 px-1">
+              <StoryVideoTrimmer
+                duration={media.duration}
+                value={trimRange ?? { start: 0, end: STORY_MAX_DURATION }}
+                onChange={setTrimRange}
+                max={STORY_MAX_DURATION}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 px-4 pt-3">
+            <button
+              type="button"
+              onClick={() => setStep('menu')}
+              className="h-12 rounded-full border border-white/10 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-900"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleTrim}
+              disabled={!!workingLabel}
+              className="h-12 rounded-full bg-violet-600 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
+            >
+              {workingLabel ? 'Working…' : 'Trim & continue'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------ EDITOR ------------------------------ */}
+      {step === 'editor' && media && (
+        <div className="flex h-full flex-col">
+          <StoryEditor
+            mediaUrl={media.url}
+            mediaType={media.type}
+            overlays={overlays}
+            onChange={(o) => {
+              setOverlays(o);
+              setUploadError(null);
+            }}
+            onClose={() => {
+              if (uploading) return;
+              setStep('menu');
+            }}
+            onNext={() => setStep('publish')}
+          />
+        </div>
+      )}
+
+      {/* ------------------------------ MUSIC ------------------------------ */}
+      {step === 'music' && (
+        <div className="flex h-full flex-col">
+          <StoryMusicPicker
+            value={music}
+            onSelect={(track) => {
+              setMusic(track);
+              setStep('publish');
+            }}
+            onClose={() => setStep('publish')}
+          />
+        </div>
+      )}
+
+      {/* ------------------------------ PUBLISH ------------------------------ */}
+      {step === 'publish' && media && (
+        <div className="flex h-full flex-col pt-[max(env(safe-area-inset-top,0px),12px)]">
+          <header className="flex items-center justify-between px-3 pb-2">
+            <button
+              type="button"
+              onClick={() => setStep('editor')}
+              aria-label="Back to editor"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-900 hover:text-white"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h2 className="text-base font-semibold text-white">Share</h2>
+            <span className="w-10" />
+          </header>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-4">
+            <div className="relative mx-auto aspect-[9/16] max-h-[56vh] overflow-hidden rounded-2xl bg-zinc-950 ring-1 ring-white/10">
+              {media.type === 'video' ? (
+                <video src={media.url} className="absolute inset-0 h-full w-full object-cover" autoPlay loop muted playsInline />
+              ) : (
+                <img src={media.url} alt="Story preview" className="absolute inset-0 h-full w-full object-cover" />
+              )}
+              <StoryOverlayRenderer overlays={overlays} />
+            </div>
+
+            <div className="mt-3 space-y-2.5 pb-4">
+              <input
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                maxLength={200}
+                placeholder="Add a caption…"
+                className="h-12 w-full rounded-xl border border-white/10 bg-zinc-900/50 px-4 text-sm text-white placeholder:text-zinc-500 focus:border-violet-500/50 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setStep('music')}
+                className="flex h-12 w-full items-center gap-3 rounded-xl border border-white/10 bg-zinc-900/50 px-4 text-left transition hover:border-white/20"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600/20 text-violet-300">
+                  <Music className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-white">{music && music.id !== 'none' ? music.name : 'Add music'}</span>
+                  <span className="block text-[11px] text-zinc-500">{music && music.id !== 'none' ? 'Playing over your story' : 'Optional'}</span>
+                </span>
+                <ChevronRight className="h-4 w-4 text-zinc-600" />
+              </button>
+            </div>
+          </div>
+
+          <div className="px-4 pb-[max(env(safe-area-inset-bottom,0px),16px)]">
+            {uploadError && <p className="mb-2 text-center text-xs text-red-400">{uploadError}</p>}
+            <button
+              type="button"
+              onClick={share}
+              disabled={uploading}
+              className="flex h-12 w-full items-center justify-center rounded-full bg-violet-600 text-[15px] font-semibold text-white transition hover:bg-violet-500 disabled:opacity-70 active:scale-[0.99]"
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Publishing
+                </>
+              ) : (
+                <>
+                  Share story
+                  <ChevronRight className="ml-1.5 h-4 w-4" />
+                </>
+              )}
+            </button>
+            {uploading && (
+              <div className="mt-2">
+                <ProgressBar value={progress} label={`Uploading ${progress}%`} />
               </div>
             )}
           </div>
-
-          {/* Controls (secondary to the preview) */}
-          {media && (
-            <div className="px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)] pt-2">
-              <div className="flex items-center gap-2 mb-2">
-                {music && (
-                  <div className="flex items-center gap-1.5 rounded-full bg-white/[0.06] border border-white/10 px-3 py-1 text-white/90 text-xs">
-                    <Music className="h-3.5 w-3.5 text-primary" />
-                    <span className="max-w-[160px] truncate">{music.name}</span>
-                  </div>
-                )}
-                <div className="flex items-center gap-2 ml-auto">
-                  <Button variant="ghost" onClick={retake} className="h-8 px-3 rounded-full text-white/70 hover:bg-white/10 hover:text-white text-xs">
-                    <Camera className="h-3.5 w-3.5 mr-1.5" /> Retake
-                  </Button>
-                  <Button variant="ghost" onClick={() => photoInputRef.current?.click()} className="h-8 px-3 rounded-full text-white/70 hover:bg-white/10 hover:text-white text-xs">
-                    <ImagePlus className="h-3.5 w-3.5 mr-1.5" /> Replace
-                  </Button>
-                </div>
-              </div>
-
-              <textarea
-                value={caption}
-                onChange={e => setCaption(e.target.value)}
-                placeholder="Add a caption…"
-                rows={2}
-                maxLength={200}
-                className="w-full resize-none rounded-xl bg-white/[0.06] border border-white/10 text-white placeholder:text-white/40 text-sm px-3.5 py-2.5 focus:outline-none focus:border-white/25"
-              />
-
-              {error && (
-                <p className="mt-2 text-center text-sm font-medium text-destructive" role="alert">
-                  {error}
-                </p>
-              )}
-
-              <Button
-                onClick={share}
-                disabled={uploading}
-                className="mt-3 w-full h-12 rounded-full bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90"
-              >
-                {uploading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sharing…
-                  </>
-                ) : (
-                  'Share story'
-                )}
-              </Button>
-            </div>
-          )}
         </div>
+      )}
 
-        {/* Hidden library pickers */}
-        <input
-          ref={photoInputRef}
-          type="file"
-          accept="image/*"
-          onChange={e => {
-            const f = e.target.files?.[0];
-            if (f) handleLibraryFile(f);
-            e.target.value = '';
-          }}
-          className="hidden"
-        />
-        <input
-          ref={videoInputRef}
-          type="file"
-          accept="video/*"
-          onChange={e => {
-            const f = e.target.files?.[0];
-            if (f) handleLibraryFile(f);
-            e.target.value = '';
-          }}
-          className="hidden"
-        />
+      {/* working overlay (background bake / camera handoff) */}
+      {workingLabel && step !== 'trim' && step !== 'editor' && (
+        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="flex items-center gap-3 rounded-2xl bg-zinc-900 px-4 py-3 text-sm text-white">
+            <Loader2 className="h-5 w-5 animate-spin text-violet-400" />
+            {workingLabel}
+          </div>
+        </div>
+      )}
 
-        <CameraModal
-          open={cameraOpen}
-          onClose={() => setCameraOpen(false)}
-          mode="story"
-          startMode={cameraMode}
-          maxVideoDuration={15}
-          onDone={handleCameraDone}
-        />
-      </DialogContent>
+      {/* hidden gallery picker */}
+      <input
+        ref={galleryRef}
+        type="file"
+        accept="image/*,video/*"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) handleLibraryFile(file);
+          event.target.value = '';
+        }}
+        className="sr-only"
+      />
+
+      <CameraModal
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        mode="story"
+        startMode={cameraStartMode}
+        maxVideoDuration={STORY_MAX_DURATION}
+        onDone={handleCameraDone}
+      />
+    </DialogContent>
+  );
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        if (!value) handleClose();
+      }}
+    >
+      {content}
     </Dialog>
+  );
+}
+
+function MenuItemButton({ icon, label, hint, onClick }: { icon: React.ReactNode; label: string; hint: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-zinc-900/40 px-2 py-5 transition hover:border-violet-500/40 hover:bg-zinc-900 active:scale-[0.98]"
+    >
+      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-900 text-zinc-300 ring-1 ring-white/10 transition group-hover:text-violet-300">
+        {icon}
+      </span>
+      <span className="text-sm font-semibold text-white">{label}</span>
+      <span className="text-[11px] text-zinc-500">{hint}</span>
+    </button>
+  );
+}
+
+function ProgressBar({ value, label }: { value: number; label?: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
+        <div
+          className="h-full rounded-full bg-violet-500 transition-all"
+          style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
+        />
+      </div>
+      {label && <span className="shrink-0 text-[11px] tabular-nums text-zinc-500">{label}</span>}
+    </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -36,7 +36,7 @@ import {
   Sparkles, ShieldCheck, KeyRound, Megaphone, Target,
   Info, HelpCircle, LifeBuoy, FileText, CalendarDays, Database,
   Type, SlidersHorizontal, BellOff, ExternalLink, CheckCircle2, MoonStar, Ban, BookMarked,
-  RotateCcw, Ghost
+  RotateCcw, Ghost, HardDrive, PhoneOff, VolumeX, RefreshCw
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -1667,15 +1667,19 @@ function PrivacySection({ formData, setFormData, blockedUsers, blocksLoading, un
         </SettingRow>
       </SectionCard>
 
-      <SectionCard icon={UserX} title="Blocked Users" description="Users you've blocked cannot contact or call you">
+      <BlockedAccountsCard />
+
+      <MutedUsersCard />
+
+      <SectionCard icon={PhoneOff} title="Blocked Calls" description="Accounts you've blocked from calling you">
         {blocksLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : blockedUsers.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-sm text-muted-foreground">No blocked users</p>
-            <p className="text-xs text-muted-foreground mt-1">Block users from their profile or message thread</p>
+            <p className="text-sm text-muted-foreground">No call blocks</p>
+            <p className="text-xs text-muted-foreground mt-1">Block calls from a user's profile or message thread</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -1709,6 +1713,163 @@ function PrivacySection({ formData, setFormData, blockedUsers, blocksLoading, un
         </Button>
       </div>
     </div>
+  );
+}
+
+function SafetyListCard({ icon: Icon, title, description, emptyTitle, emptyDescription, removeLabel, load, onRemove }: {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  removeLabel: string;
+  load: () => Promise<{ id: string; created_at: string; profile: { display_name: string; username: string; avatar_url: string | null } | null }[]>;
+  onRemove: (id: string) => Promise<void>;
+}) {
+  const [items, setItems] = useState<{ id: string; created_at: string; profile: { display_name: string; username: string; avatar_url: string | null } | null }[] | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    load().then((rows) => { if (!cancelled) setItems(rows); }).catch(() => { if (!cancelled) setItems([]); });
+    return () => { cancelled = true; };
+  }, [load]);
+
+  const removeItem = async (id: string) => {
+    if (removing) return;
+    setRemoving(id);
+    try {
+      await onRemove(id);
+      setItems((prev) => (prev || []).filter((i) => i.id !== id));
+    } finally {
+      setRemoving(null);
+    }
+  };
+
+  return (
+    <SectionCard icon={Icon} title={title} description={description}>
+      {items === null ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : items.length === 0 ? (
+        <div className="text-center py-8">
+          <p className="text-sm text-muted-foreground">{emptyTitle}</p>
+          <p className="text-xs text-muted-foreground mt-1">{emptyDescription}</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item, i) => (
+            <div key={`${item.id}-${i}`} className="flex items-center justify-between gap-3 p-3 rounded-lg border">
+              <div className="flex min-w-0 items-center gap-3">
+                <Avatar className="h-9 w-9 shrink-0">
+                  <AvatarImage src={item.profile?.avatar_url || undefined} />
+                  <AvatarFallback className="bg-muted text-xs font-medium">
+                    {item.profile?.display_name?.slice(0, 2).toUpperCase() || getInitialsFn('U')}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{item.profile?.display_name || 'Unknown'}</p>
+                  <p className="truncate text-xs text-muted-foreground">@{item.profile?.username || 'user'}</p>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => removeItem(item.id)} disabled={removing === item.id} className="shrink-0">
+                {removing === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {removeLabel}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function BlockedAccountsCard() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const load = useCallback(async () => {
+    if (!user) return [];
+    const { data } = await supabase
+      .from('blocks')
+      .select('blocked_id, created_at')
+      .eq('blocker_id', user.id)
+      .order('created_at', { ascending: false });
+    const rows = (data || []) as { blocked_id: string; created_at: string }[];
+    if (rows.length === 0) return [];
+    const ids = rows.map((r) => r.blocked_id);
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('user_id, display_name, username, avatar_url')
+      .in('user_id', ids);
+    const map = new Map((profiles || []).map((p) => [p.user_id, p]));
+    return rows.map((r) => ({ id: r.blocked_id, created_at: r.created_at, profile: map.get(r.blocked_id) || null }));
+  }, [user]);
+
+  const unblock = async (id: string) => {
+    const { error } = await supabase.rpc('unblock_user', { target_user_id: id });
+    if (error) {
+      toast({ variant: 'destructive', title: 'Failed to unblock', description: error.message });
+      throw error;
+    }
+    toast({ title: 'User unblocked', description: 'They can now see your posts again.' });
+  };
+
+  return (
+    <SafetyListCard
+      icon={UserX}
+      title="Blocked Accounts"
+      description="They can't see your posts, view your profile, or message you"
+      emptyTitle="No blocked accounts"
+      emptyDescription="Block someone from their profile or message thread"
+      removeLabel="Unblock"
+      load={load}
+      onRemove={unblock}
+    />
+  );
+}
+
+function MutedUsersCard() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const load = useCallback(async () => {
+    if (!user) return [];
+    const { data } = await supabase
+      .from('mutes')
+      .select('muted_id, created_at')
+      .eq('muter_id', user.id)
+      .order('created_at', { ascending: false });
+    const rows = (data || []) as { muted_id: string; created_at: string }[];
+    if (rows.length === 0) return [];
+    const ids = rows.map((r) => r.muted_id);
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('user_id, display_name, username, avatar_url')
+      .in('user_id', ids);
+    const map = new Map((profiles || []).map((p) => [p.user_id, p]));
+    return rows.map((r) => ({ id: r.muted_id, created_at: r.created_at, profile: map.get(r.muted_id) || null }));
+  }, [user]);
+
+  const unmute = async (id: string) => {
+    const { error } = await supabase.rpc('unmute_user', { target_user_id: id });
+    if (error) {
+      toast({ variant: 'destructive', title: 'Failed to unmute', description: error.message });
+      throw error;
+    }
+    toast({ title: 'User unmuted', description: 'You will see their posts again.' });
+  };
+
+  return (
+    <SafetyListCard
+      icon={VolumeX}
+      title="Muted Users"
+      description="Muted accounts won't show up in your feed or notifications"
+      emptyTitle="No muted users"
+      emptyDescription="Mute someone from a post, their profile, or message thread"
+      removeLabel="Unmute"
+      load={load}
+      onRemove={unmute}
+    />
   );
 }
 
@@ -1881,7 +2042,86 @@ function AboutSection({ profile }: { profile: { privacy?: string } | null }) {
           </SettingRow>
         </div>
       </SectionCard>
+
+      <StorageCard />
     </div>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (!bytes) return '0 KB';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** i;
+  return `${value >= 10 || i === 0 ? Math.round(value) : value.toFixed(1)} ${units[i]}`;
+}
+
+function StorageCard() {
+  const [usage, setUsage] = useState<string | null>(null);
+  const [cacheCount, setCacheCount] = useState<number | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if ('storage' in navigator && navigator.storage?.estimate) {
+          const est = await navigator.storage.estimate();
+          if (!cancelled) setUsage(formatBytes(est.usage || 0));
+        }
+      } catch {
+        /* storage estimate unavailable */
+      }
+      try {
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          if (!cancelled) setCacheCount(keys.length);
+        }
+      } catch {
+        /* caches unavailable */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const clearCache = async () => {
+    setClearing(true);
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+        setCacheCount(0);
+      }
+      toast({
+        title: 'Cache cleared',
+        description: 'Temporary files were removed. Some media may take a moment to reload.',
+      });
+    } catch {
+      toast({ variant: 'destructive', title: 'Could not clear cache', description: 'Something went wrong while clearing temporary files.' });
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  return (
+    <SectionCard icon={HardDrive} title="Storage & Cache" description="Manage temporary files stored on this device">
+      <SettingRow icon={Database} label="Storage used on this device" description="Temporary and cached content for Twibsers">
+        <span className="text-sm font-medium">{usage ?? '—'}</span>
+      </SettingRow>
+      <SettingRow icon={RefreshCw} label="Cached app data" description="Downloaded images, videos and offline assets" className="border-t border-border/70">
+        <span className="text-sm font-medium">
+          {cacheCount === null ? '—' : `${cacheCount} ${cacheCount === 1 ? 'cache' : 'caches'}`}
+        </span>
+      </SettingRow>
+      <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-3.5">
+        <p className="text-xs text-muted-foreground">This only clears temporary files. Your account data is unaffected.</p>
+        <Button variant="outline" size="sm" onClick={clearCache} disabled={clearing} className="shrink-0 gap-1.5">
+          {clearing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+          Clear cache
+        </Button>
+      </div>
+    </SectionCard>
   );
 }
 

@@ -1,0 +1,103 @@
+Attached Element Context from Integrated Browser
+
+Element: rect
+
+URL: http://localhost:8081/
+
+HTML Path: div#root > div.bg-background.min-h-screen > nav.lg:hidden.fixed.bottom-0.left-0.right-0.z-50.px-4.pb-[calc(env(safe-area-inset-bottom,0px)+12px)].pt-2.pointer-events-none > div.pointer-events-auto.mx-auto.max-w-[430px].rounded-full.bg-background/75.backdrop-blur-xl.border.border-border/60.shadow-lg.shadow-black/10.flex.items-center.justify-around.h-16.px-2.relative > div.relative.flex.items-center > div.absolute.inset-0.z-0.flex.items-center.justify-center > svg.h-16.w-20.-translate-y-1.overflow-visible.drop-shadow-[0_5px_14px_rgba(124,58,237,0.45)] > g > rect
+
+Outer HTML:
+```html
+<rect x="4" y="46" width="74" height="28" rx="14"></rect>
+```
+
+Dimensions:
+- top: 1109px
+- left: 57px
+- width: 52px
+- height: 20px
+
+CSS:
+```css
+*, ::before, ::after { --tw-border-spacing-x: 0;
+  --tw-border-spacing-y: 0;
+  --tw-translate-x: 0;
+  --tw-translate-y: 0;
+  --tw-rotate: 0;
+  --tw-skew-x: 0;
+  --tw-skew-y: 0;
+  --tw-scale-x: 1;
+  --tw-scale-y: 1;
+  --tw-pan-x:  ;
+  --tw-pan-y:  ;
+  --tw-pinch-zoom:  ;
+  --tw-scroll-snap-strictness: proximity;
+  --tw-gradient-from-position:  ;
+  --tw-gradient-via-position:  ;
+  --tw-gradient-to-position:  ;
+  --tw-ordinal:  ;
+  --tw-slashed-zero:  ;
+  --tw-numeric-figure:  ;
+  --tw-numeric-spacing:  ;
+  --tw-numeric-fraction:  ;
+  --tw-ring-inset:  ;
+  --tw-ring-offset-width: 0px;
+  --tw-ring-offset-color: #fff;
+  --tw-ring-color: rgb(59 130 246 / 0.5);
+  --tw-ring-offset-shadow: 0 0 #0000;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-shadow: 0 0 #0000;
+  --tw-shadow-colored: 0 0 #0000;
+  --tw-blur:  ;
+  --tw-brightness:  ;
+  --tw-contrast:  ;
+  --tw-grayscale:  ;
+  --tw-hue-rotate:  ;
+  --tw-invert:  ;
+  --tw-saturate:  ;
+  --tw-sepia:  ;
+  --tw-drop-shadow:  ;
+  --tw-backdrop-blur:  ;
+  --tw-backdrop-brightness:  ;
+  --tw-backdrop-contrast:  ;
+  --tw-backdrop-grayscale:  ;
+  --tw-backdrop-hue-rotate:  ;
+  --tw-backdrop-invert:  ;
+  --tw-backdrop-opacity:  ;
+  --tw-backdrop-saturate:  ;
+  --tw-backdrop-sepia:  ;
+  --tw-contain-size:  ;
+  --tw-contain-layout:  ;
+  --tw-contain-paint:  ;
+  --tw-contain-style:  ; }
+*, ::before, ::after { box-sizing: border-box; /* 1 */
+  border-width: 0; /* 2 */
+  border-style: solid; /* 2 */
+  border-color: #e5e7eb; /* 2 */ }
+* { border-color: hsl(var(--border)); }
+
+/* Pseudo-elements */
+::before, ::after { --tw-content: ''; }
+
+/* Inherited */
+body { color: hsl(var(--foreground)) }
+html, :host { line-height: 1.5; tab-size: 4 }
+html { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif }
+
+/* Resolved values */
+border: 0px solid rgb(39, 39, 42);
+box-sizing: border-box;
+color: rgb(250, 250, 250);
+display: inline;
+font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+font-feature-settings: normal;
+height: 28px;
+line-height: 21px;
+tab-size: 4;
+transform-origin: 0px 0px /*UA*/;
+width: 74px;
+
+/* CSS variables */
+--border: 240 3.7% 15.9%;
+--foreground: 0 0% 98%;
+```

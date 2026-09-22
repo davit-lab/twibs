@@ -8,22 +8,26 @@ import {
 } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
-  ArrowLeft, Check, Copy, Download, Maximize2, ScanLine, Share2, X,
+  ArrowLeft, Check, Copy, Download, Maximize2, Pencil, ScanLine, Share2, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   buildModuleMatrix,
   DEFAULT_QR_ACCENT,
   DEFAULT_QR_FRAME,
-  DEFAULT_QR_STYLE,
+  DEFAULT_QR_SHAPE,
+  DEFAULT_QR_THEME,
   downloadQrMatrix,
   QR_ACCENTS,
   QR_FRAMES,
-  QR_STYLES,
+  QR_SHAPES,
+  QR_THEMES,
   renderQrSvg,
-  type QrAccent,
-  type QrFrame,
-  type QrStyleId,
+  type QrAccentId,
+  type QrConfig,
+  type QrFrameId,
+  type QrShapeId,
+  type QrThemeId,
 } from '@/lib/qr';
 
 interface ShareProfileDialogProps {
@@ -80,6 +84,52 @@ function Segmented<T extends string>({
   );
 }
 
+function ShapeGlyph({ shape }: { shape: QrShapeId }) {
+  const fill = 'currentColor';
+  const cols = [2, 9, 16];
+  const y = 3;
+  const size = 5;
+
+  const cells = cols.map((x) => {
+    const cx = x + size / 2;
+    const cy = y + size / 2;
+    switch (shape) {
+      case 'dots':
+        return <circle key={x} cx={cx} cy={cy} r={size / 2} fill={fill} />;
+      case 'diamond':
+        return (
+          <rect
+            key={x}
+            x={cx - size * 0.25}
+            y={cy - size * 0.25}
+            width={size * 0.5}
+            height={size * 0.5}
+            fill={fill}
+            transform={`rotate(45 ${cx} ${cy})`}
+          />
+        );
+      case 'rounded':
+        return <rect key={x} x={x} y={y} width={size} height={size} rx={1.8} fill={fill} />;
+      default:
+        return <rect key={x} x={x} y={y} width={size} height={size} fill={fill} />;
+    }
+  });
+
+  return (
+    <svg viewBox="0 0 23 11" className="h-3.5 w-[22px]" aria-hidden="true">
+      {cells}
+    </svg>
+  );
+}
+
+function ControlLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+      {children}
+    </span>
+  );
+}
+
 export default function ShareProfileDialog({
   open,
   onOpenChange,
@@ -92,9 +142,11 @@ export default function ShareProfileDialog({
   const isMobile = useIsMobile();
 
   const [copied, setCopied] = useState(false);
-  const [style, setStyle] = useState<QrStyleId>(DEFAULT_QR_STYLE);
-  const [frame, setFrame] = useState<QrFrame>(DEFAULT_QR_FRAME);
-  const [accent, setAccent] = useState<QrAccent>(DEFAULT_QR_ACCENT);
+  const [theme, setTheme] = useState<QrThemeId>(DEFAULT_QR_THEME);
+  const [accent, setAccent] = useState<QrAccentId>(DEFAULT_QR_ACCENT);
+  const [shape, setShape] = useState<QrShapeId>(DEFAULT_QR_SHAPE);
+  const [frame, setFrame] = useState<QrFrameId>(DEFAULT_QR_FRAME);
+  const [editing, setEditing] = useState(false);
   const [focused, setFocused] = useState(false);
   const downloadRef = useRef<HTMLAnchorElement>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -102,9 +154,22 @@ export default function ShareProfileDialog({
   const url = useMemo(() => `${window.location.origin}/profile/${username}`, [username]);
 
   // The module matrix only depends on the URL, so it is computed once and reused
-  // across style switches.
+  // across customization changes.
   const matrix = useMemo(() => buildModuleMatrix(url), [url]);
-  const qrKey = useMemo(() => `${style}-${accent}`, [style, accent]);
+
+  const config = useMemo<QrConfig>(
+    () => ({ theme, accent, shape, frame }),
+    [theme, accent, shape, frame]
+  );
+
+  const qrKey = useMemo(() => `${theme}-${accent}-${shape}`, [theme, accent, shape]);
+
+  const resetCustomization = useCallback(() => {
+    setTheme(DEFAULT_QR_THEME);
+    setAccent(DEFAULT_QR_ACCENT);
+    setShape(DEFAULT_QR_SHAPE);
+    setFrame(DEFAULT_QR_FRAME);
+  }, []);
 
   const handleClose = useCallback(() => {
     if (copyTimer.current) clearTimeout(copyTimer.current);
@@ -150,7 +215,7 @@ export default function ShareProfileDialog({
   }, [displayName, username, url, copyLink]);
 
   const saveQr = useCallback(() => {
-    const canvas = downloadQrMatrix(matrix, style, accent, username);
+    const canvas = downloadQrMatrix(matrix, config, username);
     if (!canvas) {
       toast({
         variant: 'destructive',
@@ -165,7 +230,7 @@ export default function ShareProfileDialog({
       a.download = `${username}-twibsers-qr.png`;
       a.click();
     }
-  }, [matrix, style, accent, username, toast]);
+  }, [matrix, config, username, toast]);
 
   const qrCardClass = cn(
     'mx-auto flex flex-col items-center',
@@ -174,8 +239,151 @@ export default function ShareProfileDialog({
   );
 
   const qrClass = cn(
-    'w-[min(58vw,210px)] sm:w-[224px]',
+    'w-[min(60vw,218px)] sm:w-[226px]',
     frame !== 'none' && 'rounded-xl'
+  );
+
+  const renderCustomizer = () => (
+    <div className="qr-swap mt-4 space-y-3.5 rounded-2xl border border-border/70 bg-surface/40 p-3.5">
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+          <Pencil className="h-3 w-3" />
+          Customise
+        </span>
+        <button
+          type="button"
+          onClick={resetCustomization}
+          className="text-[11px] font-semibold text-muted-foreground underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded"
+        >
+          Reset
+        </button>
+      </div>
+
+      <div>
+        <ControlLabel>Colour theme</ControlLabel>
+        <div className="grid grid-cols-3 gap-1.5">
+          {QR_THEMES.map((t) => {
+            const active = theme === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTheme(t.id)}
+                aria-pressed={active}
+                title={t.label}
+                className={cn(
+                  'group flex flex-col items-center gap-1 rounded-xl border p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                  active
+                    ? 'border-primary/60 bg-primary/5'
+                    : 'border-border/80 hover:border-border'
+                )}
+              >
+                <span
+                  className="grid h-7 w-7 place-items-center rounded-md shadow-inner"
+                  style={{ background: t.background }}
+                >
+                  <span
+                    className="h-2.5 w-2.5 rounded-[3px] shadow-sm"
+                    style={{ background: t.module }}
+                  />
+                </span>
+                <span
+                  className={cn(
+                    'text-[10px] font-semibold',
+                    active ? 'text-primary' : 'text-muted-foreground'
+                  )}
+                >
+                  {t.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <ControlLabel>Accent colour</ControlLabel>
+        <div className="grid grid-cols-3 gap-1.5">
+          {QR_ACCENTS.map((a) => {
+            const active = accent === a.id;
+            return (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => setAccent(a.id)}
+                aria-pressed={active}
+                title={a.label}
+                className={cn(
+                  'flex flex-col items-center gap-1 rounded-xl border p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                  active
+                    ? 'border-primary/60 bg-primary/5'
+                    : 'border-border/80 hover:border-border'
+                )}
+              >
+                <span
+                  className={cn(
+                    'grid h-6 w-6 place-items-center rounded-full transition-transform',
+                    active && 'scale-110'
+                  )}
+                  style={{ background: a.id === 'none' ? 'transparent' : a.light }}
+                >
+                  {a.id === 'none' && (
+                    <span className="h-4 w-4 rounded-full border border-dashed border-muted-foreground/60" />
+                  )}
+                </span>
+                <span
+                  className={cn(
+                    'text-[10px] font-semibold',
+                    active ? 'text-primary' : 'text-muted-foreground'
+                  )}
+                >
+                  {a.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <ControlLabel>Module shape</ControlLabel>
+        <div className="grid grid-cols-4 gap-1.5">
+          {QR_SHAPES.map((s) => {
+            const active = shape === s.id;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setShape(s.id)}
+                aria-pressed={active}
+                title={s.label}
+                className={cn(
+                  'flex flex-col items-center gap-1 rounded-xl border p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                  active
+                    ? 'border-primary/60 bg-primary/5 text-primary'
+                    : 'border-border/80 text-muted-foreground hover:border-border hover:text-foreground'
+                )}
+              >
+                <ShapeGlyph shape={s.id} />
+                <span className={cn('text-[10px] font-semibold', active && 'text-primary')}>
+                  {s.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <ControlLabel>Frame</ControlLabel>
+        <Segmented
+          label="QR frame"
+          value={frame}
+          onChange={(v) => setFrame(v)}
+          options={QR_FRAMES}
+        />
+      </div>
+    </div>
   );
 
   const renderMain = () => (
@@ -202,7 +410,7 @@ export default function ShareProfileDialog({
         <div className="relative">
           <span className="sr-only">QR code for @{username}&apos;s Twibsers profile</span>
           <div key={qrKey} className="qr-swap">
-            {renderQrSvg(matrix, style, accent, qrClass)}
+            {renderQrSvg(matrix, config, qrClass)}
           </div>
           <button
             type="button"
@@ -212,12 +420,29 @@ export default function ShareProfileDialog({
           >
             <Maximize2 className="h-3.5 w-3.5" />
           </button>
+          <button
+            type="button"
+            onClick={() => setEditing((e) => !e)}
+            aria-pressed={editing}
+            aria-label={editing ? 'Close QR customisation' : 'Customise QR'}
+            className={cn(
+              'absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+              editing
+                ? 'border-primary bg-primary text-primary-foreground shadow-sm shadow-primary/30'
+                : 'border-border/70 bg-background text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
         </div>
         <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <ScanLine className="h-3.5 w-3.5" />
           Scan to view profile
         </p>
       </div>
+
+      {/* Customizer (toggled from the pencil button on the QR) */}
+      {editing && renderCustomizer()}
 
       {/* Actions */}
       <div className="mt-5 grid grid-cols-2 gap-2">
@@ -244,65 +469,6 @@ export default function ShareProfileDialog({
         <Download className="h-4 w-4" />
         Save QR
       </Button>
-
-      {/* Customizer */}
-      <div className="mt-4 space-y-3 rounded-2xl border border-border/70 bg-surface/40 p-3.5">
-        <div>
-          <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-            QR style
-          </span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {QR_STYLES.map((s) => {
-              const active = style === s.id;
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => setStyle(s.id)}
-                  aria-pressed={active}
-                  className={cn(
-                    'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-                    active
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border/80 bg-background text-muted-foreground hover:border-border hover:text-foreground'
-                  )}
-                >
-                  <span
-                    className="h-2.5 w-2.5 rounded-[2px]"
-                    style={{ background: s.moduleFill }}
-                    aria-hidden="true"
-                  />
-                  {s.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2.5">
-          <div className="min-w-0">
-            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              Frame
-            </span>
-            <Segmented
-              label="QR frame"
-              value={frame}
-              onChange={(v) => setFrame(v)}
-              options={QR_FRAMES}
-            />
-          </div>
-          <div className="min-w-0">
-            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              Accent
-            </span>
-            <Segmented
-              label="QR accent color"
-              value={accent}
-              onChange={(v) => setAccent(v)}
-              options={QR_ACCENTS}
-            />
-          </div>
-        </div>
-      </div>
     </div>
   );
 
@@ -322,7 +488,7 @@ export default function ShareProfileDialog({
         <div className="mt-4">
           <span className="sr-only">QR code for @{username}&apos;s Twibsers profile</span>
           <div key={`focus-${qrKey}`} className="qr-swap">
-            {renderQrSvg(matrix, style, accent, 'w-[min(72vw,300px)]')}
+            {renderQrSvg(matrix, config, 'w-[min(72vw,300px)]')}
           </div>
         </div>
         <p className="mt-4 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
@@ -379,7 +545,7 @@ export default function ShareProfileDialog({
   );
 
   const scrollable = (content: React.ReactNode) => (
-    <div className="flex flex-col overflow-y-auto">{content}</div>
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{content}</div>
   );
 
   return (
@@ -400,7 +566,7 @@ export default function ShareProfileDialog({
           <SheetContent
             side="bottom"
             className={cn(
-              'gap-0 rounded-t-[1.5rem] border-t-border p-0 sm:hidden',
+              'flex flex-col gap-0 overflow-hidden rounded-t-[1.5rem] border-t-border p-0 sm:hidden',
               focused ? 'h-[94dvh]' : 'max-h-[92dvh]'
             )}
           >

@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isToday } from 'date-fns';
-import { ShimmerGrid } from './StreakLoading';
+import { ShimmerBar, ShimmerGrid } from './StreakLoading';
 
 interface DayActivity {
   date: string;

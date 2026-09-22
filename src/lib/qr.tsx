@@ -2,94 +2,125 @@ import qrcode from 'qrcode-generator';
 import type { ReactElement, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-export type QrStyleId = 'classic' | 'twibsers' | 'soft' | 'compact' | 'dark';
-export type QrFrame = 'none' | 'minimal' | 'card';
-export type QrAccent = 'neutral' | 'violet';
+export type QrThemeId = 'paper' | 'milk' | 'mist' | 'ink' | 'nebula' | 'storm';
+export type QrShapeId = 'square' | 'rounded' | 'dots' | 'diamond';
+export type QrAccentId = 'none' | 'violet' | 'sky' | 'emerald' | 'amber' | 'rose';
+export type QrFrameId = 'none' | 'minimal' | 'card';
 
-export interface QrStyleConfig {
-  id: QrStyleId;
+export interface QrTheme {
+  id: QrThemeId;
   label: string;
-  moduleFill: string;
   background: string;
-  radius: number;
+  module: string;
   quietZone: number;
-  accentFinders: boolean;
   darkSurface: boolean;
 }
 
-export const QR_STYLES: QrStyleConfig[] = [
+export interface QrAccentOption {
+  id: QrAccentId;
+  label: string;
+  light: string;
+  dark: string;
+}
+
+export interface QrConfig {
+  theme: QrThemeId;
+  accent: QrAccentId;
+  shape: QrShapeId;
+  frame: QrFrameId;
+}
+
+export const QR_THEMES: QrTheme[] = [
   {
-    id: 'classic',
-    label: 'Classic',
-    moduleFill: '#111114',
+    id: 'paper',
+    label: 'Paper',
     background: '#ffffff',
-    radius: 0,
+    module: '#111114',
     quietZone: 4,
-    accentFinders: false,
     darkSurface: false,
   },
   {
-    id: 'twibsers',
-    label: 'Twibsers',
-    moduleFill: '#111114',
-    background: '#ffffff',
-    radius: 0.16,
+    id: 'milk',
+    label: 'Milk',
+    background: '#f4f4f6',
+    module: '#1a1a1e',
     quietZone: 4,
-    accentFinders: true,
     darkSurface: false,
   },
   {
-    id: 'soft',
-    label: 'Soft',
-    moduleFill: '#111114',
-    background: '#ffffff',
-    radius: 0.42,
-    quietZone: 3,
-    accentFinders: true,
-    darkSurface: false,
-  },
-  {
-    id: 'compact',
-    label: 'Compact',
-    moduleFill: '#111114',
-    background: '#ffffff',
-    radius: 0,
-    quietZone: 2,
-    accentFinders: false,
-    darkSurface: false,
-  },
-  {
-    id: 'dark',
-    label: 'Dark',
-    moduleFill: '#f4f4f5',
-    background: '#17171c',
-    radius: 0.16,
+    id: 'mist',
+    label: 'Mist',
+    background: '#f1effb',
+    module: '#1b1729',
     quietZone: 4,
-    accentFinders: true,
+    darkSurface: false,
+  },
+  {
+    id: 'ink',
+    label: 'Ink',
+    background: '#0e0e11',
+    module: '#f6f6f7',
+    quietZone: 4,
+    darkSurface: true,
+  },
+  {
+    id: 'nebula',
+    label: 'Nebula',
+    background: '#171526',
+    module: '#eeecfb',
+    quietZone: 4,
+    darkSurface: true,
+  },
+  {
+    id: 'storm',
+    label: 'Storm',
+    background: '#1d1e27',
+    module: '#eef0f8',
+    quietZone: 4,
     darkSurface: true,
   },
 ];
 
-export const QR_FRAMES: { id: QrFrame; label: string }[] = [
+export const QR_ACCENTS: QrAccentOption[] = [
+  { id: 'none', label: 'None', light: '#111114', dark: '#f6f6f7' },
+  { id: 'violet', label: 'Violet', light: '#7c3aed', dark: '#a78bfa' },
+  { id: 'sky', label: 'Sky', light: '#0284c7', dark: '#60a5fa' },
+  { id: 'emerald', label: 'Emerald', light: '#059669', dark: '#34d399' },
+  { id: 'amber', label: 'Amber', light: '#b45309', dark: '#fbbf24' },
+  { id: 'rose', label: 'Rose', light: '#e11d48', dark: '#fb7185' },
+];
+
+export const QR_SHAPES: { id: QrShapeId; label: string }[] = [
+  { id: 'square', label: 'Square' },
+  { id: 'rounded', label: 'Rounded' },
+  { id: 'dots', label: 'Dots' },
+  { id: 'diamond', label: 'Diamond' },
+];
+
+export const QR_FRAMES: { id: QrFrameId; label: string }[] = [
   { id: 'none', label: 'None' },
   { id: 'minimal', label: 'Minimal' },
   { id: 'card', label: 'Card' },
 ];
 
-export const QR_ACCENTS: { id: QrAccent; label: string }[] = [
-  { id: 'neutral', label: 'Neutral' },
-  { id: 'violet', label: 'Violet' },
-];
+export const DEFAULT_QR_THEME: QrThemeId = 'nebula';
+export const DEFAULT_QR_ACCENT: QrAccentId = 'violet';
+export const DEFAULT_QR_SHAPE: QrShapeId = 'rounded';
+export const DEFAULT_QR_FRAME: QrFrameId = 'minimal';
 
-export const DEFAULT_QR_STYLE: QrStyleId = 'twibsers';
-export const DEFAULT_QR_FRAME: QrFrame = 'minimal';
-export const DEFAULT_QR_ACCENT: QrAccent = 'violet';
+export const DEFAULT_QR_CONFIG: QrConfig = {
+  theme: DEFAULT_QR_THEME,
+  accent: DEFAULT_QR_ACCENT,
+  shape: DEFAULT_QR_SHAPE,
+  frame: DEFAULT_QR_FRAME,
+};
 
-const BRAND_VIOLET = '#7c3aed';
-const ACCENT_VIOLET = '#8b5cf6';
+export function getTheme(id: QrThemeId): QrTheme {
+  return QR_THEMES.find((t) => t.id === id) ?? QR_THEMES[4];
+}
 
-export function getStyleConfig(style: QrStyleId): QrStyleConfig {
-  return QR_STYLES.find((s) => s.id === style) ?? QR_STYLES[1];
+export function getAccent(id: QrAccentId): QrAccentOption {
+  return QR_ACCENTS.find((a) => a.id === id) ?? QR_ACCENTS[1];
 }
 
 export function buildModuleMatrix(text: string): boolean[][] {
@@ -106,54 +137,82 @@ export function buildModuleMatrix(text: string): boolean[][] {
   return matrix;
 }
 
-function inFinder(r: number, c: number, size: number): boolean {
+function finderZoneKind(
+  matrix: boolean[][],
+  r: number,
+  c: number,
+  size: number
+): 'outer' | 'inner' | 'center' | null {
   const a = size - 7;
-  return (
-    (r < 7 && c < 7) || (r < 7 && c >= a) || (r >= a && c < 7)
-  );
-}
-
-export interface QrRender {
-  config: QrStyleConfig;
-  accent: QrAccent;
-}
-
-function moduleFill(render: QrRender, r: number, c: number, size: number): string {
-  const { config, accent } = render;
-  if (accent === 'violet' && config.accentFinders && inFinder(r, c, size)) {
-    return config.darkSurface ? ACCENT_VIOLET : BRAND_VIOLET;
+  const zones: [number, number][] = [
+    [0, 0],
+    [0, a],
+    [a, 0],
+  ];
+  for (const [zr, zc] of zones) {
+    if (matrix[r][c] && r >= zr && r < zr + 7 && c >= zc && c < zc + 7) {
+      const fr = r - zr;
+      const fc = c - zc;
+      const d = Math.max(Math.abs(fr - 3), Math.abs(fc - 3));
+      if (d === 3) return 'outer';
+      if (d === 1) return 'inner';
+      if (d === 0) return 'center';
+      return null;
+    }
   }
-  return config.moduleFill;
+  return null;
+}
+
+function shapeNode(
+  shape: QrShapeId,
+  x: number,
+  y: number,
+  fill: string,
+  key: string
+): ReactNode {
+  switch (shape) {
+    case 'dots':
+      return <circle key={key} cx={x + 0.5} cy={y + 0.5} r={0.44} fill={fill} />;
+    case 'diamond':
+      return (
+        <rect
+          key={key}
+          x={x + 0.25}
+          y={y + 0.25}
+          width={0.5}
+          height={0.5}
+          rx={0.05}
+          fill={fill}
+          transform={`rotate(45 ${x + 0.5} ${y + 0.5})`}
+        />
+      );
+    case 'rounded':
+      return <rect key={key} x={x} y={y} width={1} height={1} rx={0.4} fill={fill} />;
+    default:
+      return <rect key={key} x={x} y={y} width={1} height={1} fill={fill} />;
+  }
 }
 
 export function renderQrSvg(
   matrix: boolean[][],
-  style: QrStyleId,
-  accent: QrAccent,
+  config: QrConfig,
   className?: string
 ): ReactElement {
   const size = matrix.length;
-  const config = getStyleConfig(style);
-  const quiet = config.quietZone;
+  const theme = getTheme(config.theme);
+  const quiet = theme.quietZone;
   const total = size + quiet * 2;
+  const accent = config.accent === 'none' ? null : getAccent(config.accent);
+  const accentFill = accent ? (theme.darkSurface ? accent.dark : accent.light) : null;
 
-  const squares: ReactNode[] = [];
+  const nodes: ReactNode[] = [];
   for (let r = 0; r < size; r++) {
     for (let c = 0; c < size; c++) {
-      if (matrix[r][c]) {
-        const fill = moduleFill({ config, accent }, r, c, size);
-        squares.push(
-          <rect
-            key={`${r}-${c}`}
-            x={c + quiet}
-            y={r + quiet}
-            width={1}
-            height={1}
-            rx={config.radius}
-            fill={fill}
-          />
-        );
-      }
+      if (!matrix[r][c]) continue;
+      const kind = finderZoneKind(matrix, r, c, size);
+      const fill =
+        accentFill && kind === 'outer' ? accentFill : theme.module;
+      nodes.push(shapeNode(config.shape, c + quiet, r + quiet, fill, `${r}-${c}`));
     }
   }
 
@@ -161,29 +220,29 @@ export function renderQrSvg(
     <svg
       viewBox={`0 0 ${total} ${total}`}
       className={cn('h-auto w-full', className)}
-      shapeRendering="crispEdges"
+      shapeRendering={config.shape === 'square' ? 'crispEdges' : 'geometricPrecision'}
       aria-hidden="true"
       focusable="false"
     >
-      <rect x={0} y={0} width={total} height={total} fill={config.background} />
-      <g>{squares}</g>
+      <rect x={0} y={0} width={total} height={total} fill={theme.background} />
+      <g>{nodes}</g>
     </svg>
   );
 }
 
 export function downloadQrMatrix(
   matrix: boolean[][],
-  style: QrStyleId,
-  accent: QrAccent,
+  config: QrConfig,
   username: string
 ): HTMLCanvasElement | null {
   const size = matrix.length;
-  const config = getStyleConfig(style);
-  const quiet = config.quietZone;
+  const theme = getTheme(config.theme);
+  const quiet = theme.quietZone;
   const scale = 18;
-  const moduleSize = scale;
   const total = size + quiet * 2;
   const footerH = 104;
+  const accent = config.accent === 'none' ? null : getAccent(config.accent);
+  const accentFill = accent ? (theme.darkSurface ? accent.dark : accent.light) : null;
 
   const canvas = document.createElement('canvas');
   canvas.width = total * scale;
@@ -191,39 +250,66 @@ export function downloadQrMatrix(
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
 
-  ctx.fillStyle = config.background;
+  ctx.fillStyle = theme.background;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const radius = config.radius * moduleSize;
+  const m = scale;
+  const radius = m * 0.4;
   for (let r = 0; r < size; r++) {
     for (let c = 0; c < size; c++) {
       if (!matrix[r][c]) continue;
-      ctx.fillStyle = moduleFill({ config, accent }, r, c, size);
+      const kind = finderZoneKind(matrix, r, c, size);
+      const fill =
+        accentFill && kind === 'outer' ? accentFill : theme.module;
+      ctx.fillStyle = fill;
       const x = (c + quiet) * scale;
       const y = (r + quiet) * scale;
-      if (radius > 0 && typeof ctx.roundRect === 'function') {
-        ctx.beginPath();
-        ctx.roundRect(x, y, moduleSize, moduleSize, radius);
-        ctx.fill();
-      } else {
-        ctx.fillRect(x, y, moduleSize, moduleSize);
+      switch (config.shape) {
+        case 'dots': {
+          ctx.beginPath();
+          ctx.arc(x + m / 2, y + m / 2, m * 0.44, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+        case 'diamond': {
+          ctx.save();
+          ctx.translate(x + m / 2, y + m / 2);
+          ctx.rotate(Math.PI / 4);
+          ctx.fillRect(-m * 0.25, -m * 0.25, m * 0.5, m * 0.5);
+          ctx.restore();
+          break;
+        }
+        case 'rounded': {
+          if (typeof ctx.roundRect === 'function') {
+            ctx.beginPath();
+            ctx.roundRect(x, y, m, m, radius);
+            ctx.fill();
+          } else {
+            ctx.fillRect(x, y, m, m);
+          }
+          break;
+        }
+        default: {
+          ctx.fillRect(x, y, m, m);
+        }
       }
     }
   }
 
-  // Identity footer beneath the QR.
   const footerY = total * scale;
   const midX = canvas.width / 2;
 
-  ctx.fillStyle = config.darkSurface ? 'rgba(244,244,245,0.85)' : '#17171c';
+  ctx.fillStyle = theme.darkSurface ? 'rgba(255,255,255,0.9)' : '#17171c';
   ctx.font = '600 30px Inter, system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText(`@${username}`, midX, footerY + 42);
 
-  ctx.fillStyle = config.darkSurface ? 'rgba(244,244,245,0.4)' : 'rgba(23,23,28,0.5)';
-  ctx.font = '700 20px Inter, system-ui, sans-serif';
+  ctx.fillStyle = accentFill
+    ? accentFill
+    : (theme.darkSurface ? 'rgba(255,255,255,0.45)' : 'rgba(23,23,28,0.45)');
+  ctx.font = '700 19px Inter, system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('TWIBSERS', midX, footerY + 78);
+  ctx.fillText('TWIBSERS', midX, footerY + 76);
 
   return canvas;
 }

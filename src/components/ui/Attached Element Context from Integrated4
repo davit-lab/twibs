@@ -1,0 +1,136 @@
+Attached Element Context from Integrated Browser
+
+Element: a.relative.z-10.flex.flex-col.items-center.justify-center.gap-1.px-3.5.py-2.transition-all.duration-200.text-primary-foreground
+
+URL: http://localhost:8081/
+
+HTML Path: div#root > div.bg-background.min-h-screen > nav.lg:hidden.fixed.bottom-0.left-0.right-0.z-50.px-4.pb-[calc(env(safe-area-inset-bottom,0px)+12px)].pt-2.pointer-events-none > div.pointer-events-auto.mx-auto.max-w-[430px].rounded-full.bg-background/75.backdrop-blur-xl.border.border-border/60.shadow-lg.shadow-black/10.flex.items-center.justify-around.h-16.px-2.relative > div.relative.flex.items-center > a.relative.z-10.flex.flex-col.items-center.justify-center.gap-1.px-3.5.py-2.transition-all.duration-200.text-primary-foreground
+
+Outer HTML:
+```html
+<a class="relative z-10 flex flex-col items-center justify-center gap-1 px-3.5 py-2 transition-all duration-200 text-primary-foreground" href="/"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-house h-5 w-5 transition-transform duration-200 scale-110"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"></path><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg><span class="text-[10px] font-semibold">Home</span></a>
+```
+
+Dimensions:
+- top: 1084px
+- left: 61px
+- width: 53px
+- height: 50px
+
+CSS:
+```css
+*, ::before, ::after { --tw-border-spacing-x: 0;
+  --tw-border-spacing-y: 0;
+  --tw-translate-x: 0;
+  --tw-translate-y: 0;
+  --tw-rotate: 0;
+  --tw-skew-x: 0;
+  --tw-skew-y: 0;
+  --tw-scale-x: 1;
+  --tw-scale-y: 1;
+  --tw-pan-x:  ;
+  --tw-pan-y:  ;
+  --tw-pinch-zoom:  ;
+  --tw-scroll-snap-strictness: proximity;
+  --tw-gradient-from-position:  ;
+  --tw-gradient-via-position:  ;
+  --tw-gradient-to-position:  ;
+  --tw-ordinal:  ;
+  --tw-slashed-zero:  ;
+  --tw-numeric-figure:  ;
+  --tw-numeric-spacing:  ;
+  --tw-numeric-fraction:  ;
+  --tw-ring-inset:  ;
+  --tw-ring-offset-width: 0px;
+  --tw-ring-offset-color: #fff;
+  --tw-ring-color: rgb(59 130 246 / 0.5);
+  --tw-ring-offset-shadow: 0 0 #0000;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-shadow: 0 0 #0000;
+  --tw-shadow-colored: 0 0 #0000;
+  --tw-blur:  ;
+  --tw-brightness:  ;
+  --tw-contrast:  ;
+  --tw-grayscale:  ;
+  --tw-hue-rotate:  ;
+  --tw-invert:  ;
+  --tw-saturate:  ;
+  --tw-sepia:  ;
+  --tw-drop-shadow:  ;
+  --tw-backdrop-blur:  ;
+  --tw-backdrop-brightness:  ;
+  --tw-backdrop-contrast:  ;
+  --tw-backdrop-grayscale:  ;
+  --tw-backdrop-hue-rotate:  ;
+  --tw-backdrop-invert:  ;
+  --tw-backdrop-opacity:  ;
+  --tw-backdrop-saturate:  ;
+  --tw-backdrop-sepia:  ;
+  --tw-contain-size:  ;
+  --tw-contain-layout:  ;
+  --tw-contain-paint:  ;
+  --tw-contain-style:  ; }
+*, ::before, ::after { box-sizing: border-box; /* 1 */
+  border-width: 0; /* 2 */
+  border-style: solid; /* 2 */
+  border-color: #e5e7eb; /* 2 */ }
+* { border-color: hsl(var(--border)); }
+a { color: inherit;
+  text-decoration: inherit; }
+.relative { position: relative; }
+.z-10 { z-index: 10; }
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.gap-1 { gap: 0.25rem; }
+.px-3\.5 { padding-left: 0.875rem;
+  padding-right: 0.875rem; }
+.py-2 { padding-top: 0.5rem;
+  padding-bottom: 0.5rem; }
+.text-primary-foreground { color: hsl(var(--primary-foreground)); }
+.transition-all { transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms; }
+.duration-200 { transition-duration: 200ms; }
+.duration-200 { animation-duration: 200ms; }
+
+/* Pseudo-elements */
+::before, ::after { --tw-content: ''; }
+
+/* Inherited */
+body { color: hsl(var(--foreground)) }
+html, :host { line-height: 1.5; tab-size: 4 }
+html { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif }
+
+/* Resolved values */
+padding: 7px 12.25px;
+border: 0px solid rgb(39, 39, 42);
+text-decoration: rgb(255, 255, 255);
+align-items: center;
+animation-duration: 0.2s;
+box-sizing: border-box;
+color: rgb(255, 255, 255);
+column-gap: 3.5px;
+cursor: pointer /*UA*/;
+display: flex;
+flex-direction: column;
+font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+font-feature-settings: normal;
+height: 49.9805px;
+justify-content: center;
+line-height: 21px;
+position: relative;
+row-gap: 3.5px;
+tab-size: 4;
+transition-duration: 0.2s;
+transition-property: all;
+transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+width: 52.9688px;
+z-index: 10;
+
+/* CSS variables */
+--border: 240 3.7% 15.9%;
+--primary-foreground: 0 0% 100%;
+--foreground: 0 0% 98%;
+```
