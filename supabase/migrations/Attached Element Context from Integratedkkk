@@ -1,0 +1,174 @@
+Attached Element Context from Integrated Browser
+
+Element: button.inline-flex.items-center.justify-center.gap-2.whitespace-nowrap.text-sm.font-semibold.transition-all.duration-200.focus-visible:outline-none.focus-visible:ring-2.focus-visible:ring-primary/50.focus-visible:ring-offset-2.focus-visible:ring-offset-background.disabled:pointer-events-none.disabled:opacity-50.[&_svg]:pointer-events-none.[&_svg]:size-4.[&_svg]:shrink-0.active:scale-[0.98].h-10.w-10.rounded-xl.bg-black/50.hover:bg-black/70.text-white.border.border-white/10
+
+URL: http://localhost:8082/profile/errorid
+
+HTML Path: div#root > div.bg-background.min-h-screen > main.min-h-screen.lg:ml-[80px] > div.relative.min-h-screen.bg-background.pb-24.lg:pb-8 > div.max-w-4xl.mx-auto.relative.z-10 > div.relative.overflow-hidden.h-44.md:h-52 > div.absolute.top-4.right-4.flex.gap-2 > button.inline-flex.items-center.justify-center.gap-2.whitespace-nowrap.text-sm.font-semibold.transition-all.duration-200.focus-visible:outline-none.focus-visible:ring-2.focus-visible:ring-primary/50.focus-visible:ring-offset-2.focus-visible:ring-offset-background.disabled:pointer-events-none.disabled:opacity-50.[&_svg]:pointer-events-none.[&_svg]:size-4.[&_svg]:shrink-0.active:scale-[0.98].h-10.w-10.rounded-xl.bg-black/50.hover:bg-black/70.text-white.border.border-white/10
+
+Outer HTML:
+```html
+<button class="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 active:scale-[0.98] h-10 w-10 rounded-xl bg-black/50 hover:bg-black/70 text-white border border-white/10" aria-label="Open Profile Studio"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-palette h-5 w-5"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path></svg></button>
+```
+
+Dimensions:
+- top: 14px
+- left: 430px
+- width: 35px
+- height: 35px
+
+CSS:
+```css
+*, ::before, ::after { --tw-border-spacing-x: 0;
+  --tw-border-spacing-y: 0;
+  --tw-translate-x: 0;
+  --tw-translate-y: 0;
+  --tw-rotate: 0;
+  --tw-skew-x: 0;
+  --tw-skew-y: 0;
+  --tw-scale-x: 1;
+  --tw-scale-y: 1;
+  --tw-pan-x:  ;
+  --tw-pan-y:  ;
+  --tw-pinch-zoom:  ;
+  --tw-scroll-snap-strictness: proximity;
+  --tw-gradient-from-position:  ;
+  --tw-gradient-via-position:  ;
+  --tw-gradient-to-position:  ;
+  --tw-ordinal:  ;
+  --tw-slashed-zero:  ;
+  --tw-numeric-figure:  ;
+  --tw-numeric-spacing:  ;
+  --tw-numeric-fraction:  ;
+  --tw-ring-inset:  ;
+  --tw-ring-offset-width: 0px;
+  --tw-ring-offset-color: #fff;
+  --tw-ring-color: rgb(59 130 246 / 0.5);
+  --tw-ring-offset-shadow: 0 0 #0000;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-shadow: 0 0 #0000;
+  --tw-shadow-colored: 0 0 #0000;
+  --tw-blur:  ;
+  --tw-brightness:  ;
+  --tw-contrast:  ;
+  --tw-grayscale:  ;
+  --tw-hue-rotate:  ;
+  --tw-invert:  ;
+  --tw-saturate:  ;
+  --tw-sepia:  ;
+  --tw-drop-shadow:  ;
+  --tw-backdrop-blur:  ;
+  --tw-backdrop-brightness:  ;
+  --tw-backdrop-contrast:  ;
+  --tw-backdrop-grayscale:  ;
+  --tw-backdrop-hue-rotate:  ;
+  --tw-backdrop-invert:  ;
+  --tw-backdrop-opacity:  ;
+  --tw-backdrop-saturate:  ;
+  --tw-backdrop-sepia:  ;
+  --tw-contain-size:  ;
+  --tw-contain-layout:  ;
+  --tw-contain-paint:  ;
+  --tw-contain-style:  ; }
+*, ::before, ::after { box-sizing: border-box; /* 1 */
+  border-width: 0; /* 2 */
+  border-style: solid; /* 2 */
+  border-color: #e5e7eb; /* 2 */ }
+* { border-color: hsl(var(--border)); }
+button, input, optgroup, select, textarea { font-family: inherit; /* 1 */
+  font-feature-settings: inherit; /* 1 */
+  font-variation-settings: inherit; /* 1 */
+  font-size: 100%; /* 1 */
+  font-weight: inherit; /* 1 */
+  line-height: inherit; /* 1 */
+  letter-spacing: inherit; /* 1 */
+  color: inherit; /* 1 */
+  margin: 0; /* 2 */
+  padding: 0; /* 3 */ }
+button, select { text-transform: none; }
+button, input:where([type='button']), input:where([type='reset']), input:where([type='submit']) { -webkit-appearance: button; /* 1 */
+  background-color: transparent; /* 2 */
+  background-image: none; /* 2 */ }
+button, [role="button"] { cursor: pointer; }
+.inline-flex { display: inline-flex; }
+.h-10 { height: 2.5rem; }
+.w-10 { width: 2.5rem; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.gap-2 { gap: 0.5rem; }
+.whitespace-nowrap { white-space: nowrap; }
+.rounded-xl { border-radius: 0.75rem; }
+.border { border-width: 1px; }
+.border-white\/10 { border-color: rgb(255 255 255 / 0.1); }
+.bg-black\/50 { background-color: rgb(0 0 0 / 0.5); }
+.text-sm { font-size: 0.875rem;
+  line-height: 1.25rem; }
+.font-semibold { font-weight: 600; }
+.text-white { --tw-text-opacity: 1;
+  color: rgb(255 255 255 / var(--tw-text-opacity, 1)); }
+.transition-all { transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms; }
+.duration-200 { transition-duration: 200ms; }
+.duration-200 { animation-duration: 200ms; }
+
+/* Pseudo-elements */
+::before, ::after { --tw-content: ''; }
+
+/* Inherited */
+body { color: hsl(var(--foreground)) }
+html, :host { line-height: 1.5; tab-size: 4 }
+html { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif }
+
+/* Resolved values */
+margin: 0px;
+padding: 0px;
+border-radius: 10.5px;
+border: 1.25px solid rgba(255, 255, 255, 0.1);
+white-space: nowrap;
+align-items: center;
+animation-duration: 0.2s;
+appearance: button;
+background-color: rgba(0, 0, 0, 0.5);
+background-image: none;
+border-image-outset: 0 /*UA*/;
+border-image-repeat: stretch /*UA*/;
+border-image-slice: 100% /*UA*/;
+border-image-source: none /*UA*/;
+border-image-width: 1 /*UA*/;
+box-sizing: border-box;
+color: rgb(255, 255, 255);
+column-gap: 7px;
+cursor: pointer;
+display: flex;
+font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+font-feature-settings: normal;
+font-size: 12.25px;
+font-variation-settings: normal;
+font-weight: 600;
+height: 35px;
+justify-content: center;
+letter-spacing: normal;
+line-height: 17.5px;
+padding-block-end: 0px /*UA*/;
+padding-block-start: 0px /*UA*/;
+padding-inline-end: 0px /*UA*/;
+padding-inline-start: 0px /*UA*/;
+row-gap: 7px;
+tab-size: 4;
+text-align: center /*UA*/;
+text-indent: 0px /*UA*/;
+text-rendering: auto /*UA*/;
+text-shadow: none /*UA*/;
+text-transform: none;
+transition-duration: 0.2s;
+transition-property: all;
+transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+width: 35px;
+word-spacing: 0px /*UA*/;
+
+/* CSS variables */
+--border: 240 3.7% 15.9%;
+--tw-text-opacity: 1;
+--foreground: 0 0% 98%;
+```
