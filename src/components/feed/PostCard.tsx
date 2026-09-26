@@ -60,6 +60,7 @@ import {
   ExternalLink,
   Heart,
   ShieldCheck,
+  Store,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -78,6 +79,14 @@ interface PostProfile {
   display_name: string;
   avatar_url: string | null;
   is_verified: boolean;
+}
+
+export interface PostBusinessAccount {
+  id: string;
+  name: string;
+  username: string;
+  avatar_url: string | null;
+  account_type: string;
 }
 
 interface PostMedia {
@@ -101,6 +110,7 @@ interface PostData {
   user_id: string;
   profiles: PostProfile;
   post_media: PostMedia[];
+  business_account?: PostBusinessAccount | null;
   user_has_starred?: boolean;
   context_meta?: PostContextMeta | null;
 }
@@ -480,27 +490,54 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter, 
 
       {/* Post Header */}
       <div className="flex items-start gap-3 p-4 pb-3">
-        <Link to={`/profile/${post.profiles.username}`} className="flex-shrink-0">
-          <UserAvatar
-            userId={post.user_id}
-            avatarUrl={post.profiles.avatar_url}
-            displayName={post.profiles.display_name}
-            size="md"
-          />
-        </Link>
+        {post.business_account ? (
+          <Link to={`/business/${post.business_account.username}`} className="flex-shrink-0">
+            <UserAvatar
+              userId={post.user_id}
+              avatarUrl={post.business_account.avatar_url}
+              displayName={post.business_account.name}
+              size="md"
+            />
+          </Link>
+        ) : (
+          <Link to={`/profile/${post.profiles.username}`} className="flex-shrink-0">
+            <UserAvatar
+              userId={post.user_id}
+              avatarUrl={post.profiles.avatar_url}
+              displayName={post.profiles.display_name}
+              size="md"
+            />
+          </Link>
+        )}
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <Link
-              to={`/profile/${post.profiles.username}`}
-              className="font-semibold text-[15px] hover:text-primary transition-colors truncate"
-            >
-              {post.profiles.display_name}
-            </Link>
-            {post.profiles.is_verified && (
-              <BadgeCheck className="h-[18px] w-[18px] text-primary flex-shrink-0" />
+            {post.business_account ? (
+              <>
+                <Link
+                  to={`/business/${post.business_account.username}`}
+                  className="font-semibold text-[15px] hover:text-primary transition-colors truncate"
+                >
+                  {post.business_account.name}
+                </Link>
+                <BadgeCheck className="h-[18px] w-[18px] text-primary flex-shrink-0" />
+                <Store className="h-3 w-3 text-violet-500 flex-shrink-0" />
+                <span className="text-muted-foreground text-sm">@{post.business_account.username}</span>
+              </>
+            ) : (
+              <>
+                <Link
+                  to={`/profile/${post.profiles.username}`}
+                  className="font-semibold text-[15px] hover:text-primary transition-colors truncate"
+                >
+                  {post.profiles.display_name}
+                </Link>
+                {post.profiles.is_verified && (
+                  <BadgeCheck className="h-[18px] w-[18px] text-primary flex-shrink-0" />
+                )}
+                <span className="text-muted-foreground text-sm">@{post.profiles.username}</span>
+              </>
             )}
-            <span className="text-muted-foreground text-sm">@{post.profiles.username}</span>
             <span className="text-muted-foreground/50">·</span>
             <time
               dateTime={post.created_at}
@@ -565,7 +602,7 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter, 
                 <DropdownMenuSeparator className="bg-border/30" />
                 <DropdownMenuItem
                   className="gap-2 text-sm rounded-lg"
-                  onClick={() => navigate(`/ads/boost/${post.id}`)}
+                  onClick={() => navigate(`/boost/${post.id}`)}
                 >
                   <Megaphone className="h-4 w-4" />
                   Boost post

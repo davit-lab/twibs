@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -40,6 +42,9 @@ import {
   ExternalLink,
   Pencil,
   MoreHorizontal,
+  Store,
+  ChevronRight,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   Dialog,
@@ -92,6 +97,15 @@ const visibilityOptions = [
 
 export default function PostComposer({ onPostCreated }: PostComposerProps) {
   const { profile } = useAuth();
+  const { activeBusiness, mode: businessMode, accountsLoading } = useBusiness();
+
+  // A business session is only resolved once we actually hold the business it
+  // points at. While it is unresolved we must NOT fall back to the personal
+  // identity - that would publish a business post onto the private profile.
+  // Either we post as the business, or we refuse to post at all.
+  const wantsBusiness = businessMode === 'business';
+  const postingAsBusiness = wantsBusiness && !!activeBusiness;
+  const attributionBlocked = wantsBusiness && !postingAsBusiness;
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -327,6 +341,18 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
     if (!content.trim() && mediaFiles.length === 0) return;
     if (!profile) return;
 
+    // Hard stop rather than a silent downgrade to the private profile.
+    if (attributionBlocked) {
+      toast({
+        variant: 'destructive',
+        title: accountsLoading ? 'Loading your business…' : 'Business unavailable',
+        description: accountsLoading
+          ? 'Your business account is still loading. Try again in a moment.'
+          : 'We could not load the business you are posting as. Switch back to your personal account or pick a business from the account switcher.',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -334,6 +360,9 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
         .from('posts')
         .insert({
           user_id: profile.user_id,
+          // In business mode this is always the active business, never null.
+          // `postingAsBusiness` is guaranteed by the attributionBlocked guard above.
+          business_id: postingAsBusiness ? activeBusiness!.id : null,
           content: content.trim(),
           visibility,
           expires_at: expiresIn24h ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : null,
@@ -412,20 +441,64 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
     )}>
       <div className="flex gap-3 p-3 sm:p-4">
         <Avatar className="h-11 w-11 flex-shrink-0 ring-2 ring-primary/20">
-          <AvatarImage src={profile?.avatar_url || undefined} />
-          <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white text-sm font-medium">
-            {getInitials(profile?.display_name || 'U')}
+          <AvatarImage
+            src={
+              postingAsBusiness
+                ? activeBusiness!.avatar_url || undefined
+                : profile?.avatar_url || undefined
+            }
+          />
+          <AvatarFallback className={cn(
+            'text-white text-sm font-medium',
+            postingAsBusiness
+              ? 'bg-gradient-to-br from-violet-600 to-indigo-600'
+              : 'bg-gradient-to-br from-primary to-accent'
+          )}>
+            {getInitials(
+              postingAsBusiness ? activeBusiness!.name : profile?.display_name || 'U'
+            )}
           </AvatarFallback>
         </Avatar>
 
         <div className="flex-1 min-w-0">
+          {postingAsBusiness ? (
+            <Link
+              to="/b"
+              className="mb-1.5 inline-flex max-w-full items-center gap-1.5 rounded-full bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-600 transition-colors hover:bg-violet-500/15 dark:text-violet-300"
+            >
+              <Store className="h-3.5 w-3.5 flex-shrink-0" />
+              <span className="truncate">Posting as {activeBusiness!.name}</span>
+              <ChevronRight className="h-3 w-3 flex-shrink-0" />
+            </Link>
+          ) : null}
+
+          {/* Business mode without a resolved business: say so instead of
+              quietly posting to the private profile. */}
+          {attributionBlocked ? (
+            <div className="mb-2 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+              <span>
+                {accountsLoading
+                  ? 'Loading your business account…'
+                  : 'Your business account could not be loaded, so posting is paused to avoid publishing to your personal profile.'}
+              </span>
+            </div>
+          ) : null}
+
           <Textarea
             ref={textareaRef}
-            placeholder="What's on your mind?"
+            placeholder={
+              attributionBlocked
+                ? 'Posting is paused until your business account loads'
+                : postingAsBusiness
+                  ? `Post as ${activeBusiness!.name}`
+                  : "What's on your mind?"
+            }
+            disabled={attributionBlocked}
             value={content}
             onChange={(e) => setContent(e.target.value)}
             onFocus={() => setIsFocused(true)}
-            className="min-h-[40px] sm:min-h-[44px] border-0 bg-transparent resize-none focus-visible:ring-0 p-0 text-sm sm:text-[15px] placeholder:text-muted-foreground/60 overflow-hidden"
+            className="min-h-[40px] sm:min-h-[44px] border-0 bg-transparent resize-none focus-visible:ring-0 p-0 text-sm sm:text-[15px] placeholder:text-muted-foreground/60 overflow-hidden disabled:cursor-not-allowed disabled:opacity-60"
             rows={1}
           />
 

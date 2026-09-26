@@ -18,6 +18,26 @@ export interface ExploreUser {
   distanceKm: number | null;
 }
 
+/**
+ * A public business/creator identity surfaced in Explore.
+ * `contact_email` / `contact_phone` are deliberately never selected here - they
+ * are private contact details and must not leak into a public discovery feed.
+ */
+export interface ExploreBusiness {
+  id: string;
+  name: string;
+  username: string;
+  account_type: string;
+  category: string | null;
+  description: string | null;
+  avatar_url: string | null;
+  cover_url: string | null;
+  location: string | null;
+  website: string | null;
+  followers_count: number;
+  is_following: boolean;
+}
+
 export interface ExplorePost {
   id: string;
   content: string;
@@ -54,7 +74,7 @@ export interface ExploreReel {
   };
 }
 
-export type ExploreTab = 'all' | 'people' | 'posts' | 'reels';
+export type ExploreTab = 'all' | 'people' | 'businesses' | 'posts' | 'reels';
 
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
@@ -73,6 +93,7 @@ export function useExplore() {
   const { user, profile } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [users, setUsers] = useState<ExploreUser[]>([]);
+  const [businesses, setBusinesses] = useState<ExploreBusiness[]>([]);
   const [posts, setPosts] = useState<ExplorePost[]>([]);
   const [reels, setReels] = useState<ExploreReel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -173,33 +194,50 @@ export function useExplore() {
       .order('view_count', { ascending: false })
       .limit(20);
 
+    // Public business/creator identities. RLS already limits this to
+    // status = 'active' for everyone, and we exclude private contact fields.
+    const businessBase = supabase
+      .from('advertiser_accounts')
+      .select('id, name, username, account_type, category, description, avatar_url, cover_url, location, website, followers_count')
+      .eq('status', 'active')
+      .order('followers_count', { ascending: false })
+      .limit(20);
+
     let profileQuery = profileBase;
     let postQuery = postBase;
     let reelQuery = reelBase;
+    let businessQuery = businessBase;
 
     if (searchQuery.trim()) {
       const q = searchQuery.trim();
       profileQuery = profileBase.or(`username.ilike.%${q}%,display_name.ilike.%${q}%,bio.ilike.%${q}%,location.ilike.%${q}%`);
       postQuery = postBase.or(`content.ilike.%${q}%`);
       reelQuery = reelBase.or(`caption.ilike.%${q}%`);
+      businessQuery = businessBase.or(
+        `name.ilike.%${q}%,username.ilike.%${q}%,description.ilike.%${q}%,category.ilike.%${q}%,location.ilike.%${q}%`
+      );
     }
 
     if (user) {
       profileQuery = profileQuery.neq('user_id', user.id);
+      // Your own businesses are not a discovery result for you.
+      businessQuery = businessQuery.neq('user_id', user.id);
     }
 
-    const [usersResult, postsResult, reelsResult] = await Promise.all([
+    const [usersResult, postsResult, reelsResult, businessesResult] = await Promise.all([
       profileQuery,
       postQuery,
       reelQuery,
+      businessQuery,
     ]);
 
     if (genRef.current !== gen) return;
 
-    const hasError = !!(usersResult.error || postsResult.error || reelsResult.error);
+    const hasError = !!(usersResult.error || postsResult.error || reelsResult.error || businessesResult.error);
     if (usersResult.error) console.error('Explore users error:', usersResult.error);
     if (postsResult.error) console.error('Explore posts error:', postsResult.error);
     if (reelsResult.error) console.error('Explore reels error:', reelsResult.error);
+    if (businessesResult.error) console.error('Explore businesses error:', businessesResult.error);
 
     if (usersResult.data) {
       const userIds = usersResult.data.map(u => u.user_id);

@@ -377,6 +377,16 @@ export default function ProfessionalAccountsSection() {
           <Mic className="h-4 w-4" />
           Create Creator Account
         </Button>
+        {/* The guided wizard sets up avatar, cover, goals and contact details in
+            one pass, so it is offered alongside the quick dialog above. This is
+            the only place business creation is surfaced now that it has been
+            removed from the account switcher. */}
+        <Button variant="outline" asChild className="gap-2">
+          <Link to="/business/create">
+            <Building2 className="h-4 w-4" />
+            Guided business setup
+          </Link>
+        </Button>
         <Button variant="ghost" asChild className="gap-2">
           <Link to="/ads">
             <Megaphone className="h-4 w-4" />

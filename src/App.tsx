@@ -2,6 +2,7 @@ import { lazy, Suspense, Component, ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { BusinessProvider } from '@/contexts/BusinessContext';
 import { SystemSettingsProvider, useAppSettings } from '@/contexts/SystemSettingsContext';
 import { CallProvider } from '@/components/calling/CallProvider';
 import PreferencesBootstrap from '@/components/PreferencesBootstrap';
@@ -39,6 +40,10 @@ const AdsBoostPost = lazy(() =>
   import('./pages/AdsNewCampaign').then((m) => ({ default: m.AdsBoostPost }))
 );
 const CampaignDetail = lazy(() => import('./pages/CampaignDetail'));
+const BusinessCreate = lazy(() => import('./pages/BusinessCreate'));
+const BusinessHome = lazy(() => import('./pages/BusinessHome'));
+const BusinessProfile = lazy(() => import('./pages/BusinessProfile'));
+const BoostPost = lazy(() => import('./pages/BoostPost'));
 const Terms = lazy(() => import('./pages/Terms'));
 const Privacy = lazy(() => import('./pages/Privacy'));
 const CommunityGuidelines = lazy(() => import('./pages/CommunityGuidelines'));
@@ -162,6 +167,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
+            <BusinessProvider>
             <SystemSettingsProvider>
               <CallProvider>
                 <PreferencesBootstrap />
@@ -171,6 +177,31 @@ const App = () => (
                       <Route path="/" element={<Index />} />
                       <Route path="/auth" element={<Auth />} />
                       <Route path="/profile/:username" element={<Profile />} />
+                      <Route
+                        path="/business/create"
+                        element={
+                          <ProtectedRoute>
+                            <BusinessCreate />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/b"
+                        element={
+                          <ProtectedRoute>
+                            <BusinessHome />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/boost/:postId"
+                        element={
+                          <ProtectedRoute>
+                            <BoostPost />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route path="/business/:username" element={<BusinessProfile />} />
                       <Route
                         path="/settings"
                         element={
@@ -275,6 +306,7 @@ const App = () => (
                 </Suspense>
               </CallProvider>
             </SystemSettingsProvider>
+            </BusinessProvider>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>

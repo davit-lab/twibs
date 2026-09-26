@@ -3,44 +3,52 @@ import type { Collection } from '@/hooks/useLibraryItems';
 
 interface CollectionCardProps {
   collection: Collection;
-  cover?: string | null;
+  covers?: (string | null)[];
   onClick?: () => void;
 }
 
-export default function CollectionCard({ collection, cover, onClick }: CollectionCardProps) {
-  const displayCover = cover ?? collection.cover_image;
-  
+export default function CollectionCard({ collection, covers, onClick }: CollectionCardProps) {
+  const displayCovers = (covers ?? [])
+    .map((c) => c ?? collection.cover_image)
+    .filter((c): c is string => Boolean(c))
+    .slice(0, 3);
+
   return (
-    <div
+    <button
+      type="button"
       onClick={onClick}
-      className="group cursor-pointer"
+      className="group text-left"
     >
-      <div className="rounded-xl border border-border overflow-hidden transition-all hover:border-primary/30 hover:-translate-y-0.5">
-        <div className="aspect-[4/3] bg-muted flex items-center justify-center relative overflow-hidden">
-          {displayCover ? (
-            <img
-              src={displayCover}
-              alt={collection.name}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            />
-          ) : (
-            <FolderPlus className="h-10 w-10 text-muted-foreground/30" />
-          )}
-          <div className="absolute top-2 right-2 px-2 py-0.5 bg-background/80 rounded-md text-xs font-medium border border-border/50">
-            {collection.item_count} items
+      <div className="relative flex h-28 items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-muted">
+        {displayCovers.length > 0 ? (
+          <div className="flex items-end justify-center gap-1.5 px-2 pb-2">
+            {displayCovers.map((c, i) => (
+              <img
+                key={i}
+                src={c}
+                alt=""
+                className="h-[92px] w-auto max-w-[36%] rounded border border-border/60 object-cover shadow-sm transition-transform duration-200 group-hover:-translate-y-1"
+                style={{ zIndex: i }}
+              />
+            ))}
           </div>
-        </div>
-        <div className="p-3">
-          <h3 className="text-sm font-semibold truncate group-hover:text-primary transition-colors">
-            {collection.name}
-          </h3>
-          {collection.description && (
-            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-              {collection.description}
-            </p>
-          )}
-        </div>
+        ) : (
+          <FolderPlus className="h-8 w-8 text-muted-foreground/30" />
+        )}
+        <span className="absolute right-2 top-2 rounded-md border border-border/50 bg-background/85 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+          {collection.item_count} {collection.item_count === 1 ? 'item' : 'items'}
+        </span>
       </div>
-    </div>
+      <div className="mt-2.5">
+        <h3 className="truncate text-sm font-semibold transition-colors group-hover:text-primary">
+          {collection.name}
+        </h3>
+        {collection.description && (
+          <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+            {collection.description}
+          </p>
+        )}
+      </div>
+    </button>
   );
 }

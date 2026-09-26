@@ -241,10 +241,11 @@ export function useCampaignActions() {
   };
 }
 
-export async function fetchFeedAds(viewerId: string, limit = 2) {
+export async function fetchFeedAds(viewerId: string, limit = 2, frequencyCap = 5) {
   const { data, error } = await rpc('get_feed_ads', {
-    p_viewer_id: viewerId,
-    p_limit: limit,
+    viewer_id: viewerId,
+    limit,
+    frequency_cap: frequencyCap,
   });
   if (error) throw error;
   return (data as any[]) || [];

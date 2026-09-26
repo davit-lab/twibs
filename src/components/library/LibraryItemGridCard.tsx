@@ -37,29 +37,23 @@ export default function LibraryItemGridCard({ item, onLike, showAuthor = true }:
       className="group flex flex-col gap-4 cursor-pointer relative"
       onClick={() => navigate(`/library/item/${item.id}`)}
     >
-      {/* Hover Glow Effect */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-primary/20 blur-3xl rounded-full opacity-0 group-hover:opacity-100 transition-all duration-700 pointer-events-none" />
-      
       {/* Thumbnail Container */}
-      <div className="relative aspect-square rounded-2xl overflow-hidden bg-muted  transition-all duration-500 group-hover:-translate-y-2 group-hover: group-hover:shadow-primary/10">
+      <div className="relative aspect-square rounded-xl overflow-hidden bg-muted transition-shadow duration-300 group-hover:shadow-md">
         {item.thumbnail_url || item.type === 'image' ? (
           <img
             src={item.thumbnail_url || item.file_url}
             alt={item.title}
-            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted-foreground/10">
+          <div className="w-full h-full flex items-center justify-center bg-muted">
             <TypeIcon className="h-16 w-16 text-muted-foreground/30" />
           </div>
         )}
-        
-        {/* Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-        
+
         {/* Type Badge */}
         <div className={cn(
-          "absolute top-3 left-3 px-3 py-1.5 rounded-lg text-white text-[10px] font-black uppercase tracking-widest  flex items-center gap-1.5",
+          "absolute top-2.5 left-2.5 px-2.5 py-1 rounded-md text-white text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5",
           config.color
         )}>
           <TypeIcon className="h-3 w-3" />
@@ -95,19 +89,19 @@ export default function LibraryItemGridCard({ item, onLike, showAuthor = true }:
 
       {/* Content */}
       <div className="flex flex-col gap-2 px-1 relative z-10">
-        <h4 className="text-lg font-black text-foreground tracking-tight leading-tight line-clamp-2 group-hover:text-primary transition-colors">
+        <h4 className="text-base font-semibold text-foreground tracking-tight leading-snug line-clamp-2 group-hover:text-primary transition-colors">
           {item.title}
         </h4>
         
         {showAuthor && item.profiles && (
           <div className="flex items-center gap-2">
-            <Avatar className="h-6 w-6">
+            <Avatar className="h-5 w-5">
               <AvatarImage src={item.profiles.avatar_url || undefined} />
-              <AvatarFallback className="text-[9px] bg-primary text-primary-foreground font-bold">
+              <AvatarFallback className="text-[9px] bg-primary/10 text-primary font-bold">
                 {getInitials(item.profiles.display_name)}
               </AvatarFallback>
             </Avatar>
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest truncate">
+            <span className="text-xs font-medium text-muted-foreground truncate">
               @{item.profiles.username}
             </span>
           </div>
@@ -116,14 +110,14 @@ export default function LibraryItemGridCard({ item, onLike, showAuthor = true }:
         <div className="flex items-center gap-4 pt-2 border-t border-border/50">
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Heart className={cn("h-3.5 w-3.5", item.is_liked && "fill-destructive text-destructive")} />
-            <span className="text-xs font-black">{formatCount(item.like_count)}</span>
+            <span className="text-xs font-semibold">{formatCount(item.like_count)}</span>
           </div>
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Eye className="h-3.5 w-3.5" />
-            <span className="text-xs font-black">{formatCount(item.view_count)}</span>
+            <span className="text-xs font-semibold">{formatCount(item.view_count)}</span>
           </div>
           {item.tags?.length > 0 && (
-            <Badge variant="secondary" className="ml-auto text-[9px] font-bold">
+            <Badge variant="secondary" className="ml-auto text-[9px] font-semibold">
               {item.tags[0]}
             </Badge>
           )}

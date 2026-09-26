@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import { useBook, useBookActions, useBooks } from '@/hooks/useBooks';
+import { useFriendsReadingThisBook } from '@/hooks/useSocialReading';
 import { useBookPurchaseStatus, useAuthorStripeStatus } from '@/hooks/useBookPurchase';
 import { useOpenLibrary } from '@/hooks/useOpenLibrary';
 import { useAuth } from '@/contexts/AuthContext';
@@ -33,8 +34,10 @@ import {
   ExternalLink,
   Loader2,
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { BookAI } from '@/components/bookai/BookAI';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 
 export default function BookDetail() {
   const { bookId } = useParams<{ bookId: string }>();
@@ -47,8 +50,10 @@ export default function BookDetail() {
   const { data: purchaseStatus } = useBookPurchaseStatus(bookId);
   const { data: authorHasStripe } = useAuthorStripeStatus(book?.author_id);
   const { books: moreBooks, isLoading: loadingMoreBooks } = useBooks({ status: 'published' });
+  const { events: friendsEvents } = useFriendsReadingThisBook(bookId);
   const [isUpdatingLibrary, setIsUpdatingLibrary] = useState(false);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [resolvedPdfUrl, setResolvedPdfUrl] = useState<string | null>(null);
   const [isResolvingPdf, setIsResolvingPdf] = useState(false);
   const { fetchPdfUrl } = useOpenLibrary();
@@ -215,8 +220,7 @@ export default function BookDetail() {
             {/* Cover */}
             <div className="flex w-full flex-shrink-0 flex-col items-start gap-5 md:w-60">
               <div className="group relative w-full max-w-[240px]">
-                <div className="absolute inset-0 translate-x-3 translate-y-3 rounded-2xl bg-primary/10" />
-                <div className="relative aspect-[3/4] overflow-hidden rounded-2xl border border-border/60 bg-muted shadow-lg shadow-black/5">
+                <div className="relative aspect-[3/4] overflow-hidden rounded-xl border border-border/60 bg-muted shadow-sm">
                   {book.cover_url ? (
                     <img
                       src={book.cover_url}
@@ -224,7 +228,7 @@ export default function BookDetail() {
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-muted to-muted/40">
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted">
                       <Book className="h-12 w-12 text-muted-foreground/30" />
                       <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
                         {book.genre || 'Book'}
@@ -250,8 +254,7 @@ export default function BookDetail() {
 
             {/* Info */}
             <div className="flex min-w-0 flex-1 flex-col">
-              <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 {book.genre || 'Book'}
               </p>
 
@@ -309,14 +312,14 @@ export default function BookDetail() {
 
               {/* Reading progress */}
               {user && progress && totalChapters > 0 && (
-                <div className="mt-6 max-w-xl rounded-2xl border border-border/60 bg-card p-4">
-                  <div className="mb-2 flex items-center justify-between text-sm">
-                    <span className="font-semibold">Reading progress</span>
-                    <span className="font-semibold text-primary">{Math.round(progressPercent)}%</span>
+                <div className="mt-6 max-w-xl">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium text-muted-foreground">Reading progress</span>
+                    <span className="font-semibold">{Math.round(progressPercent)}%</span>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-primary to-primary/60"
+                      className="h-full rounded-full bg-primary"
                       style={{ width: `${Math.min(progressPercent, 100)}%` }}
                     />
                   </div>
@@ -329,7 +332,7 @@ export default function BookDetail() {
               {/* Actions */}
               <div className="mt-7 flex flex-wrap items-center gap-3">
                 {hasPdf && hasAccess ? (
-                  <Button onClick={handleReadPdf} className="h-11 rounded-xl px-6 font-semibold shadow-md shadow-primary/20">
+                  <Button onClick={handleReadPdf} className="h-11 rounded-lg px-6 font-semibold">
                     {isEpub ? <ExternalLink className="mr-2 h-4 w-4" /> : <BookOpen className="mr-2 h-4 w-4" />}
                     {isEpub ? 'Read on Open Library' : 'Read book'}
                   </Button>
@@ -345,7 +348,7 @@ export default function BookDetail() {
                     onReadPdf={handleReadPdf}
                   />
                 ) : totalChapters > 0 && hasAccess ? (
-                  <Button onClick={handleStartReading} className="h-11 rounded-xl px-6 font-semibold shadow-md shadow-primary/20">
+                  <Button onClick={handleStartReading} className="h-11 rounded-lg px-6 font-semibold">
                     <Play className="mr-2 h-4 w-4" />
                     {progress ? 'Continue reading' : 'Start reading'}
                   </Button>
@@ -391,20 +394,77 @@ export default function BookDetail() {
                   {priceDisplay}
                 </span>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setAiOpen(true)}
+                className="mt-4 inline-flex items-center gap-2 rounded-md border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+              >
+                <BookOpen className="h-3.5 w-3.5 text-primary" />
+                Ask about this book
+              </button>
             </div>
           </div>
+        </div>
+
+        {/* Friends reading this — real data */}
+        <div className="mt-14">
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <h2 className="text-lg font-bold tracking-tight">Friends reading this</h2>
+            <span className="text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">{book.view_count}</span>{' '}
+              {book.view_count === 1 ? 'view' : 'views'}
+            </span>
+          </div>
+          {friendsEvents.length === 0 ? (
+            <p className="max-w-lg text-sm leading-relaxed text-muted-foreground">
+              No one you follow has opened this book yet. When a friend starts reading, finishing or
+              discussing it, their activity shows up here.
+            </p>
+          ) : (
+            <div className="divide-y divide-border/60">
+              {friendsEvents.map((e) => {
+                const label =
+                  e.action === 'finished' ? 'finished' : e.action === 'reading' ? 'is reading' : 'started reading';
+                return (
+                  <div key={e.key} className="flex items-center gap-3 py-3">
+                    <Link
+                      to={e.username ? `/profile/${e.username}` : '#'}
+                      className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-full border border-border/60 bg-muted"
+                    >
+                      {e.avatarUrl ? (
+                        <img src={e.avatarUrl} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="flex h-full w-full items-center justify-center text-[11px] font-semibold text-muted-foreground">
+                          {e.displayName.charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                    </Link>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-foreground">
+                        <span className="font-semibold">{e.displayName}</span>{' '}
+                        <span className="text-muted-foreground">{label}</span>{' '}
+                        <span className="font-medium">{book.title}</span>
+                      </p>
+                      {e.detail && (
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">{e.detail}</p>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {formatDistanceToNow(new Date(e.at), { addSuffix: true })}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Chapters */}
         {totalChapters > 0 && (
           <div className="mt-14">
             <div className="mb-4 flex items-end justify-between gap-4">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                  <FileText className="h-4 w-4 text-primary" />
-                </span>
-                <h2 className="text-lg font-bold tracking-tight">Chapters</h2>
-              </div>
+              <h2 className="text-lg font-bold tracking-tight">Chapters</h2>
               <span className="text-sm text-muted-foreground">{totalChapters} total</span>
             </div>
 
@@ -418,7 +478,7 @@ export default function BookDetail() {
                     key={chapter.id}
                     to={`/library/book/${bookId}/read/${chapter.id}`}
                     className={cn(
-                      'group flex items-center gap-4 rounded-2xl border border-border/60 bg-card p-4 transition-all duration-300 hover:border-primary/40 hover:shadow-md hover:shadow-primary/5',
+                      'group flex items-center gap-4 rounded-xl border border-border/60 bg-card p-4 transition-colors duration-200 hover:border-primary/40',
                       isCurrent && 'border-primary/60 bg-primary/5'
                     )}
                   >
@@ -457,15 +517,26 @@ export default function BookDetail() {
           </div>
         )}
 
+        {/* Book AI — quiet, optional utility opened on demand */}
+        <Sheet open={aiOpen} onOpenChange={(open) => { if (!open) setAiOpen(false); }}>
+          <SheetContent side="bottom" className="h-[85vh] p-0">
+            <SheetTitle className="sr-only">Ask about this book</SheetTitle>
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border/60 px-4">
+                <BookOpen className="h-4 w-4 text-primary" />
+                <span className="truncate text-sm font-semibold">{book?.title}</span>
+              </div>
+              <div className="min-h-0 flex-1">
+                <BookAI context={{ bookId: bookId!, bookTitle: book?.title ?? '' }} />
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+
         {/* More books */}
         <div className="mt-14">
           <div className="mb-4 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
-                <BookOpen className="h-4 w-4 text-muted-foreground" />
-              </span>
-              <h2 className="text-lg font-bold tracking-tight">More from the library</h2>
-            </div>
+            <h2 className="text-lg font-bold tracking-tight">Related books</h2>
             <Button variant="ghost" size="sm" className="-mr-2 gap-1 text-muted-foreground" asChild>
               <Link to="/library">
                 View all
@@ -478,7 +549,7 @@ export default function BookDetail() {
             <ScrollArea className="w-full whitespace-nowrap">
               <div className="flex gap-4 pb-4">
                 {[1, 2, 3, 4, 5].map((i) => (
-                  <Skeleton key={i} className="aspect-[3/4] w-[140px] flex-shrink-0 rounded-2xl" />
+                  <Skeleton key={i} className="aspect-[3/4] w-[140px] flex-shrink-0 rounded-xl" />
                 ))}
               </div>
             </ScrollArea>
@@ -494,9 +565,7 @@ export default function BookDetail() {
               <ScrollBar orientation="horizontal" className="h-1.5" />
             </ScrollArea>
           ) : (
-            <p className="rounded-2xl border border-dashed border-border/80 bg-card/50 px-8 py-12 text-center text-sm text-muted-foreground">
-              No similar books in the library yet.
-            </p>
+            <p className="text-sm text-muted-foreground">No related books in the library yet.</p>
           )}
         </div>
       </div>

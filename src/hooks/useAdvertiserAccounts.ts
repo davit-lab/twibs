@@ -5,6 +5,7 @@ import type {
   AdvertiserAccountType,
   AudienceEstimate,
 } from '@/lib/ads';
+import { friendlyErrorMessage } from '@/lib/errors';
 
 const AVATAR_BUCKET = 'avatars';
 
@@ -44,10 +45,10 @@ export function useAdvertiserAccounts() {
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
-      if (error) throw error;
+      if (error) throw new Error(friendlyErrorMessage(error, 'Failed to load professional accounts'));
       setAccounts((data as AdvertiserAccount[]) || []);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load professional accounts');
+      setError(friendlyErrorMessage(err, 'Failed to load professional accounts'));
     } finally {
       setLoading(false);
     }
@@ -58,20 +59,44 @@ export function useAdvertiserAccounts() {
   }, [fetchAccounts]);
 
   const createAccount = useCallback(async (input: AdvertiserAccountInput) => {
-    const { data, error } = await rpc('create_advertiser_account', {
-      p_account_type: input.account_type,
-      p_name: input.name,
-      p_username: input.username,
-      p_category: input.category || null,
-      p_description: input.description || null,
-      p_avatar_url: input.avatar_url || null,
-      p_cover_url: input.cover_url || null,
-      p_website: input.website || null,
-      p_contact_email: input.contact_email || null,
-      p_contact_phone: input.contact_phone || null,
-      p_location: input.location || null,
-    });
-    if (error) throw error;
+    // Business-like identities are routed through the unified create_account
+    // RPC so they are seeded as real teams (owner membership row, settings and
+    // wallet) exactly like accounts made in the Business area. Previously this
+    // screen called create_advertiser_account directly, which produced a
+    // "business" with no team at all -- it could not be managed, invited to, or
+    // billed, and showed up in the account switcher with no role.
+    // `personal` stays on create_advertiser_account (advertising only).
+    const isBusinessLike = input.account_type !== 'personal';
+
+    const { data, error } = isBusinessLike
+      ? await rpc('create_account', {
+          p_account_type: input.account_type,
+          p_name: input.name,
+          p_username: input.username,
+          p_category: input.category || null,
+          p_description: input.description || null,
+          p_avatar_url: input.avatar_url || null,
+          p_cover_url: input.cover_url || null,
+          p_website: input.website || null,
+          p_location: input.location || null,
+          p_goals: [],
+          p_contact_email: input.contact_email || null,
+          p_contact_phone: input.contact_phone || null,
+        })
+      : await rpc('create_advertiser_account', {
+          p_account_type: input.account_type,
+          p_name: input.name,
+          p_username: input.username,
+          p_category: input.category || null,
+          p_description: input.description || null,
+          p_avatar_url: input.avatar_url || null,
+          p_cover_url: input.cover_url || null,
+          p_website: input.website || null,
+          p_contact_email: input.contact_email || null,
+          p_contact_phone: input.contact_phone || null,
+          p_location: input.location || null,
+        });
+    if (error) throw new Error(friendlyErrorMessage(error, 'Could not create the account.'));
     await fetchAccounts();
     return data as AdvertiserAccount;
   }, [fetchAccounts]);
@@ -89,7 +114,7 @@ export function useAdvertiserAccounts() {
       p_contact_phone: updates.contact_phone ?? null,
       p_location: updates.location ?? null,
     });
-    if (error) throw error;
+    if (error) throw new Error(friendlyErrorMessage(error, 'Could not update the account.'));
     await fetchAccounts();
     return data as AdvertiserAccount;
   }, [fetchAccounts]);
@@ -99,7 +124,7 @@ export function useAdvertiserAccounts() {
       const { error } = await rpc('delete_advertiser_account', {
         p_account_id: accountId,
       });
-      if (error) throw error;
+      if (error) throw new Error(friendlyErrorMessage(error, 'Could not delete the account.'));
       await fetchAccounts();
     },
     [fetchAccounts]
@@ -115,7 +140,7 @@ export function useAdvertiserAccounts() {
     const { error: uploadError } = await supabase.storage
       .from(AVATAR_BUCKET)
       .upload(fileName, file, { upsert: true });
-    if (uploadError) throw uploadError;
+    if (uploadError) throw new Error(friendlyErrorMessage(uploadError, 'Could not upload the image.'));
     const { data: urlData } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(fileName);
     return urlData.publicUrl;
   }, []);
@@ -137,7 +162,7 @@ export function useAudienceEstimate() {
         p_languages: targeting.languages,
         p_interests: targeting.interests,
       });
-      if (error) throw error;
+      if (error) throw new Error(friendlyErrorMessage(error, 'Could not estimate the audience.'));
       return data as AudienceEstimate;
     },
     []

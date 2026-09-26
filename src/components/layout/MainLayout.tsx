@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import NotificationDropdown from '@/components/notifications/NotificationDropdown';
 import CreateDialog from '@/components/create/CreateDialog';
 import BrandLogo from '@/components/brand/BrandLogo';
+import { AccountSwitcher, AccountSwitcherItems } from '@/components/business/AccountSwitcher';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,7 +61,7 @@ const navItems = [
   { icon: BookOpen, label: 'Library', href: '/library', id: 'library' },
   { icon: Users, label: 'Groups', href: '/groups', id: 'groups' },
   { icon: Target, label: 'Interests', href: '/interests', id: 'interests' },
-  { icon: Megaphone, label: 'Advertise', href: '/ads', id: 'ads' },
+  { icon: Megaphone, label: 'Advertise', href: '/b', id: 'ads' },
 ];
 
 const mobileNavItems = [
@@ -107,16 +108,21 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
     if (href === '#create') return false;
     if (href === '/profile' && location.pathname.startsWith('/profile/')) return true;
     if (href === '/groups' && location.pathname.startsWith('/groups/')) return true;
+    if (href === '/b') {
+      return (
+        location.pathname.startsWith('/b') ||
+        location.pathname.startsWith('/ads') ||
+        location.pathname.startsWith('/boost/') ||
+        location.pathname.startsWith('/business/')
+      );
+    }
     return location.pathname === href;
   };
 
+// Rendered only inside the top bar's 3-dot menu. "Profile" and "Business" are
+// intentionally absent: the profile header card above and the embedded account
+// switcher already cover them, so they were duplicate links.
 const moreNavItems = [
-  {
-    icon: User,
-    label: 'Profile',
-    href: `/profile/${profile?.username || ''}`,
-    id: 'profile',
-  },
   { icon: BookOpen, label: 'Library', href: '/library', id: 'library' },
   { icon: Users, label: 'Groups', href: '/groups', id: 'groups' },
 ];
@@ -127,28 +133,29 @@ const moreAccountItems = [
 
   return (
     <div className={cn('bg-background', immersive ? 'h-[100dvh] overflow-hidden' : 'min-h-screen')}>
-      {/* Desktop Compact Icon Rail */}
+      {/* Desktop Expanded Sidebar */}
       {user && !immersive && (
-        <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-[80px] z-40 flex-col items-center border-r border-border bg-background py-5 px-2">
-          <Link to="/" className="mb-6 flex items-center justify-center" title="Home">
-            <BrandLogo className="h-8" />
-          </Link>
+        <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-[240px] z-40 flex-col border-r border-border bg-background py-4 pl-3 pr-3">
+          <div className="flex items-center gap-3 rounded-xl px-3 py-2">
+            <Link to="/" className="flex items-center gap-2.5" title="Home">
+              <BrandLogo className="h-9" />
+            </Link>
+          </div>
 
-          <nav className="flex flex-1 w-full flex-col items-center gap-1 overflow-y-auto scrollbar-hide">
+          <nav className="flex flex-1 w-full flex-col gap-0.5 overflow-y-auto scrollbar-hide py-3">
             {navItems.map((item) => {
               const active = isActive(item.href);
 
               if (item.href === '#create') {
                 return (
-                  <div key={item.id} className="relative group w-full flex justify-center my-1">
+                  <div key={item.id} className="mt-1">
                     <button
                       onClick={() => setCreateDialogOpen(true)}
-                      aria-label="Create"
-                      className="create-btn flex h-12 w-12 items-center justify-center"
+                      className="create-btn flex w-full items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white"
                     >
-                      <Plus className="relative z-10 h-6 w-6 text-white drop-shadow" strokeWidth={2.5} />
+                      <Plus className="h-5 w-5 text-white" strokeWidth={2.5} />
+                      Create
                     </button>
-                    <span className="rail-tip">Create</span>
                   </div>
                 );
               }
@@ -157,75 +164,87 @@ const moreAccountItems = [
                 <Link
                   key={item.id}
                   to={item.href}
-                  aria-label={item.label}
-                  className="relative group w-full flex justify-center py-0.5"
+                  className={cn(
+                    'relative group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] transition-colors',
+                    active
+                      ? 'bg-primary/15 font-semibold text-primary'
+                      : 'font-medium text-muted-foreground hover:bg-surface-2 hover:text-foreground'
+                  )}
                 >
-                  <span
-                    className={cn(
-                      'flex h-11 w-11 items-center justify-center rounded-2xl transition-colors',
-                      active
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
-                    )}
-                  >
-                    <item.icon
-                      className={cn('h-[22px] w-[22px]', active && 'text-primary')}
-                      strokeWidth={active ? 2.5 : 1.5}
-                      fill={active ? 'currentColor' : 'none'}
-                    />
-                  </span>
-                  <span className="rail-tip">{item.label}</span>
+                  <item.icon
+                    className={cn('h-[22px] w-[22px] flex-shrink-0', active && 'text-primary')}
+                    strokeWidth={active ? 2.5 : 1.75}
+                    fill={active ? 'currentColor' : 'none'}
+                  />
+                  <span className={cn(active && 'ml-0')}>{item.label}</span>
+                  {active && <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-primary" />}
                 </Link>
               );
             })}
+            <div className="mt-3 pt-1.5">
+              <button
+                onClick={() => setCreateDialogOpen(true)}
+                aria-label="Create"
+                className="create-btn flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-white"
+              >
+                <Plus className="h-5 w-5 text-white" strokeWidth={2.5} />
+                Create
+              </button>
+            </div>
           </nav>
 
-          <div className="relative group w-full flex justify-center py-1">
-            <NotificationDropdown className="h-11 w-11 rounded-2xl text-muted-foreground hover:text-foreground hover:bg-surface-2" />
-            <span className="rail-tip">Notifications</span>
-          </div>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="relative group w-full flex justify-center mt-1" aria-label="Account">
-                <Avatar className="h-10 w-10 ring-2 ring-border hover:ring-primary/40 transition-shadow">
-                  <AvatarImage src={profile?.avatar_url || undefined} />
-                  <AvatarFallback className="text-xs bg-surface-2">
-                    {getInitials(profile?.display_name || 'U')}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="rail-tip">Account</span>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-[220px]" align="start" side="right" sideOffset={12}>
-              <DropdownMenuItem asChild>
-                <Link to={`/profile/${profile?.username}`} className="cursor-pointer">
-                  <User className="mr-3 h-4 w-4" />
-                  Profile
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/settings" className="cursor-pointer">
-                  <Settings className="mr-3 h-4 w-4" />
-                  Settings
-                </Link>
-              </DropdownMenuItem>
-              {/* Premium removed */}
-              {(isAdmin || isModerator) && (
+          <div className="flex flex-col gap-leaf pt-3">
+            {/* Notification on the left, identity switcher immediately to its right. */}
+            <div className="flex items-center gap-2">
+              <NotificationDropdown className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium text-muted-foreground hover:bg-surface-2 hover:text-foreground" />
+              <AccountSwitcher lines side="top" />
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-surface-2" aria-label="Account">
+                  <Avatar className="h-9 w-9 flex-shrink-0 ring-2 ring-border hover:ring-primary/40 transition-shadow">
+                    <AvatarImage src={profile?.avatar_url || undefined} />
+                    <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                      {getInitials(profile?.display_name || 'U')}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-foreground">
+                      {profile?.display_name || 'You'}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-[240px]" align="start" side="top" sideOffset={10}>
                 <DropdownMenuItem asChild>
-                  <Link to="/admin" className="cursor-pointer">
-                    <Shield className="mr-3 h-4 w-4" />
-                    Admin
+                  <Link to={`/profile/${profile?.username}`} className="cursor-pointer">
+                    <User className="mr-3 h-4 w-4" />
+                    Profile
                   </Link>
                 </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={signOut} className="cursor-pointer text-destructive">
-                <LogOut className="mr-3 h-4 w-4" />
-                Log out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuItem asChild>
+                  <Link to="/settings" className="cursor-pointer">
+                    <Settings className="mr-3 h-4 w-4" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+                {(isAdmin || isModerator) && (
+                  <DropdownMenuItem asChild>
+                    <Link to="/admin" className="cursor-pointer">
+                      <Shield className="mr-3 h-4 w-4" />
+                      Admin
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={signOut} className="cursor-pointer text-destructive">
+                  <LogOut className="mr-3 h-4 w-4" />
+                  Log out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </aside>
       )}
 
@@ -284,6 +303,14 @@ const moreAccountItems = [
                 </span>
                 <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-neutral-500" />
               </Link>
+
+              <DropdownMenuSeparator className="my-1 bg-white/10" />
+
+              {/* Identity switching lives in the top navigation rather than the
+                  bottom bar. The header card above always shows the *personal*
+                  profile, so putting the switcher directly beneath it makes the
+                  account you are currently acting as unambiguous. */}
+              <AccountSwitcherItems tone="glass" />
 
               <DropdownMenuSeparator className="my-1 bg-white/10" />
 

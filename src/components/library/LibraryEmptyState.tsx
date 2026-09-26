@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Library, Plus, FolderPlus, Sparkles } from 'lucide-react';
+import { Library, Plus, FolderPlus, Search } from 'lucide-react';
 import UploadItemModal from './UploadItemModal';
 
 interface LibraryEmptyStateProps {
@@ -20,7 +20,7 @@ export default function LibraryEmptyState({
   const getContent = () => {
     if (searchQuery) {
       return {
-        icon: Sparkles,
+        icon: Search,
         title: 'No results found',
         description: 'Try a different search term or browse all items',
         action: null,
@@ -31,11 +31,11 @@ export default function LibraryEmptyState({
       case 'explore':
         return {
           icon: Library,
-          title: 'The archive awaits',
+          title: 'No archived books yet',
           description: 'Be the first to contribute to the community archive',
           action: isLoggedIn && onUploadSuccess ? (
             <UploadItemModal onSuccess={onUploadSuccess}>
-              <Button className="h-12 px-8 rounded-2xl font-bold shadow-lg shadow-primary/20">
+              <Button>
                 <Plus className="h-4 w-4 mr-2" />
                 Upload First Item
               </Button>
@@ -45,13 +45,13 @@ export default function LibraryEmptyState({
       case 'my-library':
         return {
           icon: Library,
-          title: 'Your vault is empty',
-          description: 'Upload audio, PDFs, or images to start your collection',
+          title: 'Your library is empty',
+          description: 'Upload a book or find something worth reading',
           action: onUploadSuccess ? (
             <UploadItemModal onSuccess={onUploadSuccess}>
-              <Button className="h-12 px-8 rounded-2xl font-bold shadow-lg shadow-primary/20">
+              <Button>
                 <Plus className="h-4 w-4 mr-2" />
-                Upload Your First Item
+                Upload Your First Book
               </Button>
             </UploadItemModal>
           ) : null,
@@ -62,10 +62,7 @@ export default function LibraryEmptyState({
           title: 'No collections yet',
           description: 'Create collections to organize your library',
           action: onCreateCollection ? (
-            <Button 
-              onClick={onCreateCollection}
-              className="h-12 px-8 rounded-2xl font-bold shadow-lg shadow-primary/20"
-            >
+            <Button onClick={onCreateCollection}>
               <Plus className="h-4 w-4 mr-2" />
               Create Collection
             </Button>
@@ -85,21 +82,18 @@ export default function LibraryEmptyState({
   const Icon = content.icon;
 
   return (
-    <div className="py-24 flex flex-col items-center justify-center text-center animate-in fade-in-50 duration-500">
-      <div className="relative mb-8">
-        <div className="absolute inset-0 bg-primary/20 blur-3xl opacity-50" />
-        <div className="relative w-28 h-28 bg-gradient-to-br from-primary/10 to-primary/5 text-primary/60 rounded-3xl flex items-center justify-center border border-primary/20 shadow-lg shadow-primary/10">
-          <Icon className="h-14 w-14" />
-        </div>
+    <div className="py-24 flex flex-col items-center justify-center text-center">
+      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border border-border/60 bg-muted/30 text-primary">
+        <Icon className="h-8 w-8" />
       </div>
-      
-      <h3 className="text-3xl font-black text-foreground tracking-tight mb-3">
+
+      <h3 className="text-2xl font-bold text-foreground tracking-tight mb-2">
         {content.title}
       </h3>
-      <p className="text-muted-foreground font-medium text-lg max-w-sm leading-relaxed mb-8">
+      <p className="text-muted-foreground text-base max-w-sm leading-relaxed mb-6">
         {content.description}
       </p>
-      
+
       {content.action}
     </div>
   );

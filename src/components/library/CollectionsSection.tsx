@@ -50,7 +50,7 @@ export default function CollectionsSection() {
   const { user } = useAuth();
   const { collections, loading, createCollection, removeFromCollection, deleteCollection, refetch } = useCollections(user?.id);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [coverMap, setCoverMap] = useState<Record<string, string | null>>({});
+  const [coverMap, setCoverMap] = useState<Record<string, (string | null)[]>>({});
   const [deleteTarget, setDeleteTarget] = useState<Collection | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -67,7 +67,13 @@ export default function CollectionsSection() {
         .in('collection_id', collections.map((c) => c.id))
         .order('created_at', { ascending: false });
 
-      const itemIds = [...new Set(entries?.map((e) => e.item_id) || [])];
+      const byCollection = new Map<string, string[]>();
+      (entries || []).forEach((e) => {
+        const list = byCollection.get(e.collection_id) || [];
+        if (list.length < 3) list.push(e.item_id);
+        byCollection.set(e.collection_id, list);
+      });
+      const itemIds = [...new Set((entries || []).map((e) => e.item_id))];
       let thumbMap = new Map<string, string | null>();
       if (itemIds.length) {
         const { data: items } = await supabase
@@ -82,9 +88,9 @@ export default function CollectionsSection() {
         );
       }
       if (cancelled) return;
-      const map: Record<string, string | null> = {};
-      (entries || []).forEach((e) => {
-        if (map[e.collection_id] == null) map[e.collection_id] = thumbMap.get(e.item_id) || null;
+      const map: Record<string, (string | null)[]> = {};
+      collections.forEach((c) => {
+        map[c.id] = (byCollection.get(c.id) || []).map((id) => thumbMap.get(id) || null);
       });
       setCoverMap(map);
     };
@@ -106,18 +112,13 @@ export default function CollectionsSection() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-            <FolderOpen className="h-4 w-4 text-primary" />
-          </span>
-          <h2 className="text-lg font-bold tracking-tight">Collections</h2>
-          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
-            {collections.length}
-          </span>
+        <div className="flex items-baseline gap-2.5">
+          <h2 className="text-base font-semibold tracking-tight">Collections</h2>
+          <span className="text-xs text-muted-foreground">{collections.length}</span>
         </div>
         <div className="flex items-center gap-2">
           <UploadItemModal onSuccess={refetch}>
-            <Button variant="outline" className="h-10 rounded-xl gap-1.5 border-border/60 font-semibold">
+            <Button variant="outline" className="h-10 rounded-lg gap-1.5 border-border/60 font-semibold">
               <Upload className="h-4 w-4" />
               Upload
             </Button>
@@ -160,7 +161,7 @@ export default function CollectionsSection() {
             <CollectionCard
               key={collection.id}
               collection={collection}
-              cover={coverMap[collection.id]}
+              covers={coverMap[collection.id]}
               onClick={() => setSelectedId(collection.id)}
             />
           ))}
@@ -384,7 +385,7 @@ function CollectionDetailSheet({
                   <div key={item.id} className="relative">
                     <ContentCard content={content} variant="list" />
                     {isConfirming ? (
-                      <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-2xl bg-background/80 backdrop-blur-sm">
+                      <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-xl bg-background/90">
                         <span className="text-sm font-semibold text-muted-foreground">Remove from collection?</span>
                         <Button size="sm" onClick={() => handleRemove(item.id)} disabled={removingId === item.id} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
                           Remove

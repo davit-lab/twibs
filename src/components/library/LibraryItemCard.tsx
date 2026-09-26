@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { LibraryItem } from '@/hooks/useLibraryItems';
-import { Heart, MessageCircle, Download, Eye, FileAudio, FileText, Image, Play, Lock, Users } from 'lucide-react';
+import { Heart, MessageCircle, Download, Eye, FileText, Headphones, Image as ImageIcon, Play, Lock, Users, Video } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -12,29 +12,16 @@ interface LibraryItemCardProps {
 
 export default function LibraryItemCard({ item, onLike, showAuthor = true }: LibraryItemCardProps) {
   const getTypeIcon = () => {
-    switch (item.type) {
-      case 'audio':
-        return <FileAudio className="h-8 w-8" />;
-      case 'pdf':
-        return <FileText className="h-8 w-8" />;
-      case 'image':
-        return <Image className="h-8 w-8" />;
-      default:
-        return <FileText className="h-8 w-8" />;
-    }
-  };
-
-  const getTypeColor = () => {
-    switch (item.type) {
-      case 'audio':
-        return 'from-violet-500/20 to-purple-500/20 text-violet-500';
-      case 'pdf':
-        return 'from-red-500/20 to-orange-500/20 text-red-500';
-      case 'image':
-        return 'from-green-500/20 to-emerald-500/20 text-green-500';
-      default:
-        return 'from-gray-500/20 to-slate-500/20 text-gray-500';
-    }
+    const icons = {
+      audio: Headphones,
+      pdf: FileText,
+      image: ImageIcon,
+      video: Video,
+    };
+    const Icon = icons[item.type] || FileText;
+    return (
+      <Icon className="h-8 w-8 text-muted-foreground/40" />
+    );
   };
 
   const getVisibilityIcon = () => {
@@ -51,13 +38,10 @@ export default function LibraryItemCard({ item, onLike, showAuthor = true }: Lib
   return (
     <Link
       to={`/library/item/${item.id}`}
-      className="group block bg-card rounded-xl border border-border/50 overflow-hidden hover:border-primary/30 hover:shadow-lg transition-all duration-200"
+      className="group block bg-card rounded-xl border border-border/50 overflow-hidden hover:border-primary/30 transition-all duration-200"
     >
       {/* Thumbnail / Preview */}
-      <div className={cn(
-        "relative aspect-square flex items-center justify-center bg-gradient-to-br",
-        getTypeColor()
-      )}>
+      <div className="relative aspect-square flex items-center justify-center bg-muted">
         {item.thumbnail_url ? (
           <img
             src={item.thumbnail_url}

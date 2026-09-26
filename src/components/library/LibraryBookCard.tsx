@@ -10,6 +10,7 @@ interface LibraryBookCardProps {
   book: LibraryBookWithProgress;
   onRemove?: () => void;
   onToggleLike?: (bookId: string, isCurrentlyLiked: boolean) => void;
+  onAsk?: () => void;
 }
 
 export default function LibraryBookCard({ book, onRemove, onToggleLike }: LibraryBookCardProps) {
@@ -49,22 +50,22 @@ export default function LibraryBookCard({ book, onRemove, onToggleLike }: Librar
   };
 
   return (
-    <div className="group flex gap-4 rounded-2xl border border-border/60 bg-card p-4 transition-all duration-300 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5">
+    <div className="group flex gap-4 rounded-2xl border border-border/60 bg-card p-4 transition-colors duration-200 hover:border-primary/40">
       <Link to={`/library/book/${book.id}`} className="w-20 flex-shrink-0 self-start sm:w-24">
-        <div className="relative aspect-[3/4] overflow-hidden rounded-xl border border-border/60 bg-muted">
+        <div className="relative aspect-[3/4] overflow-hidden rounded-lg border border-border/60 bg-muted">
           {book.cover_url ? (
             <img
               src={book.cover_url}
               alt={book.title}
-              className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-muted to-muted/40">
+            <div className="flex h-full w-full items-center justify-center bg-muted">
               <Book className="h-8 w-8 text-muted-foreground/30" />
             </div>
           )}
           {isComplete && (
-            <span className="absolute right-1.5 top-1.5 rounded-full bg-emerald-500 p-1 shadow-lg shadow-emerald-500/30">
+            <span className="absolute right-1.5 top-1.5 rounded-full bg-emerald-500 p-1">
               <CheckCircle2 className="h-3.5 w-3.5 text-white" />
             </span>
           )}
@@ -81,11 +82,6 @@ export default function LibraryBookCard({ book, onRemove, onToggleLike }: Librar
               {book.title}
             </Link>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              {book.genre && (
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                  {book.genre}
-                </span>
-              )}
               {book.progress?.last_read_at && (
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" />
@@ -161,7 +157,7 @@ export default function LibraryBookCard({ book, onRemove, onToggleLike }: Librar
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-primary to-primary/60 transition-all duration-700"
+                  className="h-full rounded-full bg-primary transition-all duration-300"
                   style={{ width: `${Math.min(progressPercent, 100)}%` }}
                 />
               </div>
@@ -180,7 +176,7 @@ export default function LibraryBookCard({ book, onRemove, onToggleLike }: Librar
           <Button
             size="sm"
             onClick={handleContinueReading}
-            className="h-9 rounded-xl px-4 font-semibold"
+            className="h-9 rounded-lg px-4 font-semibold"
           >
             <Play className="h-3.5 w-3.5" />
             {isComplete ? 'Read again' : book.progress ? 'Continue' : 'Start reading'}

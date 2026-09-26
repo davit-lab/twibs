@@ -20,17 +20,17 @@ export default function BookCard({ book, showStatus = false }: BookCardProps) {
   return (
     <Link
       to={`/library/book/${book.id}`}
-      className="group block overflow-hidden rounded-2xl border border-border/60 bg-card transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
+      className="group block overflow-hidden rounded-xl border border-border/60 bg-card transition-colors duration-200 hover:border-primary/40"
     >
       <div className="relative aspect-[3/4] overflow-hidden">
         {book.cover_url ? (
           <img
             src={book.cover_url}
             alt={book.title}
-            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
           />
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-muted to-muted/40">
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted">
             <Book className="h-10 w-10 text-muted-foreground/30" />
             <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
               {book.genre || 'Book'}
@@ -41,14 +41,14 @@ export default function BookCard({ book, showStatus = false }: BookCardProps) {
         {showStatus && book.status !== 'published' && (
           <Badge
             variant={book.status === 'draft' ? 'secondary' : 'outline'}
-            className="absolute right-2.5 top-2.5 text-[10px] font-semibold capitalize backdrop-blur-sm"
+            className="absolute right-2.5 top-2.5 text-[10px] font-semibold capitalize"
           >
             {book.status}
           </Badge>
         )}
 
         {!isFree && (
-          <div className="absolute left-2.5 top-2.5 rounded-lg bg-background/85 px-2 py-0.5 text-xs font-semibold shadow-sm backdrop-blur-sm">
+          <div className="absolute left-2.5 top-2.5 rounded-md bg-background/85 px-2 py-0.5 text-xs font-semibold">
             {priceDisplay}
           </div>
         )}

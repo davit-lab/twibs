@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15"
+    PostgrestVersion: "14.5"
   }
   graphql_public: {
     Tables: {
@@ -101,6 +101,54 @@ export type Database = {
           },
           {
             foreignKeyName: "ad_reports_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ad_transactions: {
+        Row: {
+          amount_cents: number
+          business_id: string
+          campaign_id: string | null
+          created_at: string
+          currency: string
+          description: string | null
+          id: string
+          kind: Database["public"]["Enums"]["ad_transaction_kind"]
+        }
+        Insert: {
+          amount_cents: number
+          business_id: string
+          campaign_id?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          kind: Database["public"]["Enums"]["ad_transaction_kind"]
+        }
+        Update: {
+          amount_cents?: number
+          business_id?: string
+          campaign_id?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["ad_transaction_kind"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_transactions_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "advertiser_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_transactions_campaign_id_fkey"
             columns: ["campaign_id"]
             isOneToOne: false
             referencedRelation: "campaigns"
@@ -352,6 +400,8 @@ export type Database = {
           cover_url: string | null
           created_at: string
           description: string | null
+          followers_count: number
+          goals: string[]
           id: string
           location: string | null
           name: string
@@ -370,6 +420,8 @@ export type Database = {
           cover_url?: string | null
           created_at?: string
           description?: string | null
+          followers_count?: number
+          goals?: string[]
           id?: string
           location?: string | null
           name: string
@@ -388,6 +440,8 @@ export type Database = {
           cover_url?: string | null
           created_at?: string
           description?: string | null
+          followers_count?: number
+          goals?: string[]
           id?: string
           location?: string | null
           name?: string
@@ -741,6 +795,122 @@ export type Database = {
         }
         Relationships: []
       }
+      business_balances: {
+        Row: {
+          balance_cents: number
+          business_id: string
+          currency: string
+          updated_at: string
+        }
+        Insert: {
+          balance_cents?: number
+          business_id: string
+          currency?: string
+          updated_at?: string
+        }
+        Update: {
+          balance_cents?: number
+          business_id?: string
+          currency?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_balances_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: true
+            referencedRelation: "advertiser_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_followers: {
+        Row: {
+          business_id: string
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_followers_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "advertiser_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_members: {
+        Row: {
+          business_id: string
+          created_at: string
+          role: Database["public"]["Enums"]["business_role"]
+          user_id: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          role?: Database["public"]["Enums"]["business_role"]
+          user_id: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          role?: Database["public"]["Enums"]["business_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_members_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "advertiser_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_settings: {
+        Row: {
+          audience_expansion: boolean
+          business_id: string
+          discovery_priority: Database["public"]["Enums"]["business_discovery_priority"]
+          quality_signals: Json
+          updated_at: string
+        }
+        Insert: {
+          audience_expansion?: boolean
+          business_id: string
+          discovery_priority?: Database["public"]["Enums"]["business_discovery_priority"]
+          quality_signals?: Json
+          updated_at?: string
+        }
+        Update: {
+          audience_expansion?: boolean
+          business_id?: string
+          discovery_priority?: Database["public"]["Enums"]["business_discovery_priority"]
+          quality_signals?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_settings_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: true
+            referencedRelation: "advertiser_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       call_blocks: {
         Row: {
           blocked_id: string
@@ -976,6 +1146,7 @@ export type Database = {
         Row: {
           advertiser_id: string
           approved_at: string | null
+          audience_expansion: boolean
           budget_type: Database["public"]["Enums"]["campaign_budget_type"]
           cost_per_impression_cents: number
           created_at: string
@@ -984,6 +1155,7 @@ export type Database = {
           currency: string
           daily_budget_cents: number | null
           description: string | null
+          distribution_priority: Database["public"]["Enums"]["business_discovery_priority"]
           end_at: string
           ended_at: string | null
           estimated_impressions: number | null
@@ -1009,6 +1181,7 @@ export type Database = {
         Insert: {
           advertiser_id: string
           approved_at?: string | null
+          audience_expansion?: boolean
           budget_type?: Database["public"]["Enums"]["campaign_budget_type"]
           cost_per_impression_cents?: number
           created_at?: string
@@ -1017,6 +1190,7 @@ export type Database = {
           currency?: string
           daily_budget_cents?: number | null
           description?: string | null
+          distribution_priority?: Database["public"]["Enums"]["business_discovery_priority"]
           end_at: string
           ended_at?: string | null
           estimated_impressions?: number | null
@@ -1042,6 +1216,7 @@ export type Database = {
         Update: {
           advertiser_id?: string
           approved_at?: string | null
+          audience_expansion?: boolean
           budget_type?: Database["public"]["Enums"]["campaign_budget_type"]
           cost_per_impression_cents?: number
           created_at?: string
@@ -1050,6 +1225,7 @@ export type Database = {
           currency?: string
           daily_budget_cents?: number | null
           description?: string | null
+          distribution_priority?: Database["public"]["Enums"]["business_discovery_priority"]
           end_at?: string
           ended_at?: string | null
           estimated_impressions?: number | null
@@ -1497,6 +1673,53 @@ export type Database = {
           },
         ]
       }
+      custom_backgrounds: {
+        Row: {
+          created_at: string
+          file_size: number | null
+          height: number | null
+          id: string
+          mime: string | null
+          storage_path: string | null
+          thumb_path: string | null
+          url: string
+          user_id: string
+          width: number | null
+        }
+        Insert: {
+          created_at?: string
+          file_size?: number | null
+          height?: number | null
+          id?: string
+          mime?: string | null
+          storage_path?: string | null
+          thumb_path?: string | null
+          url: string
+          user_id?: string
+          width?: number | null
+        }
+        Update: {
+          created_at?: string
+          file_size?: number | null
+          height?: number | null
+          id?: string
+          mime?: string | null
+          storage_path?: string | null
+          thumb_path?: string | null
+          url?: string
+          user_id?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_backgrounds_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       emergency_armings: {
         Row: {
           created_at: string
@@ -1628,6 +1851,45 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      feed_signals: {
+        Row: {
+          created_at: string
+          id: string
+          post_id: string
+          signal: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          post_id: string
+          signal: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          post_id?: string
+          signal?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feed_signals_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feed_signals_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       follows: {
         Row: {
@@ -2354,6 +2616,74 @@ export type Database = {
           },
         ]
       }
+      live_stream_chat: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          stream_id: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          stream_id: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          stream_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_stream_chat_stream_id_fkey"
+            columns: ["stream_id"]
+            isOneToOne: false
+            referencedRelation: "live_streams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      live_streams: {
+        Row: {
+          created_at: string
+          ended_at: string | null
+          id: string
+          peak_viewer_count: number
+          started_at: string
+          status: string
+          title: string
+          user_id: string
+          viewer_count: number
+        }
+        Insert: {
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          peak_viewer_count?: number
+          started_at?: string
+          status?: string
+          title?: string
+          user_id: string
+          viewer_count?: number
+        }
+        Update: {
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          peak_viewer_count?: number
+          started_at?: string
+          status?: string
+          title?: string
+          user_id?: string
+          viewer_count?: number
+        }
+        Relationships: []
+      }
       login_sessions: {
         Row: {
           created_at: string
@@ -2768,6 +3098,7 @@ export type Database = {
       }
       posts: {
         Row: {
+          business_id: string | null
           comment_count: number | null
           content: string
           context_meta: Json | null
@@ -2784,6 +3115,7 @@ export type Database = {
           visibility: Database["public"]["Enums"]["post_visibility"] | null
         }
         Insert: {
+          business_id?: string | null
           comment_count?: number | null
           content: string
           context_meta?: Json | null
@@ -2800,6 +3132,7 @@ export type Database = {
           visibility?: Database["public"]["Enums"]["post_visibility"] | null
         }
         Update: {
+          business_id?: string | null
           comment_count?: number | null
           content?: string
           context_meta?: Json | null
@@ -2817,8 +3150,133 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "posts_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "advertiser_accounts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "posts_user_id_profiles_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      profile_backgrounds: {
+        Row: {
+          created_at: string
+          file_size: number | null
+          height: number | null
+          id: string
+          mime: string | null
+          storage_path: string | null
+          thumb_path: string | null
+          url: string
+          user_id: string
+          width: number | null
+        }
+        Insert: {
+          created_at?: string
+          file_size?: number | null
+          height?: number | null
+          id?: string
+          mime?: string | null
+          storage_path?: string | null
+          thumb_path?: string | null
+          url: string
+          user_id?: string
+          width?: number | null
+        }
+        Update: {
+          created_at?: string
+          file_size?: number | null
+          height?: number | null
+          id?: string
+          mime?: string | null
+          storage_path?: string | null
+          thumb_path?: string | null
+          url?: string
+          user_id?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_backgrounds_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      profile_themes: {
+        Row: {
+          config: Json
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_themes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      profile_views: {
+        Row: {
+          created_at: string
+          id: string
+          target_id: string
+          viewer_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          target_id: string
+          viewer_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          target_id?: string
+          viewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_views_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "profile_views_viewer_id_fkey"
+            columns: ["viewer_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["user_id"]
@@ -2839,6 +3297,7 @@ export type Database = {
           last_seen_at: string | null
           location: string | null
           privacy: Database["public"]["Enums"]["account_privacy"] | null
+          profile_customization: Json | null
           push_notifications: boolean | null
           updated_at: string
           user_id: string
@@ -2858,6 +3317,7 @@ export type Database = {
           last_seen_at?: string | null
           location?: string | null
           privacy?: Database["public"]["Enums"]["account_privacy"] | null
+          profile_customization?: Json | null
           push_notifications?: boolean | null
           updated_at?: string
           user_id: string
@@ -2877,6 +3337,7 @@ export type Database = {
           last_seen_at?: string | null
           location?: string | null
           privacy?: Database["public"]["Enums"]["account_privacy"] | null
+          profile_customization?: Json | null
           push_notifications?: boolean | null
           updated_at?: string
           user_id?: string
@@ -3426,11 +3887,12 @@ export type Database = {
           duration: number | null
           expires_at: string
           id: string
-          like_count: number | null
+          like_count: number
           media_type: string
           media_url: string
           music_name: string | null
           music_url: string | null
+          overlays: Json
           user_id: string
           view_count: number | null
         }
@@ -3440,11 +3902,12 @@ export type Database = {
           duration?: number | null
           expires_at?: string
           id?: string
-          like_count?: number | null
+          like_count?: number
           media_type?: string
           media_url: string
           music_name?: string | null
           music_url?: string | null
+          overlays?: Json
           user_id: string
           view_count?: number | null
         }
@@ -3454,11 +3917,12 @@ export type Database = {
           duration?: number | null
           expires_at?: string
           id?: string
-          like_count?: number | null
+          like_count?: number
           media_type?: string
           media_url?: string
           music_name?: string | null
           music_url?: string | null
+          overlays?: Json
           user_id?: string
           view_count?: number | null
         }
@@ -3468,16 +3932,51 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          reaction: string
           story_id: string
           user_id: string
         }
         Insert: {
           created_at?: string
           id?: string
+          reaction?: string
           story_id: string
           user_id: string
         }
         Update: {
+          created_at?: string
+          id?: string
+          reaction?: string
+          story_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_likes_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      story_replies: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          story_id: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          story_id: string
+          user_id: string
+        }
+        Update: {
+          content?: string
           created_at?: string
           id?: string
           story_id?: string
@@ -3485,7 +3984,7 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "story_likes_story_id_fkey"
+            foreignKeyName: "story_replies_story_id_fkey"
             columns: ["story_id"]
             isOneToOne: false
             referencedRelation: "stories"
@@ -3820,8 +4319,8 @@ export type Database = {
           display_density: string | null
           do_not_disturb: boolean | null
           font_size: string | null
-          ghost_mode: boolean | null
-          hide_like_counts: boolean | null
+          ghost_mode: boolean
+          hide_like_counts: boolean
           high_contrast: boolean | null
           id: string
           language: string | null
@@ -3843,8 +4342,8 @@ export type Database = {
           display_density?: string | null
           do_not_disturb?: boolean | null
           font_size?: string | null
-          ghost_mode?: boolean | null
-          hide_like_counts?: boolean | null
+          ghost_mode?: boolean
+          hide_like_counts?: boolean
           high_contrast?: boolean | null
           id?: string
           language?: string | null
@@ -3866,8 +4365,8 @@ export type Database = {
           display_density?: string | null
           do_not_disturb?: boolean | null
           font_size?: string | null
-          ghost_mode?: boolean | null
-          hide_like_counts?: boolean | null
+          ghost_mode?: boolean
+          hide_like_counts?: boolean
           high_contrast?: boolean | null
           id?: string
           language?: string | null
@@ -3882,81 +4381,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
-      }
-      profile_views: {
-        Row: {
-          created_at: string
-          id: string
-          target_id: string
-          viewer_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          target_id: string
-          viewer_id?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          target_id?: string
-          viewer_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "profile_views_viewer_id_fkey"
-            columns: ["viewer_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "profile_views_target_id_fkey"
-            columns: ["target_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["user_id"]
-          },
-        ]
-      }
-      feed_signals: {
-        Row: {
-          created_at: string
-          id: string
-          post_id: string
-          signal: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          post_id: string
-          signal: string
-          user_id?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          post_id?: string
-          signal?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "feed_signals_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "feed_signals_post_id_fkey"
-            columns: ["post_id"]
-            isOneToOne: false
-            referencedRelation: "posts"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       user_roles: {
         Row: {
@@ -4150,6 +4574,14 @@ export type Database = {
       }
     }
     Functions: {
+      add_business_member: {
+        Args: {
+          p_business_id: string
+          p_role: Database["public"]["Enums"]["business_role"]
+          p_username: string
+        }
+        Returns: Json
+      }
       add_conversation_members: {
         Args: { conv_id: string; member_ids: string[] }
         Returns: undefined
@@ -4200,6 +4632,7 @@ export type Database = {
         Returns: {
           advertiser_id: string
           approved_at: string | null
+          audience_expansion: boolean
           budget_type: Database["public"]["Enums"]["campaign_budget_type"]
           cost_per_impression_cents: number
           created_at: string
@@ -4208,6 +4641,7 @@ export type Database = {
           currency: string
           daily_budget_cents: number | null
           description: string | null
+          distribution_priority: Database["public"]["Enums"]["business_discovery_priority"]
           end_at: string
           ended_at: string | null
           estimated_impressions: number | null
@@ -4283,11 +4717,19 @@ export type Database = {
         Returns: undefined
       }
       block_user: { Args: { target_user_id: string }; Returns: undefined }
+      can_admin_business: { Args: { p_business_id: string }; Returns: boolean }
+      can_follow_business: { Args: { p_business_id: string }; Returns: boolean }
+      can_manage_asset_folder: { Args: { p_folder: string }; Returns: boolean }
+      can_manage_business_campaigns: {
+        Args: { p_business_id: string }
+        Returns: boolean
+      }
       cancel_campaign: {
         Args: { p_campaign_id: string }
         Returns: {
           advertiser_id: string
           approved_at: string | null
+          audience_expansion: boolean
           budget_type: Database["public"]["Enums"]["campaign_budget_type"]
           cost_per_impression_cents: number
           created_at: string
@@ -4296,6 +4738,7 @@ export type Database = {
           currency: string
           daily_budget_cents: number | null
           description: string | null
+          distribution_priority: Database["public"]["Enums"]["business_discovery_priority"]
           end_at: string
           ended_at: string | null
           estimated_impressions: number | null
@@ -4344,6 +4787,7 @@ export type Database = {
         Returns: {
           advertiser_id: string
           approved_at: string | null
+          audience_expansion: boolean
           budget_type: Database["public"]["Enums"]["campaign_budget_type"]
           cost_per_impression_cents: number
           created_at: string
@@ -4352,6 +4796,7 @@ export type Database = {
           currency: string
           daily_budget_cents: number | null
           description: string | null
+          distribution_priority: Database["public"]["Enums"]["business_discovery_priority"]
           end_at: string
           ended_at: string | null
           estimated_impressions: number | null
@@ -4381,6 +4826,48 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_account: {
+        Args: {
+          p_account_type: Database["public"]["Enums"]["advertiser_account_type"]
+          p_avatar_url?: string
+          p_category?: string
+          p_contact_email?: string
+          p_contact_phone?: string
+          p_cover_url?: string
+          p_description?: string
+          p_goals?: string[]
+          p_location?: string
+          p_name: string
+          p_username: string
+          p_website?: string
+        }
+        Returns: {
+          account_type: Database["public"]["Enums"]["advertiser_account_type"]
+          avatar_url: string | null
+          category: string | null
+          contact_email: string | null
+          contact_phone: string | null
+          cover_url: string | null
+          created_at: string
+          description: string | null
+          followers_count: number
+          goals: string[]
+          id: string
+          location: string | null
+          name: string
+          status: Database["public"]["Enums"]["advertiser_status"]
+          updated_at: string
+          user_id: string
+          username: string
+          website: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "advertiser_accounts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_advertiser_account: {
         Args: {
           p_account_type: Database["public"]["Enums"]["advertiser_account_type"]
@@ -4404,6 +4891,8 @@ export type Database = {
           cover_url: string | null
           created_at: string
           description: string | null
+          followers_count: number
+          goals: string[]
           id: string
           location: string | null
           name: string
@@ -4416,6 +4905,162 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "advertiser_accounts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_boost_campaign: {
+        Args: {
+          p_advertiser_id: string
+          p_audience_expansion?: boolean
+          p_budget_cents: number
+          p_days: number
+          p_description?: string
+          p_distribution_priority?: Database["public"]["Enums"]["business_discovery_priority"]
+          p_goal: Database["public"]["Enums"]["campaign_objective"]
+          p_post_id: string
+          p_targeting?: Json
+        }
+        Returns: {
+          advertiser_id: string
+          approved_at: string | null
+          audience_expansion: boolean
+          budget_type: Database["public"]["Enums"]["campaign_budget_type"]
+          cost_per_impression_cents: number
+          created_at: string
+          cta: string | null
+          cta_url: string | null
+          currency: string
+          daily_budget_cents: number | null
+          description: string | null
+          distribution_priority: Database["public"]["Enums"]["business_discovery_priority"]
+          end_at: string
+          ended_at: string | null
+          estimated_impressions: number | null
+          estimated_reach_max: number | null
+          estimated_reach_min: number | null
+          headline: string | null
+          id: string
+          impressions_delivered: number
+          is_scheduled: boolean
+          moderation_note: string | null
+          name: string
+          objective: Database["public"]["Enums"]["campaign_objective"]
+          paid_at: string | null
+          post_id: string | null
+          rejection_reason: string | null
+          spend_cents: number
+          start_at: string
+          status: Database["public"]["Enums"]["campaign_status"]
+          total_budget_cents: number
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "campaigns"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_business_account: {
+        Args: {
+          p_account_type: Database["public"]["Enums"]["advertiser_account_type"]
+          p_avatar_url?: string
+          p_category?: string
+          p_cover_url?: string
+          p_description?: string
+          p_goals?: string[]
+          p_location?: string
+          p_name: string
+          p_username: string
+          p_website?: string
+        }
+        Returns: {
+          account_type: Database["public"]["Enums"]["advertiser_account_type"]
+          avatar_url: string | null
+          category: string | null
+          contact_email: string | null
+          contact_phone: string | null
+          cover_url: string | null
+          created_at: string
+          description: string | null
+          followers_count: number
+          goals: string[]
+          id: string
+          location: string | null
+          name: string
+          status: Database["public"]["Enums"]["advertiser_status"]
+          updated_at: string
+          user_id: string
+          username: string
+          website: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "advertiser_accounts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_business_campaign: {
+        Args: {
+          p_advertiser_id: string
+          p_audience_expansion?: boolean
+          p_budget_type?: Database["public"]["Enums"]["campaign_budget_type"]
+          p_cta?: string
+          p_cta_url?: string
+          p_currency?: string
+          p_daily_budget_cents?: number
+          p_description?: string
+          p_distribution_priority?: Database["public"]["Enums"]["business_discovery_priority"]
+          p_end_at?: string
+          p_is_scheduled?: boolean
+          p_name: string
+          p_objective: Database["public"]["Enums"]["campaign_objective"]
+          p_post_id?: string
+          p_start_at?: string
+          p_targeting?: Json
+          p_total_budget_cents: number
+        }
+        Returns: {
+          advertiser_id: string
+          approved_at: string | null
+          audience_expansion: boolean
+          budget_type: Database["public"]["Enums"]["campaign_budget_type"]
+          cost_per_impression_cents: number
+          created_at: string
+          cta: string | null
+          cta_url: string | null
+          currency: string
+          daily_budget_cents: number | null
+          description: string | null
+          distribution_priority: Database["public"]["Enums"]["business_discovery_priority"]
+          end_at: string
+          ended_at: string | null
+          estimated_impressions: number | null
+          estimated_reach_max: number | null
+          estimated_reach_min: number | null
+          headline: string | null
+          id: string
+          impressions_delivered: number
+          is_scheduled: boolean
+          moderation_note: string | null
+          name: string
+          objective: Database["public"]["Enums"]["campaign_objective"]
+          paid_at: string | null
+          post_id: string | null
+          rejection_reason: string | null
+          spend_cents: number
+          start_at: string
+          status: Database["public"]["Enums"]["campaign_status"]
+          total_budget_cents: number
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "campaigns"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -4442,6 +5087,7 @@ export type Database = {
         Returns: {
           advertiser_id: string
           approved_at: string | null
+          audience_expansion: boolean
           budget_type: Database["public"]["Enums"]["campaign_budget_type"]
           cost_per_impression_cents: number
           created_at: string
@@ -4450,6 +5096,7 @@ export type Database = {
           currency: string
           daily_budget_cents: number | null
           description: string | null
+          distribution_priority: Database["public"]["Enums"]["business_discovery_priority"]
           end_at: string
           ended_at: string | null
           estimated_impressions: number | null
@@ -4525,6 +5172,21 @@ export type Database = {
         }
         Returns: string
       }
+      credit_business_balance: {
+        Args: { p_amount_cents: number; p_business_id: string }
+        Returns: {
+          balance_cents: number
+          business_id: string
+          currency: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "business_balances"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       decline_group_join_request: {
         Args: { request_id: string }
         Returns: undefined
@@ -4590,6 +5252,7 @@ export type Database = {
         Returns: {
           advertiser_id: string
           approved_at: string | null
+          audience_expansion: boolean
           budget_type: Database["public"]["Enums"]["campaign_budget_type"]
           cost_per_impression_cents: number
           created_at: string
@@ -4598,6 +5261,7 @@ export type Database = {
           currency: string
           daily_budget_cents: number | null
           description: string | null
+          distribution_priority: Database["public"]["Enums"]["business_discovery_priority"]
           end_at: string
           ended_at: string | null
           estimated_impressions: number | null
@@ -4660,12 +5324,21 @@ export type Database = {
         }[]
       }
       get_ads_overview: { Args: never; Returns: Json }
+      get_business_accounts: { Args: never; Returns: Json }
+      get_business_audience: { Args: { p_business_id: string }; Returns: Json }
+      get_business_billing: { Args: { p_business_id: string }; Returns: Json }
+      get_business_campaigns: { Args: { p_business_id: string }; Returns: Json }
+      get_business_insights: { Args: { p_business_id: string }; Returns: Json }
+      get_business_overview: { Args: { p_business_id: string }; Returns: Json }
+      get_business_profile: { Args: { p_username: string }; Returns: Json }
+      get_business_role: { Args: { p_business_id: string }; Returns: string }
       get_campaign_analytics: { Args: { p_campaign_id: string }; Returns: Json }
       get_campaign_or_null: {
         Args: { p_campaign_id: string }
         Returns: {
           advertiser_id: string
           approved_at: string | null
+          audience_expansion: boolean
           budget_type: Database["public"]["Enums"]["campaign_budget_type"]
           cost_per_impression_cents: number
           created_at: string
@@ -4674,6 +5347,7 @@ export type Database = {
           currency: string
           daily_budget_cents: number | null
           description: string | null
+          distribution_priority: Database["public"]["Enums"]["business_discovery_priority"]
           end_at: string
           ended_at: string | null
           estimated_impressions: number | null
@@ -4704,7 +5378,11 @@ export type Database = {
         }
       }
       get_feed_ads: {
-        Args: { p_limit?: number; p_viewer_id: string }
+        Args: {
+          p_frequency_cap?: number
+          p_limit?: number
+          p_viewer_id: string
+        }
         Returns: {
           advertisement_id: string
           advertiser_avatar_url: string
@@ -4736,10 +5414,18 @@ export type Database = {
         Args: { other_user_id: string }
         Returns: string
       }
-      group_role_to_chat_role: {
-        Args: { group_role: string }
-        Returns: string
+      get_reading_leaderboard: {
+        Args: { row_limit?: number }
+        Returns: {
+          avatar_url: string
+          display_name: string
+          reading_days: number
+          total_minutes: number
+          user_id: string
+          username: string
+        }[]
       }
+      group_role_to_chat_role: { Args: { group_role: string }; Returns: string }
       handle_verification_request: {
         Args: { approve: boolean; request_id: string }
         Returns: undefined
@@ -4762,6 +5448,7 @@ export type Database = {
         Args: { check_user: string; other_user: string }
         Returns: boolean
       }
+      is_business_member: { Args: { p_business_id: string }; Returns: boolean }
       is_conversation_participant: {
         Args: { _conversation_id: string; _user_id: string }
         Returns: boolean
@@ -4790,6 +5477,7 @@ export type Database = {
       }
       is_shadow_banned: { Args: { target?: string }; Returns: boolean }
       is_staff: { Args: never; Returns: boolean }
+      is_story_visible: { Args: { story_id: string }; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
       is_user_banned: { Args: { _user_id: string }; Returns: boolean }
       is_verified_author: { Args: { _user_id: string }; Returns: boolean }
@@ -4807,6 +5495,7 @@ export type Database = {
         Returns: {
           advertiser_id: string
           approved_at: string | null
+          audience_expansion: boolean
           budget_type: Database["public"]["Enums"]["campaign_budget_type"]
           cost_per_impression_cents: number
           created_at: string
@@ -4815,6 +5504,7 @@ export type Database = {
           currency: string
           daily_budget_cents: number | null
           description: string | null
+          distribution_priority: Database["public"]["Enums"]["business_discovery_priority"]
           end_at: string
           ended_at: string | null
           estimated_impressions: number | null
@@ -4872,6 +5562,14 @@ export type Database = {
       red_button_watchdog_tick: { Args: never; Returns: number }
       red_button_worker_tick: { Args: never; Returns: number }
       refresh_campaign_daily_stats: { Args: never; Returns: number }
+      remove_business_member: {
+        Args: { p_business_id: string; p_user_id: string }
+        Returns: Json
+      }
+      remove_conversation_wallpaper_by_url: {
+        Args: { wallpaper_url: string }
+        Returns: undefined
+      }
       remove_group_member: {
         Args: { target_group_id: string; target_user_id: string }
         Returns: undefined
@@ -4919,6 +5617,7 @@ export type Database = {
         Returns: {
           advertiser_id: string
           approved_at: string | null
+          audience_expansion: boolean
           budget_type: Database["public"]["Enums"]["campaign_budget_type"]
           cost_per_impression_cents: number
           created_at: string
@@ -4927,6 +5626,7 @@ export type Database = {
           currency: string
           daily_budget_cents: number | null
           description: string | null
+          distribution_priority: Database["public"]["Enums"]["business_discovery_priority"]
           end_at: string
           ended_at: string | null
           estimated_impressions: number | null
@@ -5007,11 +5707,12 @@ export type Database = {
         }
         Returns: undefined
       }
-      submit_campaign: {
+      submit_boost_campaign: {
         Args: { p_campaign_id: string }
         Returns: {
           advertiser_id: string
           approved_at: string | null
+          audience_expansion: boolean
           budget_type: Database["public"]["Enums"]["campaign_budget_type"]
           cost_per_impression_cents: number
           created_at: string
@@ -5020,6 +5721,51 @@ export type Database = {
           currency: string
           daily_budget_cents: number | null
           description: string | null
+          distribution_priority: Database["public"]["Enums"]["business_discovery_priority"]
+          end_at: string
+          ended_at: string | null
+          estimated_impressions: number | null
+          estimated_reach_max: number | null
+          estimated_reach_min: number | null
+          headline: string | null
+          id: string
+          impressions_delivered: number
+          is_scheduled: boolean
+          moderation_note: string | null
+          name: string
+          objective: Database["public"]["Enums"]["campaign_objective"]
+          paid_at: string | null
+          post_id: string | null
+          rejection_reason: string | null
+          spend_cents: number
+          start_at: string
+          status: Database["public"]["Enums"]["campaign_status"]
+          total_budget_cents: number
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "campaigns"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      submit_campaign: {
+        Args: { p_campaign_id: string }
+        Returns: {
+          advertiser_id: string
+          approved_at: string | null
+          audience_expansion: boolean
+          budget_type: Database["public"]["Enums"]["campaign_budget_type"]
+          cost_per_impression_cents: number
+          created_at: string
+          cta: string | null
+          cta_url: string | null
+          currency: string
+          daily_budget_cents: number | null
+          description: string | null
+          distribution_priority: Database["public"]["Enums"]["business_discovery_priority"]
           end_at: string
           ended_at: string | null
           estimated_impressions: number | null
@@ -5097,6 +5843,8 @@ export type Database = {
           cover_url: string | null
           created_at: string
           description: string | null
+          followers_count: number
+          goals: string[]
           id: string
           location: string | null
           name: string
@@ -5109,6 +5857,77 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "advertiser_accounts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      update_business_member_role: {
+        Args: {
+          p_business_id: string
+          p_role: Database["public"]["Enums"]["business_role"]
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      update_business_profile: {
+        Args: {
+          p_avatar_url?: string
+          p_business_id: string
+          p_category?: string
+          p_clear_avatar?: boolean
+          p_clear_cover?: boolean
+          p_cover_url?: string
+          p_description?: string
+          p_goals?: string[]
+          p_location?: string
+          p_name?: string
+          p_username?: string
+          p_website?: string
+        }
+        Returns: {
+          account_type: Database["public"]["Enums"]["advertiser_account_type"]
+          avatar_url: string | null
+          category: string | null
+          contact_email: string | null
+          contact_phone: string | null
+          cover_url: string | null
+          created_at: string
+          description: string | null
+          followers_count: number
+          goals: string[]
+          id: string
+          location: string | null
+          name: string
+          status: Database["public"]["Enums"]["advertiser_status"]
+          updated_at: string
+          user_id: string
+          username: string
+          website: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "advertiser_accounts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      update_business_settings: {
+        Args: {
+          p_audience_expansion?: boolean
+          p_business_id: string
+          p_discovery_priority?: Database["public"]["Enums"]["business_discovery_priority"]
+          p_quality_signals?: Json
+        }
+        Returns: {
+          audience_expansion: boolean
+          business_id: string
+          discovery_priority: Database["public"]["Enums"]["business_discovery_priority"]
+          quality_signals: Json
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "business_settings"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -5167,12 +5986,20 @@ export type Database = {
         | "follow"
         | "website_click"
         | "conversion"
-      ad_placement: "feed" | "explore"
+      ad_placement: "feed" | "explore" | "reels" | "stories"
       ad_report_status: "open" | "reviewing" | "dismissed" | "actioned"
-      advertiser_account_type: "personal" | "business" | "creator"
+      ad_transaction_kind: "credit" | "debit" | "refund"
+      advertiser_account_type:
+        | "personal"
+        | "business"
+        | "creator"
+        | "organization"
+        | "project"
       advertiser_status: "active" | "suspended"
       app_role: "admin" | "moderator" | "user" | "super_admin" | "support"
       book_status: "draft" | "published" | "archived"
+      business_discovery_priority: "normal" | "expanded" | "promoted"
+      business_role: "owner" | "admin" | "advertiser" | "analyst"
       campaign_budget_type: "daily" | "total"
       campaign_objective:
         | "reach"
@@ -5232,12 +6059,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -5261,11 +6088,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -5286,11 +6113,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -5311,11 +6138,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -5328,11 +6155,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -5360,12 +6187,21 @@ export const Constants = {
         "website_click",
         "conversion",
       ],
-      ad_placement: ["feed", "explore"],
+      ad_placement: ["feed", "explore", "reels", "stories"],
       ad_report_status: ["open", "reviewing", "dismissed", "actioned"],
-      advertiser_account_type: ["personal", "business", "creator"],
+      ad_transaction_kind: ["credit", "debit", "refund"],
+      advertiser_account_type: [
+        "personal",
+        "business",
+        "creator",
+        "organization",
+        "project",
+      ],
       advertiser_status: ["active", "suspended"],
       app_role: ["admin", "moderator", "user", "super_admin", "support"],
       book_status: ["draft", "published", "archived"],
+      business_discovery_priority: ["normal", "expanded", "promoted"],
+      business_role: ["owner", "admin", "advertiser", "analyst"],
       campaign_budget_type: ["daily", "total"],
       campaign_objective: [
         "reach",

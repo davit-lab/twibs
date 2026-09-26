@@ -1,5 +1,8 @@
 export const RING_TIMEOUT_MS = 45_000;
 export const INCOMING_WATCHDOG_MS = 45_000;
+
+/** Max time to wait for ICE to connect after SDP exchange before failing. */
+export const CONNECT_TIMEOUT_MS = 30_000;
 export const MAX_INCOMING_QUEUE = 2;
 export const END_SCREEN_AUTO_CLOSE_MS = 4_000;
 

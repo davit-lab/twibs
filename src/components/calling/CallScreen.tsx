@@ -421,7 +421,8 @@ export function CallScreen() {
       );
     }
 
-    const primaryOn = (isConnected || isReconnecting) && !minimized;
+    const activeInCall =
+      (phase === 'connecting' || phase === 'connected' || phase === 'reconnecting') && !minimized;
     return (
       <div className="flex flex-col items-center gap-3 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
         {(isConnected || isReconnecting) ? (
@@ -463,10 +464,10 @@ export function CallScreen() {
         ) : null}
 
         <div className="flex">
-          {primaryOn ? (
+          {activeInCall ? (
             <button
               type="button"
-              onClick={() => void call.endCall()}
+              onClick={() => void call.endOrCancel()}
               aria-label="End call"
               className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-[hsl(0_72%_51%)] text-white shadow-lg shadow-[hsl(0_72%_51%/0.35)] transition-transform active:scale-95"
             >

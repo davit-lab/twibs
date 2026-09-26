@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Loader2, Sparkles, Zap, MessageCircle, TrendingUp, Users } from 'lucide-react';
 import { useMutedUsers, useHiddenFeedPosts } from '@/hooks/useSafety';
+import { businessAccountEmbed } from '@/lib/business/businessSupport';
 import { cn } from '@/lib/utils';
 import type { FeedAd } from '@/lib/ads';
 
@@ -26,6 +27,14 @@ interface PostMedia {
   alt_text: string | null;
 }
 
+interface PostBusinessAccount {
+  id: string;
+  name: string;
+  username: string;
+  avatar_url: string | null;
+  account_type: string;
+}
+
 interface Post {
   id: string;
   content: string;
@@ -40,6 +49,7 @@ interface Post {
   user_id: string;
   profiles: PostProfile;
   post_media: PostMedia[];
+  business_account?: PostBusinessAccount | null;
   user_has_starred?: boolean;
   expires_at?: string | null;
   context_meta?: PostContextMeta | null;
@@ -71,12 +81,19 @@ type FeedType = 'all' | 'following' | 'interests';
 
 interface FeedProps {
   userId?: string;
+  /**
+   * Filter to posts published under a business identity. Set this instead of
+   * `userId` for a business profile: the underlying rows still belong to a
+   * user, but they are attributed to the business via posts.business_id, and
+   * PostCard renders that attribution from the `business_account` embed.
+   */
+  businessId?: string;
   refreshTrigger?: number;
   onRefreshComplete?: () => void;
   onFeedTypeChange?: (type: FeedType) => void;
 }
 
-const POST_SELECT = `
+const POST_SELECT_BASE = `
   id,
   content,
   visibility,
@@ -104,7 +121,9 @@ const POST_SELECT = `
   )
 `;
 
-export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeedTypeChange }: FeedProps) {
+const POST_SELECT = () => Promise.resolve(POST_SELECT_BASE).then((b) => businessAccountEmbed().then((e) => b + e));
+
+export default function Feed({ userId, businessId, refreshTrigger, onRefreshComplete, onFeedTypeChange }: FeedProps) {
   const { user } = useAuth();
   const { data: mutedIds = [] } = useMutedUsers();
   const { data: hiddenPostIds = [] } = useHiddenFeedPosts();
@@ -124,7 +143,9 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeed
   
   const PAGE_SIZE = 10;
   const segmentedRef = useRef<HTMLDivElement | null>(null);
-  const showFeedTabs = !userId && user;
+  // A single-entity view (personal or business profile) has no feed-type tabs.
+  const isEntityView = Boolean(userId || businessId);
+  const showFeedTabs = !isEntityView && Boolean(user);
 
   useEffect(() => {
     onFeedTypeChange?.(feedType);
@@ -132,7 +153,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeed
 
   // Catch Me Up: show a summary when the user hasn't opened the app in 3+ days.
   useEffect(() => {
-    if (!user || userId) return;
+    if (!user || isEntityView) return;
     let cancelled = false;
     let lastVisit: string | null = null;
     try {
@@ -170,13 +191,15 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeed
       }
     })();
     return () => { cancelled = true; };
-  }, [user, userId]);
+  }, [user, isEntityView]);
 
   // Keep latest filter state available to the realtime channel (avoids stale closures)
   const feedTypeRef = useRef(feedType);
   feedTypeRef.current = feedType;
   const userIdRef = useRef(userId);
   userIdRef.current = userId;
+  const businessIdRef = useRef(businessId);
+  businessIdRef.current = businessId;
 
   const attachStars = useCallback(async (posts: Post[]): Promise<Post[]> => {
     if (!user || posts.length === 0) return posts;
@@ -202,7 +225,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeed
     }
     setError(null);
 
-    if (feedType === 'interests' && !userId) {
+    if (feedType === 'interests' && !isEntityView) {
       if (!loadMore) {
         setItems([]);
         setHasMore(false);
@@ -221,7 +244,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeed
 
       // Resolve followed user ids once for the following feed
       let followedIds: string[] = [];
-      if (!userId && feedType === 'following' && user) {
+      if (!isEntityView && feedType === 'following' && user) {
         const { data: followedUsers } = await supabase
           .from('follows')
           .select('following_id')
@@ -242,7 +265,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeed
 
       const postsQuery = supabase
         .from('posts')
-        .select(POST_SELECT)
+        .select(await POST_SELECT())
         .eq('hidden', false)
         .or('expires_at.is.null,expires_at.gt.now()')
         .order('created_at', { ascending: false })
@@ -250,6 +273,11 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeed
 
       if (userId) {
         postsQuery.eq('user_id', userId);
+      } else if (businessId) {
+        // Business profile feed: only posts published under this identity.
+        // A profile is a single-entity view, so the all/following/interests
+        // tabs stay hidden and this is the only branch that can apply.
+        postsQuery.eq('business_id', businessId);
       } else if (feedType === 'following') {
         postsQuery.in('user_id', followedIds);
       }
@@ -275,7 +303,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeed
       });
 
       // In following mode, also surface reposts made by followed users
-      if (feedType === 'following' && !userId) {
+      if (feedType === 'following' && !isEntityView) {
         let repostsQuery = supabase
           .from('reposts')
           .select('post_id, user_id, created_at')
@@ -294,7 +322,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeed
           const reposterIds = [...new Set(reposts.map(r => r.user_id))];
 
           const [{ data: repostedPosts }, { data: reposterProfiles }] = await Promise.all([
-            supabase.from('posts').select(POST_SELECT).in('id', repostIds).eq('hidden', false).or('expires_at.is.null,expires_at.gt.now()'),
+            supabase.from('posts').select(await POST_SELECT()).in('id', repostIds).eq('hidden', false).or('expires_at.is.null,expires_at.gt.now()'),
             supabase
               .from('profiles')
               .select('user_id, username, display_name, avatar_url, is_verified')
@@ -351,7 +379,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeed
       let finalItems: (FeedItem | FeedAdItem)[] = nextItems;
 
       // Pull sponsored posts into the home feeds ("For You" + "Following"), interleaved between posts.
-      if (!loadMore && !userId && user && (feedType === 'all' || feedType === 'following')) {
+      if (!loadMore && !isEntityView && user && (feedType === 'all' || feedType === 'following')) {
         try {
           const ads = await fetchFeedAds(user.id, 2);
           const adItems: FeedAdItem[] = (ads || []).map((ad) => ({
@@ -388,11 +416,18 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeed
       setLoadingMore(false);
       onRefreshComplete?.();
     }
-  }, [userId, user, feedType, items.length, onRefreshComplete, mutedIds, attachStars]);
+  }, [userId, businessId, isEntityView, user, feedType, items.length, onRefreshComplete, mutedIds, attachStars]);
+
+  // Entering a single-entity view must reset any feed-type tab chosen in the
+  // global feed (e.g. 'following'), otherwise a business profile would render
+  // the viewer's followed users' posts instead of the business's own posts.
+  useEffect(() => {
+    if (isEntityView && feedType !== 'all') setFeedType('all');
+  }, [isEntityView, feedType]);
 
   useEffect(() => {
     fetchPosts();
-  }, [userId, refreshTrigger, feedType]);
+  }, [userId, businessId, refreshTrigger, feedType]);
 
   // Smooth slide for segmented control: position the slider under active tab
   useLayoutEffect(() => {
@@ -454,7 +489,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeed
     async (id: string): Promise<Post | null> => {
       const { data, error } = await supabase
         .from('posts')
-        .select(POST_SELECT)
+        .select(await POST_SELECT())
         .eq('id', id)
         .eq('hidden', false)
         .or('expires_at.is.null,expires_at.gt.now()')
@@ -478,9 +513,11 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeed
     async (p: Post): Promise<boolean> => {
       const currentFeed = feedTypeRef.current;
       const ownerId = userIdRef.current;
+      const bizId = businessIdRef.current;
       const viewerId = user?.id;
 
       if (ownerId) return p.user_id === ownerId;
+      if (bizId) return p.business_id === bizId;
       if (currentFeed === 'interests') return false; // handled by HomeInterestFeed
       if (currentFeed === 'following') {
         if (!viewerId) return false;
@@ -651,7 +688,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeed
         <HomeInterestFeed />
       ) : (
         <>
-          {catchUp && !userId && (catchUp.posts > 0 || catchUp.messages > 0) && (
+          {catchUp && !isEntityView && (catchUp.posts > 0 || catchUp.messages > 0) && (
             <div className="mb-4 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.07] to-accent/[0.05] p-4 overflow-hidden">
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
@@ -717,7 +754,7 @@ export default function Feed({ userId, refreshTrigger, onRefreshComplete, onFeed
                       reposter={item.reposter}
                       onPostDeleted={handlePostDeleted}
                       onStarChange={handleStarChange}
-                      showRecommendationInfo={!userId && feedType === 'all'}
+                      showRecommendationInfo={!isEntityView && feedType === 'all'}
                     />
                   )}
                 </div>

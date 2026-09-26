@@ -70,7 +70,7 @@ function BookMiniCard({ book }: BookMiniCardProps) {
       to={`/library/book/${book.id}`}
       className="group flex w-[132px] flex-shrink-0 flex-col"
     >
-      <div className="relative aspect-[3/4] overflow-hidden rounded-xl border border-border/60 bg-muted transition-all duration-300 group-hover:border-primary/50 group-hover:shadow-lg group-hover:shadow-primary/10">
+      <div className="relative aspect-[3/4] overflow-hidden rounded-xl border border-border/60 bg-muted transition-colors duration-300 group-hover:border-primary/50">
         {book.cover_url ? (
           <img
             src={book.cover_url}
@@ -78,11 +78,10 @@ function BookMiniCard({ book }: BookMiniCardProps) {
             className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-muted to-muted/40">
+          <div className="flex h-full w-full items-center justify-center bg-muted">
             <Book className="h-9 w-9 text-muted-foreground/30" />
           </div>
         )}
-        <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/40 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
       </div>
 
       <div className="mt-2 flex flex-col gap-0.5">

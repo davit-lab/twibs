@@ -512,9 +512,9 @@ export default function Profile() {
                     <Link to="/settings">Edit Profile</Link>
                   </Button>
                   <Button variant="outline" asChild className="rounded-xl font-semibold h-9">
-                    <Link to="/ads">
+                    <Link to="/b">
                       <Megaphone className="h-4 w-4 mr-2" />
-                      Advertise
+                      Business
                     </Link>
                   </Button>
                   <Button variant="ghost" size="icon" className="rounded-xl h-9 w-9" onClick={handleShareProfile}>

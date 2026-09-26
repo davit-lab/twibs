@@ -5,9 +5,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import PostCard, { PostData } from '@/components/feed/PostCard';
+import { businessAccountEmbed } from '@/lib/business/businessSupport';
 import { Loader2, FileQuestion, ArrowLeft } from 'lucide-react';
 
-const POST_SELECT = `
+const POST_SELECT_BASE = `
   id,
   content,
   visibility,
@@ -35,6 +36,8 @@ const POST_SELECT = `
   )
 `;
 
+const POST_SELECT = () => Promise.resolve(POST_SELECT_BASE).then((b) => businessAccountEmbed().then((e) => b + e));
+
 export default function PostShare() {
   const { postId } = useParams<{ postId: string }>();
   const navigate = useNavigate();
@@ -57,7 +60,7 @@ export default function PostShare() {
     try {
       const { data, error } = await supabase
         .from('posts')
-        .select(POST_SELECT)
+        .select(await POST_SELECT())
         .eq('id', postId)
         .eq('hidden', false)
         .or('expires_at.is.null,expires_at.gt.now()')

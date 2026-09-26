@@ -5,6 +5,7 @@ import PostCard from './PostCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Repeat, Loader2, RefreshCw } from 'lucide-react';
+import { businessAccountEmbed } from '@/lib/business/businessSupport';
 
 interface ReposterProfile {
   username: string;
@@ -27,6 +28,14 @@ interface PostMedia {
   alt_text: string | null;
 }
 
+interface PostBusinessAccount {
+  id: string;
+  name: string;
+  username: string;
+  avatar_url: string | null;
+  account_type: string;
+}
+
 interface Post {
   id: string;
   content: string;
@@ -41,6 +50,7 @@ interface Post {
   user_id: string;
   profiles: PostProfile;
   post_media: PostMedia[];
+  business_account?: PostBusinessAccount | null;
   user_has_starred?: boolean;
 }
 
@@ -56,7 +66,7 @@ interface RepostsFeedProps {
   onRefreshComplete?: () => void;
 }
 
-const POST_SELECT = `
+const POST_SELECT_BASE = `
   id,
   content,
   visibility,
@@ -83,6 +93,8 @@ const POST_SELECT = `
     alt_text
   )
 `;
+
+const POST_SELECT = () => Promise.resolve(POST_SELECT_BASE).then((b) => businessAccountEmbed().then((e) => b + e));
 
 const ACTIVE_POST_FILTER = 'expires_at.is.null,expires_at.gt.now()';
 
@@ -153,7 +165,7 @@ export default function RepostsFeed({ userId, refreshTrigger, onRefreshComplete 
       const reposterIds = [...new Set(reposts.map(r => r.user_id))];
 
       const [{ data: repostedPosts }, { data: reposterProfiles }] = await Promise.all([
-        supabase.from('posts').select(POST_SELECT).in('id', repostIds).eq('hidden', false).or(ACTIVE_POST_FILTER),
+        supabase.from('posts').select(await POST_SELECT()).in('id', repostIds).eq('hidden', false).or(ACTIVE_POST_FILTER),
         supabase
           .from('profiles')
           .select('user_id, username, display_name, avatar_url, is_verified')

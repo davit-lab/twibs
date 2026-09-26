@@ -1,14 +1,12 @@
-import { motion } from 'framer-motion';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, Flame, CalendarDays, Clock } from 'lucide-react';
 import { useReadingStreak } from '@/hooks/useReadingStreak';
+import { useReadingStats } from '@/hooks/useReadingStats';
 import WeeklyRhythm from '@/components/streak/WeeklyRhythm';
-import { ReadingRecords } from '@/components/streak/ReadingRecords';
 import StreakMilestones from '@/components/streak/StreakMilestones';
 import ReadingBadges from '@/components/streak/ReadingBadges';
 import ReadingActivity from '@/components/streak/ReadingActivity';
 import StreakEmptyState from '@/components/streak/StreakEmptyState';
 import { StreakCardLoading } from '@/components/streak/StreakLoading';
-import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
 interface ReadingStreakCardProps {
@@ -16,8 +14,17 @@ interface ReadingStreakCardProps {
   compact?: boolean;
 }
 
+function formatMinutes(total: number) {
+  const m = total || 0;
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return rem > 0 ? `${h}h ${rem}m` : `${h}h`;
+}
+
 export default function ReadingStreakCard({ userId, compact = false }: ReadingStreakCardProps) {
   const { streak, badges, todayReading, loading } = useReadingStreak(userId);
+  const { data: stats } = useReadingStats(userId);
   const currentStreak = streak?.current_streak || 0;
   const longestStreak = streak?.longest_streak || 0;
 
@@ -40,15 +47,7 @@ export default function ReadingStreakCard({ userId, compact = false }: ReadingSt
         <div className="flex items-end justify-between gap-3">
           <div className="flex items-baseline gap-1.5">
             <BookOpen className="h-4 w-4 self-center text-primary/60" />
-            <motion.span
-              key={currentStreak}
-              initial={{ opacity: 0.7, y: 3 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-              className="text-2xl font-extrabold tabular-nums tracking-tight"
-            >
-              {currentStreak}
-            </motion.span>
+            <span className="text-2xl font-extrabold tabular-nums tracking-tight">{currentStreak}</span>
             <span className="text-xs font-semibold text-muted-foreground">
               {currentStreak === 1 ? 'day' : 'days'} streak
             </span>
@@ -79,125 +78,98 @@ export default function ReadingStreakCard({ userId, compact = false }: ReadingSt
 
   return (
     <div className="flex flex-col gap-8">
-      {/* Hero */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-      >
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Reading streak</p>
-        <div className="mt-2 flex flex-col items-start gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Your reading rhythm</h2>
-            {todayReading?.hasRead ? (
-              <p className="mt-2 text-sm text-muted-foreground">
-                Read today &middot; {todayReading.minutes} min &middot; {todayReading.chapters} chapters
-              </p>
-            ) : (
-              <p className="mt-2 text-sm text-muted-foreground">Read today to continue your streak</p>
-            )}
-          </div>
+      {/* Header */}
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">Reading habits</p>
+        <div className="mt-1 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <h2 className="text-2xl font-bold tracking-tight">Your reading rhythm</h2>
+          <p className="text-sm text-muted-foreground">
+            {todayReading?.hasRead
+              ? `Read today · ${todayReading.minutes} min · ${todayReading.chapters} chapters`
+              : 'Read today to continue your streak'}
+          </p>
+        </div>
+      </div>
 
-          <div className="flex flex-col items-start md:items-end">
-            <div className="flex items-center gap-2">
-              <BookOpen className="h-4 w-4 text-primary/60" />
-              <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">consecutive</span>
-            </div>
-            <motion.div
-              key={currentStreak}
-              initial={{ opacity: 0.6, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease: 'easeOut' }}
-              className="mt-1 text-7xl font-semibold tracking-[-0.04em] tabular-nums leading-none md:text-8xl"
-            >
-              {currentStreak}
-            </motion.div>
-            <div className="mt-1 flex items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Days</span>
-              {currentStreak > 0 && longestStreak > currentStreak && (
-                <span className="text-xs text-muted-foreground">
-                  &middot; best <span className="font-semibold text-foreground">{longestStreak}</span>
-                </span>
-              )}
-            </div>
+      {/* Stats row */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="rounded-xl border border-border/60 bg-card p-4">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Flame className="h-3.5 w-3.5" />
+            <span className="text-xs font-medium">Current streak</span>
+          </div>
+          <div className="mt-1.5 flex items-baseline gap-1.5">
+            <span className="text-2xl font-semibold tabular-nums tracking-tight">{currentStreak}</span>
+            <span className="text-xs text-muted-foreground">{currentStreak === 1 ? 'day' : 'days'}</span>
           </div>
         </div>
-      </motion.div>
 
-      {/* Weekly rhythm */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: 0.1 }}
-      >
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">This week</p>
-        <WeeklyRhythm userId={userId} />
-      </motion.div>
+        <div className="rounded-xl border border-border/60 bg-card p-4">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Flame className="h-3.5 w-3.5" />
+            <span className="text-xs font-medium">Best streak</span>
+          </div>
+          <div className="mt-1.5 flex items-baseline gap-1.5">
+            <span className="text-2xl font-semibold tabular-nums tracking-tight">{longestStreak}</span>
+            <span className="text-xs text-muted-foreground">days</span>
+          </div>
+        </div>
 
-      {/* Reading status */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: 0.15 }}
-      >
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Today</p>
-        {todayReading?.hasRead ? (
-          <div className="flex items-center gap-2">
-            <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-            <span className="text-sm font-medium text-foreground">Read today</span>
-            <span className="text-sm text-muted-foreground">
-              {todayReading.minutes} min &middot; {todayReading.chapters} chapters
+        <div className="rounded-xl border border-border/60 bg-card p-4">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <CalendarDays className="h-3.5 w-3.5" />
+            <span className="text-xs font-medium">Reading days</span>
+          </div>
+          <div className="mt-1.5 flex items-baseline gap-1.5">
+            <span className="text-2xl font-semibold tabular-nums tracking-tight">
+              {stats?.totalSessions ?? 0}
             </span>
+            <span className="text-xs text-muted-foreground">sessions</span>
           </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <div className="h-1.5 w-1.5 rounded-full border border-primary" />
-            <span className="text-sm font-medium text-muted-foreground">Not read today</span>
+        </div>
+
+        <div className="rounded-xl border border-border/60 bg-card p-4">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Clock className="h-3.5 w-3.5" />
+            <span className="text-xs font-medium">Time read</span>
           </div>
-        )}
-      </motion.div>
+          <div className="mt-1.5 flex items-baseline gap-1.5">
+            <span className="text-2xl font-semibold tabular-nums tracking-tight">
+              {formatMinutes(stats?.totalMinutes ?? 0)}
+            </span>
+            <span className="text-xs text-muted-foreground">total</span>
+          </div>
+        </div>
+      </div>
 
-      {/* Reading records */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: 0.2 }}
-      >
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Records</p>
-        <ReadingRecords userId={userId} />
-      </motion.div>
+      {/* This week */}
+      <div>
+        <h3 className="mb-3 text-sm font-semibold tracking-tight">This week</h3>
+        <WeeklyRhythm userId={userId} />
+      </div>
 
-      {/* Milestones */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: 0.25 }}
-      >
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Milestones</p>
-        <StreakMilestones userId={userId} />
-      </motion.div>
+      {/* Calendar + milestones/badges */}
+      <div className="grid gap-8 md:grid-cols-2">
+        <div>
+          <h3 className="text-sm font-semibold tracking-tight">Reading calendar</h3>
+          <p className="mt-1 text-xs text-muted-foreground">Minutes read per day this month</p>
+          <div className="mt-3">
+            <ReadingActivity userId={userId} />
+          </div>
+        </div>
 
-      {/* Badges */}
-      {badges.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.3 }}
-        >
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Earned</p>
-          <ReadingBadges userId={userId} />
-        </motion.div>
-      )}
+        <div className="flex flex-col gap-8">
+          <div>
+            <h3 className="mb-3 text-sm font-semibold tracking-tight">Milestones</h3>
+            <StreakMilestones userId={userId} />
+          </div>
 
-      {/* Reading activity */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: 0.35 }}
-      >
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Activity</p>
-        <ReadingActivity userId={userId} />
-      </motion.div>
+          <div>
+            <h3 className="mb-3 text-sm font-semibold tracking-tight">Badges</h3>
+            <ReadingBadges userId={userId} />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

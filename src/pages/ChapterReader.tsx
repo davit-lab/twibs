@@ -6,6 +6,7 @@ import { useLogReading } from '@/hooks/useReadingStreak';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
+import { BookAI } from '@/components/bookai/BookAI';
 import {
   Sheet,
   SheetContent,
@@ -20,8 +21,29 @@ import {
   BookOpen,
   CheckCircle2,
   X,
+  Settings2,
 } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+
+type ReaderTheme = 'dark' | 'light' | 'sepia';
+type ReaderLineHeight = 'compact' | 'relaxed' | 'loose';
+
+const READER_SETTINGS_KEY = 'twibs:reader:settings';
+
+function loadReaderSettings() {
+  try {
+    const raw = localStorage.getItem(READER_SETTINGS_KEY);
+    if (!raw) return { theme: 'dark' as ReaderTheme, lineHeight: 'relaxed' as ReaderLineHeight };
+    const parsed = JSON.parse(raw);
+    return {
+      theme: (parsed.theme as ReaderTheme) || 'dark',
+      lineHeight: (parsed.lineHeight as ReaderLineHeight) || 'relaxed',
+    };
+  } catch {
+    return { theme: 'dark' as ReaderTheme, lineHeight: 'relaxed' as ReaderLineHeight };
+  }
+}
 
 export default function ChapterReader() {
   const { bookId, chapterId } = useParams<{ bookId: string; chapterId: string }>();
@@ -31,7 +53,9 @@ export default function ChapterReader() {
   const { updateProgress } = useBookActions();
   const logReading = useLogReading();
   const [tocOpen, setTocOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [fontSize, setFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
+  const [settings, setSettings] = useState(loadReaderSettings);
   const startTimeRef = useRef<number>(Date.now());
   const saveScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -94,6 +118,23 @@ export default function ChapterReader() {
   }, [bookId, chapterId, updateProgress, logReading]);
 
   const fontSizeClass = fontSize === 'xlarge' ? 'text-xl' : fontSize === 'large' ? 'text-lg' : 'text-base';
+  const lineHeightClass = settings.lineHeight === 'compact' ? 'leading-snug' : settings.lineHeight === 'loose' ? 'leading-loose' : 'leading-relaxed';
+  const themeClasses: Record<ReaderTheme, { container: string; prose: string; body: string }> = {
+    dark: { container: 'bg-card', prose: 'prose-neutral dark:prose-invert', body: 'text-foreground/85' },
+    light: { container: 'bg-white', prose: 'prose-zinc dark:prose-invert', body: 'text-zinc-800' },
+    sepia: { container: 'bg-[#f6efdf]', prose: 'prose-stone', body: 'text-[#3d342a]' },
+  };
+  const theme = themeClasses[settings.theme];
+
+  const updateSettings = (patch: Partial<typeof settings>) => {
+    const next = { ...settings, ...patch };
+    setSettings(next);
+    try {
+      localStorage.setItem(READER_SETTINGS_KEY, JSON.stringify(next));
+    } catch {
+      /* storage unavailable */
+    }
+  };
 
   const handleNavigate = (chapter: typeof prevChapter) => {
     if (!chapter) return;
@@ -116,11 +157,11 @@ export default function ChapterReader() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <div className="w-20 h-20 bg-gradient-to-br from-primary/10 to-primary/5 rounded-3xl flex items-center justify-center mx-auto mb-5">
-            <BookOpen className="h-10 w-10 text-primary/60" />
+          <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-5">
+            <BookOpen className="h-8 w-8 text-muted-foreground/50" />
           </div>
-          <h2 className="text-xl font-black mb-3">Chapter not found</h2>
-          <Button asChild className="h-11 px-6 rounded-xl font-bold shadow-lg shadow-primary/20">
+          <h2 className="text-xl font-bold mb-3">Chapter not found</h2>
+          <Button asChild className="h-10 px-5 rounded-lg font-semibold">
             <Link to={`/library/book/${bookId}`}>Back to Book</Link>
           </Button>
         </div>
@@ -165,16 +206,16 @@ export default function ChapterReader() {
                         className={cn(
                           "w-full flex items-center gap-3 p-3.5 rounded-2xl text-left transition-all duration-200",
                           isCurrent 
-                            ? "bg-gradient-to-br from-primary to-primary/90 text-white shadow-lg shadow-primary/20" 
+                            ? "bg-primary text-primary-foreground" 
                             : "hover:bg-muted/50"
                         )}
                       >
                         <span className={cn(
-                          "w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0",
+                          "w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0",
                           isComplete && !isCurrent
                             ? "bg-primary text-primary-foreground"
                             : isCurrent
-                            ? "bg-white/20 text-white"
+                            ? "bg-white/20 text-primary-foreground"
                             : "bg-muted text-muted-foreground"
                         )}>
                           {isComplete ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
@@ -195,7 +236,7 @@ export default function ChapterReader() {
             </p>
           </div>
 
-          <div className="flex items-center justify-end gap-1 bg-card border border-border/60 rounded-xl p-1 shadow-sm">
+          <div className="flex items-center justify-end gap-1 rounded-lg border border-border/60 bg-card p-1">
             {([
               { size: 'normal' as const, label: 'A', cls: 'text-xs' },
               { size: 'large' as const, label: 'A', cls: 'text-sm' },
@@ -204,26 +245,82 @@ export default function ChapterReader() {
               <button
                 key={size}
                 onClick={() => setFontSize(size)}
+                aria-label={`Font size ${size}`}
                 className={cn(
-                  "w-8 h-8 rounded-lg font-bold transition-all duration-200",
+                  "w-8 h-8 rounded-md font-bold transition-colors duration-200",
                   cls,
-                  fontSize === size ? "bg-gradient-to-br from-primary to-primary/80 text-white shadow-md" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  fontSize === size ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 )}
               >
                 {label}
               </button>
             ))}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Reading preferences"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
+                >
+                  <Settings2 className="h-4 w-4" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-60 rounded-xl p-3">
+                <div className="space-y-4">
+                  <div>
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Theme</p>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(['dark', 'light', 'sepia'] as ReaderTheme[]).map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => updateSettings({ theme: t })}
+                          className={cn(
+                            'rounded-md border px-2 py-1.5 text-xs font-semibold capitalize transition-colors',
+                            settings.theme === t
+                              ? 'border-primary bg-primary/10 text-primary'
+                              : 'border-border/60 text-muted-foreground hover:text-foreground'
+                          )}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Line height</p>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(['compact', 'relaxed', 'loose'] as ReaderLineHeight[]).map((lh) => (
+                        <button
+                          key={lh}
+                          type="button"
+                          onClick={() => updateSettings({ lineHeight: lh })}
+                          className={cn(
+                            'rounded-md border px-2 py-1.5 text-xs font-semibold capitalize transition-colors',
+                            settings.lineHeight === lh
+                              ? 'border-primary bg-primary/10 text-primary'
+                              : 'border-border/60 text-muted-foreground hover:text-foreground'
+                          )}
+                        >
+                          {lh}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
-        <Progress value={progressPercent} className="h-1 bg-muted/50" indicatorClassName="bg-gradient-to-r from-primary to-accent" />
+        <Progress value={progressPercent} className="h-1 bg-muted/50" indicatorClassName="bg-primary" />
       </header>
 
       {/* Content */}
       <main className="max-w-2xl mx-auto px-4 py-8 md:py-12">
-        <div className="bg-card border border-border/60 rounded-2xl p-6 md:p-8 shadow-sm">
-          <article className="prose prose-neutral dark:prose-invert max-w-none">
-            <h1 className="text-2xl md:text-3xl font-black mb-8 tracking-tight">{currentChapter.title}</h1>
-            <div className={cn("whitespace-pre-wrap leading-relaxed text-foreground/85", fontSizeClass)}>
+        <div className={cn('border border-border/60 rounded-xl p-6 md:p-8 shadow-sm', theme.container)}>
+          <article className={cn('prose max-w-none', theme.prose)}>
+            <h1 className="text-2xl md:text-3xl font-bold mb-8 tracking-tight">{currentChapter.title}</h1>
+            <div className={cn('whitespace-pre-wrap', fontSizeClass, lineHeightClass, theme.body)}>
               {currentChapter.content || (
                 <p className="text-muted-foreground italic">This chapter has no content yet.</p>
               )}
@@ -235,7 +332,7 @@ export default function ChapterReader() {
         <div className="mt-8 space-y-6">
           {user && !isCompleted && (
             <Button
-              className="w-full h-12 rounded-2xl font-bold bg-gradient-to-br from-primary to-primary/90 text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all"
+              className="w-full h-11 rounded-lg font-semibold text-primary-foreground"
               onClick={handleMarkComplete}
             >
               <CheckCircle2 className="h-5 w-5 mr-2" />
@@ -280,6 +377,36 @@ export default function ChapterReader() {
           </Button>
         </div>
       </footer>
+
+      {/* Book AI — mobile: FAB + bottom sheet. Desktop (lg): untouched reader. */}
+      <div className="lg:hidden">
+        <button
+          type="button"
+          onClick={() => setAiOpen(true)}
+          aria-label="Open Book AI"
+          className="fixed right-4 bottom-20 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-border/60 bg-background shadow-lg shadow-black/30"
+        >
+          <span className="h-2 w-2 rounded-full bg-violet-500" aria-hidden="true" />
+        </button>
+
+        <Sheet open={aiOpen} onOpenChange={setAiOpen}>
+          <SheetContent side="bottom" className="h-[85vh] p-0">
+            <SheetHeader className="sr-only">
+              <SheetTitle>Ask about this book</SheetTitle>
+            </SheetHeader>
+            <div className="flex h-full min-h-0 flex-col">
+              <BookAI
+                  context={{
+                    bookId: bookId ?? '',
+                    bookTitle: book?.title ?? currentChapter.title,
+                    chapterTitle: currentChapter.title,
+                    chapter: currentIndex >= 0 ? currentIndex + 1 : undefined,
+                  }}
+                />
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
     </div>
   );
 }

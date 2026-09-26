@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { callAudio } from '@/lib/callAudio';
 import {
   RING_TIMEOUT_MS,
+  CONNECT_TIMEOUT_MS,
   QUALITY_SAMPLE_MS,
   QUALITY_EXCELLENT_RTT,
   QUALITY_GOOD_RTT,
@@ -183,6 +185,7 @@ export function useCallManager(): CallManager {
   const mountedRef = useRef(true);
   const ringTimeoutRef = useRef<number | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
+  const connectTimeoutRef = useRef<number | null>(null);
   const qualityTimerRef = useRef<number | null>(null);
   const endScreenCleanupRef = useRef<number | null>(null);
   const phaseRef = useRef<CallPhase>('idle');
@@ -218,6 +221,13 @@ export function useCallManager(): CallManager {
     setPhase(p);
   };
 
+  const clearConnectTimeout = useCallback(() => {
+    if (connectTimeoutRef.current !== null) {
+      window.clearTimeout(connectTimeoutRef.current);
+      connectTimeoutRef.current = null;
+    }
+  }, []);
+
   const stopTimers = () => {
     if (ringTimeoutRef.current !== null) {
       window.clearTimeout(ringTimeoutRef.current);
@@ -227,6 +237,7 @@ export function useCallManager(): CallManager {
       window.clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
     }
+    clearConnectTimeout();
     if (qualityTimerRef.current !== null) {
       window.clearInterval(qualityTimerRef.current);
       qualityTimerRef.current = null;
@@ -304,48 +315,89 @@ export function useCallManager(): CallManager {
     [teardownConnection]
   );
 
+  /**
+   * Best-effort, fire-and-forget persistence of the call row's terminal
+   * status. Never rejects/throws into the caller so hangup is unconditional.
+   */
+  const persistCallStatus = useCallback(
+    (sessionId: string, status: CallSession['status'], reason: CallEndReason) => {
+      void (async () => {
+        try {
+          const { error } = await supabase
+            .from('call_sessions')
+            .update({ status, ended_at: new Date().toISOString(), ended_reason: reason })
+            .eq('id', sessionId);
+          if (error) {
+            console.warn('[CallManager] Failed to persist call status:', error.message);
+          }
+        } catch (err) {
+          console.warn('[CallManager] Failed to persist call status:', getErrorMessage(err));
+        }
+      })();
+    },
+    []
+  );
+
   /** Set a terminal phase locally, stop audio, persist DB status. */
-  const finishCall = useCallback(async (reason: CallEndReason, opts?: { dbStatus?: CallSession['status']; skipDb?: boolean }) => {
-    const s = sessionRef.current;
-    if (phaseRef.current === 'ended') return;
+  const finishCall = useCallback(
+    async (reason: CallEndReason, opts?: { dbStatus?: CallSession['status']; skipDb?: boolean }) => {
+      const s = sessionRef.current;
+      if (phaseRef.current === 'ended') return;
 
-    callAudio.stopAll();
-    if (ringTimeoutRef.current !== null) {
-      window.clearTimeout(ringTimeoutRef.current);
-      ringTimeoutRef.current = null;
-    }
-    if (reconnectTimerRef.current !== null) {
-      window.clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-    if (qualityTimerRef.current !== null) {
-      window.clearInterval(qualityTimerRef.current);
-      qualityTimerRef.current = null;
-    }
-
-    if (!opts?.skipDb && s) {
-      const status = opts?.dbStatus ?? statusForReason(reason);
-      try {
-        await supabase
-          .from('call_sessions')
-          .update({ status, ended_at: new Date().toISOString(), ended_reason: reason })
-          .eq('id', s.id);
-      } catch (err) {
-        console.error('[CallManager] Failed to persist call end:', err);
+      callAudio.stopAll();
+      if (ringTimeoutRef.current !== null) {
+        window.clearTimeout(ringTimeoutRef.current);
+        ringTimeoutRef.current = null;
       }
-    }
-
-    if (mountedRef.current) {
-      setEndReason(reason);
-      setSession(s);
-      if (reason === 'failed') {
-        setError(connectionStateRef.current === 'connected' ? 'Connection lost.' : 'Connection failed.');
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
       }
-      phaseRefUpdate('ended');
-    }
-    // Keep streams briefly mounted so the end screen can keep a final frame.
-    scheduleConnectionTeardown(false, END_SCREEN_AUTO_CLOSE_MS);
-  }, [scheduleConnectionTeardown]);
+      clearConnectTimeout();
+      if (qualityTimerRef.current !== null) {
+        window.clearInterval(qualityTimerRef.current);
+        qualityTimerRef.current = null;
+      }
+
+      // Transition local state immediately — a terminal call must never stay
+      // stuck waiting on the database or signaling before the UI leaves the
+      // active state. DB persistence is best-effort and happens separately.
+      if (mountedRef.current) {
+        setEndReason(reason);
+        setSession(s);
+        if (reason === 'failed') {
+          setError(connectionStateRef.current === 'connected' ? 'Connection lost.' : 'Connection failed.');
+        }
+        phaseRefUpdate('ended');
+      }
+      // Best-effort server-side status persistence; failure must not affect the
+      // local terminal state already committed above. Done separately from the
+      // local teardown so a slow/dead database can never block hangup.
+      if (!opts?.skipDb && s) {
+        const status = opts?.dbStatus ?? statusForReason(reason);
+        persistCallStatus(s.id, status, reason);
+      }
+
+      // Keep streams briefly mounted so the end screen can keep a final frame.
+      scheduleConnectionTeardown(false, END_SCREEN_AUTO_CLOSE_MS);
+    },
+    [scheduleConnectionTeardown, clearConnectTimeout, persistCallStatus]
+  );
+
+  /**
+   * Guarantees a call never sits on "Connecting…" forever. Fires once the
+   * connecting phase outlives CONNECT_TIMEOUT_MS and tears the call down.
+   */
+  const startConnectTimeout = useCallback(() => {
+    clearConnectTimeout();
+    connectTimeoutRef.current = window.setTimeout(() => {
+      connectTimeoutRef.current = null;
+      if (phaseRef.current === 'connecting' && sessionRef.current && !isCleaningUpRef.current) {
+        console.warn('[CallManager] Call did not establish a peer connection in time.');
+        finishCall('failed', { dbStatus: 'ended' });
+      }
+    }, CONNECT_TIMEOUT_MS);
+  }, [finishCall, clearConnectTimeout]);
 
   // ----------------------------------------------------------------- media --
 
@@ -415,34 +467,48 @@ export function useCallManager(): CallManager {
 
   const storeIceCandidate = useCallback(
     async (sessionId: string, candidate: RTCIceCandidate, isCaller: boolean) => {
+      const payload: Json = candidate.toJSON() as Json;
+      const candidateField = isCaller ? 'caller_ice_candidates' : 'receiver_ice_candidates';
+
+      // Preferred path: the atomic server-side RPC `append_call_ice_candidate`.
+      // NOTE: `supabase.rpc(...)` MUST be invoked as a method on `supabase` so
+      // that `this` is bound internally (it accesses `this.rest`). Detaching
+      // the method (e.g. `const rpc = supabase.rpc`) makes `this` undefined
+      // and throws `Cannot read properties of undefined (reading 'rest')`.
       try {
-        const rpc = supabase.rpc as unknown as (
-          fn: 'append_call_ice_candidate',
-          params: Record<string, unknown>
-        ) => Promise<{ error: { message?: string } | null }>;
-        const { error } = await rpc('append_call_ice_candidate', {
+        const { error } = await supabase.rpc('append_call_ice_candidate', {
           p_session_id: sessionId,
           p_is_caller: isCaller,
-          p_candidate: candidate.toJSON(),
+          p_candidate: payload,
         });
         if (!error) return;
+      } catch {
+        // RPC unavailable or threw (network/parse). Fall through to RMW.
+      }
 
-        console.warn('[CallManager] RPC append unavailable, using fallback:', error?.message);
-        const candidateField = isCaller ? 'caller_ice_candidates' : 'receiver_ice_candidates';
-        const { data: currentSession } = await supabase
+      // Fallback: read-modify-write via the standard supabase.from() pattern
+      // used elsewhere in Twibs. A failed candidate persist must never tear
+      // down the call, so errors here are logged once and swallowed.
+      try {
+        const { data, error: fetchError } = await supabase
           .from('call_sessions')
           .select(candidateField)
           .eq('id', sessionId)
           .single();
-        if (currentSession) {
-          const currentCandidates = (currentSession as unknown as Record<string, RTCIceCandidateInit[]>)[candidateField] || [];
-          await supabase
-            .from('call_sessions')
-            .update({ [candidateField]: [...currentCandidates, candidate.toJSON()] })
-            .eq('id', sessionId);
+        if (fetchError || !data) return;
+        const current = (data as unknown as Record<string, unknown>)[candidateField];
+        const currentCandidates: RTCIceCandidateInit[] = Array.isArray(current)
+          ? (current as RTCIceCandidateInit[])
+          : [];
+        const { error: updateError } = await supabase
+          .from('call_sessions')
+          .update({ [candidateField]: [...currentCandidates, payload] })
+          .eq('id', sessionId);
+        if (updateError) {
+          console.warn('[CallManager] Failed to persist ICE candidate (fallback):', updateError.message);
         }
       } catch (err) {
-        console.error('[CallManager] Failed to store ICE candidate:', err);
+        console.warn('[CallManager] Failed to store ICE candidate:', getErrorMessage(err));
       }
     },
     []
@@ -619,6 +685,7 @@ export function useCallManager(): CallManager {
         setConnectionState(pc.connectionState);
 
         if (pc.connectionState === 'connected') {
+          clearConnectTimeout();
           if (phaseRef.current === 'connecting' || phaseRef.current === 'reconnecting') {
             phaseRefUpdate('connected');
           }
@@ -662,6 +729,7 @@ export function useCallManager(): CallManager {
           return;
         }
         if (pc.connectionState === 'closed') {
+          clearConnectTimeout();
           stopQualitySampler();
         }
       };
@@ -677,7 +745,7 @@ export function useCallManager(): CallManager {
 
       return pc;
     },
-    [finishCall, startQualitySampler, stopQualitySampler, storeIceCandidate]
+    [finishCall, startQualitySampler, stopQualitySampler, storeIceCandidate, clearConnectTimeout]
   );
 
   const subscribeToSession = useCallback(
@@ -714,6 +782,7 @@ export function useCallManager(): CallManager {
                 callAudio.stopOutgoingRingback(sessionId);
                 appliedAnswerRef.current = updated.sdp_answer;
                 phaseRefUpdate('connecting');
+                startConnectTimeout();
                 try {
                   const answer = JSON.parse(updated.sdp_answer);
                   await pc.setRemoteDescription(new RTCSessionDescription(answer));
@@ -763,7 +832,7 @@ export function useCallManager(): CallManager {
       channelRef.current = channel;
       syncRemoteCandidates(sessionId, isCaller);
     },
-    [finishCall, addIceCandidates, processPendingIceCandidates, syncRemoteCandidates]
+    [finishCall, addIceCandidates, processPendingIceCandidates, syncRemoteCandidates, startConnectTimeout]
   );
 
   // ----------------------------------------------------------------- outgoing --
@@ -933,6 +1002,12 @@ export function useCallManager(): CallManager {
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
+        // SDP exchange complete: move to 'connecting' (and arm the connect
+        // timeout) BEFORE the awaited DB write below, so an ICE 'connected'
+        // event that fires during the write still promotes us correctly.
+        phaseRefUpdate('connecting');
+        startConnectTimeout();
+
         const now = new Date().toISOString();
         await supabase
           .from('call_sessions')
@@ -962,7 +1037,7 @@ export function useCallManager(): CallManager {
         teardownConnection(true);
       }
     },
-    [acquireMedia, integrateStream, createPeerConnection, subscribeToSession, subscribeReactions, syncRemoteCandidates, processPendingIceCandidates, addIceCandidates, finishCall, teardownConnection]
+    [acquireMedia, integrateStream, createPeerConnection, subscribeToSession, subscribeReactions, syncRemoteCandidates, processPendingIceCandidates, addIceCandidates, finishCall, teardownConnection, startConnectTimeout]
   );
 
   const answerCall = useCallback(
@@ -1000,54 +1075,33 @@ export function useCallManager(): CallManager {
 
   const cancelCall = useCallback(async () => {
     const s = sessionRef.current;
-    if (!s || phaseRef.current !== 'ringing') return;
-    callAudio.stopOutgoingRingback(s.id);
-    if (ringTimeoutRef.current !== null) {
-      window.clearTimeout(ringTimeoutRef.current);
-      ringTimeoutRef.current = null;
-    }
-    try {
-      await supabase
-        .from('call_sessions')
-        .update({ status: 'cancelled', ended_at: new Date().toISOString(), ended_reason: 'cancelled' })
-        .eq('id', s.id);
-    } catch (err) {
-      console.error('[CallManager] Failed to cancel call:', err);
-    }
-    if (mountedRef.current) {
-      setEndReason('cancelled');
-      phaseRefUpdate('ended');
-    }
-    scheduleConnectionTeardown(true, END_SCREEN_AUTO_CLOSE_MS);
-  }, [scheduleConnectionTeardown]);
+    if (phaseRef.current !== 'ringing' && phaseRef.current !== 'dialing') return;
+    if (s) callAudio.stopOutgoingRingback(s.id);
+    clearConnectTimeout();
+    // Local teardown happens first and must not depend on the database.
+    phaseRefUpdate('ended');
+    setEndReason('cancelled');
+    teardownConnection(true);
+    // Best-effort: notify the remote peer (sets their terminal transition).
+    if (s) persistCallStatus(s.id, 'cancelled', 'cancelled');
+  }, [teardownConnection, clearConnectTimeout, persistCallStatus]);
 
   const endCall = useCallback(async () => {
     const s = sessionRef.current;
     if (!['connected', 'connecting', 'reconnecting'].includes(phaseRef.current)) return;
     callAudio.stopAll();
-    if (qualityTimerRef.current !== null) {
-      window.clearInterval(qualityTimerRef.current);
-      qualityTimerRef.current = null;
-    }
-    try {
-      if (s) {
-        await supabase
-          .from('call_sessions')
-          .update({ status: 'ended', ended_at: new Date().toISOString(), ended_reason: 'ended' })
-          .eq('id', s.id);
-      }
-    } catch (err) {
-      console.error('[CallManager] Failed to update call status:', err);
-    }
-    if (mountedRef.current) {
-      setEndReason('ended');
-      phaseRefUpdate('ended');
-    }
-    scheduleConnectionTeardown(false, END_SCREEN_AUTO_CLOSE_MS);
-  }, [scheduleConnectionTeardown]);
+    clearConnectTimeout();
+    // Immediate local cleanup — media, peer connection, listeners, timers,
+    // and realtime subscriptions are torn down regardless of signaling/DB.
+    phaseRefUpdate('ended');
+    setEndReason('ended');
+    teardownConnection(true);
+    // Best-effort server-side status update; must never block the user hangup.
+    if (s) persistCallStatus(s.id, 'ended', 'ended');
+  }, [teardownConnection, clearConnectTimeout, persistCallStatus]);
 
   const endOrCancel = useCallback(() => {
-    if (phaseRef.current === 'ringing') {
+    if (phaseRef.current === 'ringing' || phaseRef.current === 'dialing') {
       cancelCall();
     } else if (['connected', 'connecting', 'reconnecting'].includes(phaseRef.current)) {
       endCall();

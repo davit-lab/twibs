@@ -39,7 +39,7 @@ function ContentTypeBadge({ kind, className }: { kind: ContentKind; className?: 
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full bg-background/90 border border-border/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground shadow-sm backdrop-blur',
+        'inline-flex items-center gap-1 rounded-md bg-background/90 border border-border/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground',
         className
       )}
     >
@@ -127,7 +127,7 @@ export default function ContentCard({ content, variant = 'grid', onLike, onRemov
 
   if (variant === 'list') {
     return (
-      <div className="group flex gap-4 rounded-2xl border border-border/60 bg-card p-4 transition-all duration-200 hover:border-primary/40 hover:shadow-md hover:shadow-primary/5">
+      <div className="group flex gap-4 rounded-2xl border border-border/60 bg-card p-4 transition-colors duration-200 hover:border-primary/40">
         <Link
           to={content.route}
           className="relative aspect-[3/4] w-16 shrink-0 overflow-hidden rounded-xl border border-border/60 bg-muted sm:w-20"
@@ -209,25 +209,23 @@ export default function ContentCard({ content, variant = 'grid', onLike, onRemov
     <div className="group relative flex flex-col">
       <Link
         to={content.route}
-        className="relative block aspect-[3/4] overflow-hidden rounded-2xl border border-border/60 bg-muted transition-all duration-300 group-hover:-translate-y-1 group-hover:border-primary/40 group-hover:shadow-lg group-hover:shadow-primary/10"
+        className="relative block aspect-[3/4] overflow-hidden rounded-xl border border-border/60 bg-muted transition-colors duration-200 group-hover:border-primary/40"
       >
         {content.thumbnail ? (
           <img
             src={content.thumbnail}
             alt={content.title}
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-muted to-muted/40">
+          <div className="flex h-full w-full items-center justify-center bg-muted">
             <TypeIcon className="h-14 w-14 text-muted-foreground/25" />
           </div>
         )}
 
-        <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-
         {content.kind === 'audio' && (
-          <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 shadow-lg">
+          <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90">
               <Play className="ml-0.5 h-5 w-5 text-black" />
             </span>
           </span>
