@@ -129,8 +129,10 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
     }
   };
 
+  const toggleDiscussion = () => setCommentsOpen((prev) => !prev);
+
   return (
-    <article className="px-4 sm:px-5 py-4">
+    <article className="px-4 sm:px-5 py-5">
       {/* Header */}
       <div className="flex items-center gap-3 mb-2.5">
         <Link to={`/profile/${username}`} className="flex-shrink-0">
@@ -158,7 +160,7 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
             @{username}
             {category && (
               <>
-                {' '}· <span className="font-medium text-primary">{category.name}</span>
+            {' '}· <span className="font-medium text-primary">{category.name}</span>
               </>
             )}
             {' '}· {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
@@ -186,7 +188,15 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
       </div>
 
       {/* Content */}
-      <p className="text-[15px] leading-[1.55] whitespace-pre-wrap break-words">
+      {category && (
+        <div className="mb-2.5">
+          <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/[0.07] px-2.5 py-1 text-[11px] font-bold tracking-[0.02em] text-primary">
+            {category.name}
+          </span>
+        </div>
+      )}
+
+      <p className="text-[15px] leading-[1.6] whitespace-pre-wrap break-words">
         <RichText text={post.content} />
       </p>
 
@@ -241,7 +251,7 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
         )}
 
         <button
-          onClick={() => setCommentsOpen((prev) => !prev)}
+          onClick={toggleDiscussion}
           className={cn(
             'flex items-center gap-1.5 py-1.5 px-2.5 ml-1 rounded-full text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
             commentsOpen
@@ -251,11 +261,7 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
           aria-label={commentsOpen ? 'Close discussion' : 'Open discussion'}
         >
           <MessageCircle className={cn('h-[18px] w-[18px]', commentsOpen && 'fill-current')} />
-          {post.comment_count > 0 ? (
-            <span className="tabular-nums">{formatCount(post.comment_count)}</span>
-          ) : (
-            <span>Discuss</span>
-          )}
+          <span>{post.comment_count > 0 ? `${formatCount(post.comment_count)} replies` : 'Reply'}</span>
         </button>
 
         <div className="flex-1" />
@@ -333,7 +339,7 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
             className="overflow-hidden"
           >
             <div className="mt-3 pt-4 border-t border-border/60">
-              <InterestPostComments postId={post.id} />
+              <InterestPostComments postId={post.id} autoFocus={commentsOpen} />
             </div>
           </motion.div>
         )}

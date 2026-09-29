@@ -21,7 +21,7 @@ import {
 import SponsoredPost from '@/components/ads/SponsoredPost';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Settings2 } from 'lucide-react';
+import { Loader2, Settings2, Compass, Plus, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FeedAd } from '@/lib/ads';
 
@@ -155,13 +155,53 @@ export default function HomeInterestFeed() {
 
   return (
     <div>
-      {/* Sticky interest chips + inline composer */}
-      <div className="sticky top-0 z-30 -mx-4 bg-background border-b border-border/70">
-        <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide px-4 py-2.5">
+      <section className="mb-2 rounded-2xl border border-border/65 bg-card px-4 py-4 shadow-sm shadow-black/[0.03] sm:px-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.13em] text-primary">
+              <Compass className="h-3.5 w-3.5" /> Your spaces
+            </div>
+            <h2 className="mt-1 text-lg font-bold tracking-tight">Talk about what you follow</h2>
+            <p className="mt-1 max-w-md text-sm leading-relaxed text-muted-foreground">
+              Share ideas with people who are here for the same subjects.
+            </p>
+          </div>
+          <button
+            onClick={() => setManageOpen(true)}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-border/70 px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Edit topics</span>
+            <span className="sm:hidden">Edit</span>
+          </button>
+        </div>
+        {categories.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {categories.slice(0, 5).map((category) => (
+              <button
+                key={category.id}
+                onClick={() => setActiveCategory(category.id)}
+                className={cn(
+                  'rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors',
+                  activeCategory === category.id
+                    ? 'border-primary/35 bg-primary/10 text-primary'
+                    : 'border-border/70 text-muted-foreground hover:border-border hover:text-foreground'
+                )}
+              >
+                {category.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Topic filters and the discussion composer */}
+      <div className="sticky top-0 z-30 -mx-4 border-y border-border/70 bg-background/95 backdrop-blur-md">
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide px-4 py-2">
           <button
             onClick={() => setActiveCategory('all')}
             className={cn(
-              'inline-flex items-center whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-semibold transition-colors',
+              'inline-flex items-center whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors',
               activeCategory === 'all'
                 ? 'bg-foreground text-background'
                 : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
@@ -177,7 +217,7 @@ export default function HomeInterestFeed() {
                 key={c.id}
                 onClick={() => setActiveCategory(c.id)}
                 className={cn(
-                  'inline-flex items-center whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-semibold transition-colors',
+                  'inline-flex items-center whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors',
                   active
                     ? 'bg-primary/10 text-primary ring-1 ring-inset ring-primary/25'
                     : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
@@ -188,15 +228,8 @@ export default function HomeInterestFeed() {
             );
           })}
 
-          <button
-            onClick={() => setManageOpen(true)}
-            className={cn(
-              'inline-flex items-center whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground',
-              activeCategory === 'all' ? 'ml-1' : 'ml-2'
-            )}
-          >
-            <Settings2 className="mr-1.5 h-3.5 w-3.5" />
-            Manage
+          <button onClick={() => setManageOpen(true)} className="ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-surface-2 hover:text-foreground" aria-label="Manage interests">
+            <Plus className="h-4 w-4" />
           </button>
         </div>
 

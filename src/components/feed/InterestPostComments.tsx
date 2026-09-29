@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -32,6 +32,7 @@ import ReportDialog from '@/components/social/ReportDialog';
 
 interface InterestPostCommentsProps {
   postId: string;
+  autoFocus?: boolean;
 }
 
 interface CommentItemProps {
@@ -285,7 +286,7 @@ function CommentItem({ comment, currentUserId, depth = 0, onReport }: CommentIte
   );
 }
 
-export default function InterestPostComments({ postId }: InterestPostCommentsProps) {
+export default function InterestPostComments({ postId, autoFocus = false }: InterestPostCommentsProps) {
   const { user, profile } = useAuth();
   const {
     data: comments = [],
@@ -297,6 +298,11 @@ export default function InterestPostComments({ postId }: InterestPostCommentsPro
 
   const [body, setBody] = useState('');
   const [reportId, setReportId] = useState<string | null>(null);
+  const composerRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (autoFocus) composerRef.current?.focus();
+  }, [autoFocus]);
 
   const handlePost = () => {
     const trimmed = body.trim();
@@ -345,7 +351,7 @@ export default function InterestPostComments({ postId }: InterestPostCommentsPro
   }
 
   return (
-    <div className="space-y-3">
+    <div className="mt-1 space-y-3 rounded-2xl border border-border/60 bg-surface/35 p-3.5 sm:p-4">
       <div className="flex items-baseline gap-2">
         <p className="text-sm font-bold tracking-tight">Discussion</p>
         {comments.length > 0 && (
@@ -366,6 +372,7 @@ export default function InterestPostComments({ postId }: InterestPostCommentsPro
             </Avatar>
           </Link>
           <input
+            ref={composerRef}
             placeholder="Join the discussion..."
             value={body}
             onChange={(e) => setBody(e.target.value)}
@@ -375,7 +382,7 @@ export default function InterestPostComments({ postId }: InterestPostCommentsPro
                 handlePost();
               }
             }}
-            className="h-10 flex-1 rounded-xl border border-border/60 bg-surface px-3.5 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+            className="h-10 flex-1 rounded-xl border border-border/60 bg-background px-3.5 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
           />
           <Button
             variant="ghost"
@@ -397,7 +404,7 @@ export default function InterestPostComments({ postId }: InterestPostCommentsPro
       )}
 
       {comments.length === 0 ? (
-        <div className="pt-4 pb-2 text-center">
+        <div className="rounded-xl border border-dashed border-border/80 bg-background/50 px-4 py-4 text-center">
           <p className="text-sm font-semibold">Start the discussion</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Be the first to share your take on this post.

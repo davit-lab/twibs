@@ -14,6 +14,8 @@ import {
   Check,
   Settings2,
   ZoomIn,
+  MessageCircle,
+  Sparkles,
 } from 'lucide-react';
 import defaultAvatar from '@/assets/default-avatar.png';
 import { MediaPreviewGrid } from '@/components/media/MediaPreviewGrid';
@@ -224,14 +226,14 @@ export default function InterestPostComposer({
   }));
 
   return (
-    <div className="px-4 pb-3 pt-1.5">
+    <div className="px-4 pb-4 pt-2">
       <div
         className={cn(
-          'rounded-2xl border bg-card transition-colors',
-          expanded ? 'border-border/80' : 'border-border/60 hover:border-border'
+          'overflow-visible rounded-2xl border bg-card shadow-sm shadow-black/[0.04] transition-colors',
+          expanded ? 'border-primary/30 ring-1 ring-primary/10' : 'border-border/70 hover:border-border'
         )}
       >
-        <div className="flex gap-3 p-3.5">
+        <div className="flex gap-3 p-3.5 sm:p-4">
           <Avatar className="h-10 w-10 flex-shrink-0">
             <AvatarImage src={profile?.avatar_url || defaultAvatar} alt="" />
             <AvatarFallback className="bg-surface-2 font-semibold">
@@ -246,7 +248,7 @@ export default function InterestPostComposer({
               onChange={(e) => setContent(e.target.value)}
               onFocus={() => setExpanded(true)}
               onInput={autoResize}
-              placeholder="Create a post on your interests…"
+              placeholder="Start a conversation with your community…"
               rows={1}
               className="w-full resize-none overflow-hidden bg-transparent text-[15px] leading-normal text-foreground outline-none placeholder:text-muted-foreground/60"
             />
@@ -272,17 +274,25 @@ export default function InterestPostComposer({
               />
             )}
 
+            {!expanded && !content && media.length === 0 && (
+              <div className="mt-2 flex items-center gap-2 text-[12px] text-muted-foreground">
+                <MessageCircle className="h-3.5 w-3.5" />
+                Ask a question, share a recommendation, or start a discussion.
+              </div>
+            )}
+
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/50 pt-2.5">
               <div className="relative">
                 <button
                   type="button"
                   onClick={openInterestMenu}
                   className={cn(
-                    'inline-flex h-7 max-w-[180px] shrink-0 items-center gap-1 rounded-full border border-border/70 bg-surface-2/70 px-2.5 text-[13px] font-medium text-foreground transition-colors hover:bg-surface-2',
+                    'inline-flex h-8 max-w-[190px] shrink-0 items-center gap-1.5 rounded-full border border-border/70 bg-surface-2/70 px-3 text-[13px] font-semibold text-foreground transition-colors hover:bg-surface-2',
                     !selectedCategory && 'text-muted-foreground'
                   )}
                 >
-                  <span className="truncate">{selectedName || (showInterestRow ? 'No interest — add one' : 'No interest selected')}</span>
+                  <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  <span className="truncate">{selectedName || (showInterestRow ? 'Choose a topic' : 'Choose a topic')}</span>
                   <ChevronDown
                     className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', menuOpen && 'rotate-180')}
                   />
@@ -330,17 +340,6 @@ export default function InterestPostComposer({
                 )}
               </div>
 
-              {onManageInterests && (
-                <button
-                  type="button"
-                  onClick={onManageInterests}
-                  className="inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
-                >
-                  <Settings2 className="h-3.5 w-3.5" />
-                  Manage
-                </button>
-              )}
-
               <div className="flex-1" />
 
               <input
@@ -382,7 +381,7 @@ export default function InterestPostComposer({
                 aria-label="Publish post"
                 onClick={handleSubmit}
                 disabled={!canPost}
-                className="h-9 min-w-[84px] rounded-xl bg-primary px-5 text-[14px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-45"
+                className="h-9 min-w-[84px] rounded-xl bg-primary px-5 text-[14px] font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-45"
               >
                 {isSubmitting ? (
                   <span className="inline-flex items-center gap-1.5">
