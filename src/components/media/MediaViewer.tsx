@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   ZoomIn,
@@ -335,9 +336,9 @@ export default function MediaViewer({
     return Array.from({ length: 5 }, (_, offset) => start + offset);
   }, [images, index]);
 
-  return (
+  const viewer = (
     <div className={cn(
-      'fixed inset-0 z-[100] bg-black/95 flex flex-col',
+      'fixed inset-0 z-[2147483647] bg-black/95 flex flex-col',
       isFullscreen && 'bg-black'
     )}
       ref={viewerRef}
@@ -537,4 +538,6 @@ export default function MediaViewer({
       </div>
     </div>
   );
+
+  return typeof document === 'undefined' ? viewer : createPortal(viewer, document.body);
 }
