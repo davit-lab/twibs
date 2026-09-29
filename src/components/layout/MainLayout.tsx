@@ -526,42 +526,38 @@ const moreAccountItems = [
                   {active && (
                     <motion.div
                       layoutId="mobile-nav-cloud"
-                      transition={{ type: 'spring', stiffness: 340, damping: 32, opacity: { duration: 0.15 } }}
-                      className="absolute inset-0 z-0 flex items-center justify-center"
+                      transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.72 }}
+                      className="pointer-events-none absolute left-1/2 top-0.5 z-0 flex h-8 w-12 -translate-x-1/2 items-center justify-center"
                     >
                       <svg
-                        viewBox="0 0 96 80"
-                        className="h-16 w-20 -translate-y-1 overflow-visible drop-shadow-[0_5px_14px_rgba(124,58,237,0.45)]"
+                        viewBox="0 0 68 56"
+                        className="h-8 w-12 overflow-visible drop-shadow-[0_3px_6px_hsl(var(--primary)/0.24)]"
                         aria-hidden="true"
                       >
                         <defs>
                           <linearGradient
-                            id="nav-cloud-grad"
-                            x1="0"
-                            y1="0"
-                            x2="96"
-                            y2="80"
+                            id={`nav-cloud-grad-${item.id}`}
+                            x1="12"
+                            y1="8"
+                            x2="56"
+                            y2="50"
                             gradientUnits="userSpaceOnUse"
                           >
-                            <stop offset="0%" stopColor="#a78bfa" />
-                            <stop offset="50%" stopColor="hsl(var(--primary))" />
-                            <stop offset="100%" stopColor="#4f46e5" />
+                            <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.82" />
+                            <stop offset="100%" stopColor="hsl(var(--primary))" />
                           </linearGradient>
                         </defs>
-                        <g fill="url(#nav-cloud-grad)">
-                          <rect x="4" y="46" width="74" height="28" rx="14" />
-                          <circle cx="24" cy="40" r="16" />
-                          <circle cx="44" cy="30" r="19" />
-                          <circle cx="66" cy="37" r="17" />
-                          <circle cx="82" cy="48" r="12" />
-                        </g>
+                        <path
+                          d="M15.25 49C7.93 49 2 43.12 2 35.86c0-5.75 3.72-10.64 8.91-12.42C12.63 13.84 21.06 7 30.82 7c7.95 0 14.9 4.5 18.36 11.12C58.55 18.28 66 25.9 66 35.28 66 42.86 59.8 49 52.16 49H15.25Z"
+                          fill={`url(#nav-cloud-grad-${item.id})`}
+                        />
                       </svg>
                     </motion.div>
                   )}
                   <Link
                     to={item.href}
                     className={cn(
-                      "relative z-10 flex flex-col items-center justify-center gap-1 px-3.5 py-2 transition-all duration-200",
+                      "relative z-10 flex h-[54px] min-w-[58px] flex-col items-center justify-center gap-1 px-2 transition-colors duration-200",
                       active
                         ? "text-primary-foreground"
                         : "text-muted-foreground hover:text-foreground"
@@ -569,12 +565,12 @@ const moreAccountItems = [
                   >
                     {item.icon && (
                       <item.icon
-                        className={cn("h-5 w-5 transition-transform duration-200", active && "scale-110")}
-                        strokeWidth={active ? 2.5 : 1.5}
-                        fill={active ? 'currentColor' : 'none'}
+                        className={cn("h-5 w-5 transition-transform duration-200", active && "-translate-y-1 scale-[0.95]")}
+                        strokeWidth={active ? 2.25 : 1.6}
+                        fill="none"
                       />
                     )}
-                    <span className={cn("text-[10px]", active && "font-semibold")}>
+                    <span className={cn("text-[10px] leading-none", active && "font-semibold text-primary")}>
                       {item.label}
                     </span>
                   </Link>
