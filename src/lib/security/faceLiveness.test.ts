@@ -180,6 +180,22 @@ describe('extractFaceMetrics', () => {
     expect(m!.faceSize).toBeCloseTo(0.5, 5);
   });
 
+  it('uses zero-valued blink blendshapes as a fully open eye signal', () => {
+    const blendshapes = [
+      { categoryName: 'eyeBlinkLeft', score: 0 },
+      { categoryName: 'eyeBlinkRight', score: 0 },
+    ];
+    const open = extractFaceMetrics(makeMesh(), blendshapes, 640, 480);
+    expect(open).not.toBeNull();
+    expect(open!.eyeAspect).toBe(1);
+
+    blendshapes[0].score = 0.92;
+    blendshapes[1].score = 0.9;
+    const closed = extractFaceMetrics(makeMesh(), blendshapes, 640, 480);
+    expect(closed).not.toBeNull();
+    expect(closed!.eyeAspect).toBeLessThan(0.1);
+  });
+
   it('turning the head left (nose right) drives yaw negative', () => {
     // interocular = 0.16; nose 0.09 right of center -> yaw ~= -22.5
     const m = extractFaceMetrics(makeMesh(0.09), null, 640, 480);

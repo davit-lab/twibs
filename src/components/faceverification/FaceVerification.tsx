@@ -41,6 +41,7 @@ interface FaceVerificationProps {
 
 const STABLE_FRAMES_REQUIRED = 7;
 const EMBEDDING_SAMPLES = 3;
+const EMBEDDING_CAPTURE_ATTEMPTS = 5;
 const EMBEDDING_CONSISTENCY_MIN = 0.72;
 
 function cosineSimilarity(a: number[], b: number[]): number {
@@ -84,6 +85,7 @@ export default function FaceVerification({
   const [state, setState] = useState<VerificationState>('idle');
   const [challenge, setChallenge] = useState<IssuedChallenge | null>(null);
   const [cooldownSec, setCooldownSec] = useState(0);
+  const [failureDetail, setFailureDetail] = useState('');
 
   const stateRef = useRef(state);
   const challengeStartAtRef = useRef<number | null>(null);
@@ -204,6 +206,7 @@ export default function FaceVerification({
     submittingRef.current = false;
     setChallenge(null);
     challengeStartAtRef.current = null;
+    setFailureDetail('');
     liveness.reset();
     go('detecting_face');
   }, [liveness, go]);
@@ -216,6 +219,7 @@ export default function FaceVerification({
     const proof = liveness.buildProof();
     const issued = challenge;
     if (!proof || !issued) {
+      setFailureDetail('The liveness sequence was incomplete. Follow each prompt until its progress reaches 100%.');
       submittingRef.current = false;
       go(mode === 'enroll' ? 'liveness_failed' : 'face_match_failed');
       return;
@@ -233,15 +237,14 @@ export default function FaceVerification({
       const video = videoRef.current;
       if (embeddingHook.ready && video && video.readyState >= 2 && video.videoWidth > 0) {
         const samples: number[][] = [];
-        for (let i = 0; i < EMBEDDING_SAMPLES; i++) {
+        for (let i = 0; i < EMBEDDING_CAPTURE_ATTEMPTS && samples.length < EMBEDDING_SAMPLES; i++) {
           const canvas = document.createElement('canvas');
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
           canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
           const sample = await embeddingHook.extractEmbedding(canvas);
-          if (!sample) break;
-          samples.push(sample);
-          if (i < EMBEDDING_SAMPLES - 1) await new Promise((resolve) => setTimeout(resolve, 160));
+          if (sample) samples.push(sample);
+          if (samples.length < EMBEDDING_SAMPLES) await new Promise((resolve) => setTimeout(resolve, 180));
         }
         embedding = averageEmbeddings(samples);
       }
@@ -250,6 +253,9 @@ export default function FaceVerification({
     }
 
     if (!embedding) {
+      setFailureDetail(
+        embeddingHook.error || 'The final face capture was unclear. Keep your full face visible and use brighter, even lighting.',
+      );
       submittingRef.current = false;
       go(mode === 'enroll' ? 'liveness_failed' : 'face_match_failed');
       return;
@@ -271,6 +277,7 @@ export default function FaceVerification({
       retry();
       return;
     }
+    setFailureDetail(res.message || 'The server rejected this verification attempt.');
     go(mode === 'enroll' ? 'liveness_failed' : 'face_match_failed');
   }, [mode, liveness, challenge, embeddingHook, onSuccess, go, retry]);
 
@@ -278,9 +285,16 @@ export default function FaceVerification({
     if (liveness.phase === 'satisfied' && state === 'liveness_in_progress') {
       submitLiveness();
     } else if (liveness.phase === 'failed' && state === 'liveness_in_progress') {
+      const details: Record<string, string> = {
+        multiple_faces: 'Only one person can be visible during enrollment.',
+        face_lost: 'Keep your face visible for the entire sequence.',
+        face_size: 'Move slightly closer to the camera and keep your full face inside the frame.',
+        instruction_missed: 'A prompt was not held long enough. Keep the pose until its progress reaches 100%.',
+      };
+      setFailureDetail(details[liveness.failedReason ?? ''] || 'The liveness sequence was not completed.');
       go('liveness_failed');
     }
-  }, [liveness.phase, state, submitLiveness, go]);
+  }, [liveness.phase, liveness.failedReason, state, submitLiveness, go]);
 
   // ---- Cooldown countdown for lockouts -------------------------------------
   useEffect(() => {
@@ -346,6 +360,10 @@ export default function FaceVerification({
       <div className="mt-4 space-y-3">
         {state !== 'liveness_in_progress' && state !== 'authentication_success' && (
           <VerificationStatus state={state} />
+        )}
+
+        {failureDetail && showRetry && (
+          <p className="rounded-xl bg-muted/60 px-4 py-3 text-sm text-muted-foreground">{failureDetail}</p>
         )}
 
         {(showRetry || state === 'camera_error') && (

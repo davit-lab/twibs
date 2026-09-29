@@ -47,7 +47,6 @@ export function useFaceDetection({ videoRef, enabled }: UseFaceDetectionOptions)
             runningMode: 'VIDEO',
             numFaces: 2,
             outputFaceBlendshapes: true,
-            outputFaceLandmarks: true,
           });
 
         let lm: FaceLandmarker;

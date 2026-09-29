@@ -86,8 +86,7 @@ export async function storeCredential(
       enabled: true,
       version,
       updated_at: new Date().toISOString(),
-    })
-    .eq("admin_id", adminId);
+    }, { onConflict: "admin_id" });
 
   if (error) throw new Error("Failed to store biometric credential");
 }

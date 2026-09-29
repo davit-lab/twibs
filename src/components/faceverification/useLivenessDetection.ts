@@ -16,7 +16,6 @@ import {
   FACE_SIZE_MIN,
   InstructionTracker,
   PROOF_SAMPLING_MS,
-  currentInstructionIndex,
   sustainFrames,
   timelineIndex,
   totalTimelineMs,
@@ -159,7 +158,8 @@ export function useLivenessDetection({ enabled, challenge, challengeStartAtRef }
         s.lastFaceAt = t;
 
         if (t <= totalMs && t - s.lastSampleAt >= PROOF_SAMPLING_MS) {
-          const action = seq[timelineIndex(seq, t)].type;
+          const timelineIdx = timelineIndex(seq, t);
+          const action = seq[timelineIdx].type;
           s.frames.push({
             t: Math.round(t),
             action,
@@ -178,10 +178,9 @@ export function useLivenessDetection({ enabled, challenge, challengeStartAtRef }
 
           // Feed the tracker at the SAME cadence the proof samples (5Hz), so
           // the on-screen progress matches what the server will re-validate.
-          const idx = currentInstructionIndex(seq, s.satisfied);
-          const tracker = s.trackers[idx];
+          const tracker = s.trackers[timelineIdx];
           if (tracker && tracker.feed(sig)) {
-            s.satisfied[idx] = true;
+            s.satisfied[timelineIdx] = true;
           }
         }
 
@@ -201,12 +200,12 @@ export function useLivenessDetection({ enabled, challenge, challengeStartAtRef }
       }
 
       // UI snapshot (throttled, cheap).
-      const idx = currentInstructionIndex(seq, s.satisfied);
+      const idx = timelineIndex(seq, Math.min(t, Math.max(0, totalMs - 1)));
       setActiveIndex((prev) => (prev === idx ? prev : idx));
       const ip = s.trackers[idx]?.progress ?? 0;
       setInstructionProgress((prev) => (Math.round(ip * 20) === Math.round(prev * 20) ? prev : ip));
       const doneCount = s.satisfied.filter(Boolean).length;
-      const tp = doneCount / seq.length;
+      const tp = Math.min(1, (doneCount + (s.trackers[idx]?.progress ?? 0)) / seq.length);
       setTotalProgress((prev) => (Math.round(tp * 40) === Math.round(prev * 40) ? prev : tp));
 
       // Completion: every instruction satisfied AND the challenge timeline fully
@@ -226,6 +225,8 @@ export function useLivenessDetection({ enabled, challenge, challengeStartAtRef }
             sampledFrames: s.frames.length,
             timelineMs: totalMs,
           });
+        } else if (t > totalMs + PROOF_SAMPLING_MS) {
+          fail('instruction_missed');
         }
       }
     },

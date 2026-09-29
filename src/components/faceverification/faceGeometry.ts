@@ -52,6 +52,10 @@ export function blendshapeScore(bs: BlendshapeLike[] | null | undefined, name: s
   return 0;
 }
 
+function hasBlendshape(bs: BlendshapeLike[] | null | undefined, name: string): boolean {
+  return !!bs?.some((category) => category.categoryName === name);
+}
+
 export interface FaceMetrics {
   yaw: number;
   pitch: number;
@@ -109,7 +113,12 @@ export function extractFaceMetrics(
     blendshapeScore(blendshapes, 'eyeBlinkLeft'),
     blendshapeScore(blendshapes, 'eyeBlinkRight'),
   );
-  const eyeAspect = blink > 0.02 ? 1 - blink : geoEye;
+  const hasBlinkSignal =
+    hasBlendshape(blendshapes, 'eyeBlinkLeft') || hasBlendshape(blendshapes, 'eyeBlinkRight');
+  // ARKit blink scores are 0 while open and 1 while closed. Checking for a
+  // score above zero incorrectly discarded the useful "open" signal. The
+  // geometric fallback is scaled to the same 0..1 range.
+  const eyeAspect = hasBlinkSignal ? 1 - blink : geoEye * 2;
 
   const mouthCorner = dist(lm[INDICES.MOUTH_LEFT], lm[INDICES.MOUTH_RIGHT]);
   const mouthOpenGeo = mouthCorner > 0 ? dist(lm[INDICES.UPPER_LIP], lm[INDICES.LOWER_LIP]) / mouthCorner : 0;
