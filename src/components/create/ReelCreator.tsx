@@ -533,11 +533,11 @@ export default function ReelCreator({ open, onOpenChange }: ReelCreatorProps) {
 
         <main className="min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain">
           {stage === 'create' && (
-            <div className="flex min-h-full flex-col items-center px-4 py-4 sm:justify-center sm:py-6">
+            <div className="flex min-h-full flex-col items-center px-3 py-3 sm:justify-center sm:px-4 sm:py-5">
               <input ref={fileInputRef} type="file" accept="video/*" onChange={handleFileSelect} className="hidden" />
 
               <div
-                className="relative aspect-[9/16] max-h-[65vh] w-full max-w-[330px] overflow-hidden rounded-[26px] bg-[#161616] shadow-[0_28px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/10"
+                  className="relative aspect-[9/16] max-h-[calc(100dvh-170px)] w-full max-w-[390px] overflow-hidden rounded-[28px] bg-[#161616] shadow-[0_28px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/10 sm:max-h-[74vh]"
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={(event) => {
                   event.preventDefault();
@@ -597,7 +597,7 @@ export default function ReelCreator({ open, onOpenChange }: ReelCreatorProps) {
                 )}
               </div>
 
-              <div className="mt-4 flex rounded-full border border-white/10 bg-white/[0.05] p-1">
+              <div className="mt-3 flex rounded-full border border-white/10 bg-white/[0.05] p-1">
                 <button type="button" onClick={() => setUploadMode('upload')} className={cn('flex h-10 min-w-28 items-center justify-center gap-2 rounded-full px-4 text-xs font-semibold transition', uploadMode === 'upload' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white')}>
                   <Upload className="h-4 w-4" /> Library
                 </button>
