@@ -116,32 +116,20 @@ export default function Marketplace() {
 
   return (
     <MainLayout>
-      <main className="mx-auto w-full max-w-[86rem] px-4 pb-28 pt-4 sm:px-5 lg:px-8 lg:pb-10 lg:pt-7">
-        <header className="space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                Twibs Shop
-              </p>
-              <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                Marketplace
-              </h1>
-              <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                Browse products from businesses on Twibs with delivery, pickup, and direct order tracking.
-              </p>
-            </div>
-
-            <nav aria-label="Marketplace account" className="flex shrink-0 items-center gap-2">
-              {user && (
-                <HeaderLink to="/orders" label="Orders" icon={<PackageCheck className="h-4 w-4" aria-hidden />} />
-              )}
-              {user && <CartLink count={cartCount} />}
-            </nav>
+      <main className="mx-auto w-full max-w-[82rem] px-4 pb-28 pt-3 sm:px-5 lg:px-8 lg:pb-10 lg:pt-6">
+        <header className="space-y-3">
+          <div className="max-w-[calc(100%-5.75rem)] sm:max-w-none">
+            <h1 className="text-[1.55rem] font-bold leading-tight tracking-tight text-foreground sm:text-3xl">
+              Marketplace
+            </h1>
+            <p className="mt-0.5 max-w-xl text-[13px] leading-5 text-muted-foreground sm:text-sm">
+              Products from Twibs businesses, with delivery, pickup, and order tracking.
+            </p>
           </div>
 
           <section
             aria-label="Marketplace tools"
-            className="rounded-[1.25rem] border border-border bg-card/70 p-3 shadow-sm"
+            className="rounded-2xl border border-border bg-card/70 p-2.5 shadow-sm"
           >
             <div className="flex gap-2">
               <div className="relative min-w-0 flex-1">
@@ -154,7 +142,7 @@ export default function Marketplace() {
                   onChange={(event) => updateSearch(event.target.value)}
                   placeholder="Search products or stores"
                   aria-label="Search the marketplace"
-                  className="h-11 rounded-xl border-border/80 bg-background pl-9 pr-9 text-[15px]"
+                  className="h-10 rounded-xl border-border/80 bg-background pl-9 pr-9 text-[14px]"
                 />
                 {rawQuery && (
                   <button
@@ -167,22 +155,28 @@ export default function Marketplace() {
                   </button>
                 )}
               </div>
-
-              <Button asChild className="h-11 rounded-xl px-3 sm:px-4">
-                <Link to={sellerCta}>
-                  <Plus className="h-4 w-4 sm:mr-2" aria-hidden />
-                  <span className="hidden sm:inline">{accounts.length > 0 ? 'List item' : 'Sell'}</span>
-                </Link>
-              </Button>
             </div>
 
-            <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto]">
+            <nav aria-label="Marketplace account" className="mt-2 grid grid-cols-3 gap-2">
+              {user && (
+                <HeaderLink to="/orders" label="Orders" icon={<PackageCheck className="h-4 w-4" aria-hidden />} />
+              )}
+              {user && <CartLink count={cartCount} />}
+              <Button asChild className={cn('h-9 rounded-xl px-2 text-xs font-semibold', !user && 'col-span-3')}>
+                <Link to={sellerCta}>
+                  <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+                  {accounts.length > 0 ? 'List' : 'Sell'}
+                </Link>
+              </Button>
+            </nav>
+
+            <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-[1fr_1fr_auto_auto]">
               <Select
                 value={filters.fulfillment ?? 'all'}
                 onValueChange={(value) => update({ fulfillment: value === 'all' ? null : (value as MarketplaceFilters['fulfillment']) })}
               >
-                <SelectTrigger className="h-10 rounded-xl" aria-label="Filter by fulfilment">
-                  <Truck className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden />
+                <SelectTrigger className="h-9 rounded-xl text-xs sm:text-sm" aria-label="Filter by fulfilment">
+                  <Truck className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden />
                   <SelectValue placeholder="Fulfilment" />
                 </SelectTrigger>
                 <SelectContent>
@@ -194,8 +188,8 @@ export default function Marketplace() {
               </Select>
 
               <Select value={filters.sort} onValueChange={(value) => update({ sort: value as MarketplaceFilters['sort'] })}>
-                <SelectTrigger className="h-10 rounded-xl" aria-label="Sort results">
-                  <ArrowUpDown className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden />
+                <SelectTrigger className="h-9 rounded-xl text-xs sm:text-sm" aria-label="Sort results">
+                  <ArrowUpDown className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -221,7 +215,7 @@ export default function Marketplace() {
           </section>
 
           {categories && categories.length > 0 && (
-            <div className="-mx-4 overflow-x-auto border-y border-border/80 px-4 py-2 [scrollbar-width:none] sm:mx-0 sm:border-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+            <div className="-mx-4 overflow-x-auto border-y border-border/80 px-4 py-1.5 [scrollbar-width:none] sm:mx-0 sm:border-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
               <div className="flex min-w-max gap-2">
                 <CategoryChip active={filters.categoryId === null} onClick={() => update({ categoryId: null })}>
                   All
@@ -367,10 +361,10 @@ function HeaderLink({ to, label, icon }: { to: string; label: string; icon: Reac
   return (
     <Link
       to={to}
-      className="inline-flex h-10 items-center gap-2 rounded-full border border-border bg-card px-3 text-sm font-semibold shadow-sm transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      className="inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-2 text-xs font-semibold transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:text-sm"
     >
       {icon}
-      <span className="hidden sm:inline">{label}</span>
+      <span className="truncate">{label}</span>
     </Link>
   );
 }
@@ -379,13 +373,13 @@ function CartLink({ count }: { count: number }) {
   return (
     <Link
       to="/cart"
-      className="relative inline-flex h-10 items-center gap-2 rounded-full border border-border bg-card px-3 text-sm font-semibold shadow-sm transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      className="relative inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-2 text-xs font-semibold transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:text-sm"
       aria-label={`Cart, ${count} items`}
     >
       <ShoppingBag className="h-4 w-4" aria-hidden />
-      <span className="hidden sm:inline">Cart</span>
+      <span className="truncate">Cart</span>
       {count > 0 && (
-        <span className="grid min-w-5 place-items-center rounded-full bg-foreground px-1.5 py-0.5 text-[10px] font-bold text-background">
+        <span className="grid min-w-4 place-items-center rounded-full bg-foreground px-1 py-0.5 text-[9px] font-bold text-background">
           {count}
         </span>
       )}
@@ -410,7 +404,7 @@ function PriceInput({
       </span>
       <Input
         aria-label={label}
-        className="h-10 rounded-xl pl-6"
+        className="h-9 rounded-xl pl-6 text-xs sm:text-sm"
         inputMode="decimal"
         min="0"
         step="0.01"
@@ -439,7 +433,7 @@ function CategoryChip({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-sm font-medium transition',
+        'inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition sm:text-sm',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
         active
           ? 'border-foreground bg-foreground text-background'
