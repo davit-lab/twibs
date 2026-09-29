@@ -9,6 +9,8 @@ export interface InterestCategory {
   name: string;
   icon: string;
   color: string;
+  active?: boolean;
+  sort_order?: number;
 }
 
 export interface UserInterest {
@@ -29,6 +31,8 @@ export function useInterestCategories() {
       const { data, error } = await (supabase as any)
         .from('interest_categories')
         .select('*')
+        .eq('active', true)
+        .order('sort_order', { ascending: true })
         .order('name');
 
       if (error) throw error;
@@ -53,14 +57,17 @@ export function useUserInterests(userId?: string) {
           id,
           category_id,
           created_at,
-          interest_categories (
+          interest_categories!inner (
             id,
             name,
             icon,
-            color
+            color,
+            active,
+            sort_order
           )
         `)
-        .eq('user_id', targetUserId);
+        .eq('user_id', targetUserId)
+        .eq('interest_categories.active', true);
 
       if (error) throw error;
       return (data || []) as UserInterestWithCategory[];

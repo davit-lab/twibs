@@ -8,6 +8,7 @@ import { toast } from '@/hooks/use-toast';
 import {
   Users, FileText, Clapperboard, BookOpen, Flag, BadgeCheck, ShoppingBag,
   Settings, ScrollText, Loader2, Trash, ShieldAlert, ScanFace, Megaphone,
+  Building2, PackageCheck, Compass, Activity,
 } from 'lucide-react';
 import AdminControlCenter from '@/components/admin/AdminControlCenter';
 import AdminUsersTab from '@/components/admin/AdminUsersTab';
@@ -22,6 +23,10 @@ import AdminDeletedUsersTab from '@/components/admin/AdminDeletedUsersTab';
 import AdminFaceAuthTab from '@/components/admin/AdminFaceAuthTab';
 import AdminAdsTab from '@/components/admin/AdminAdsTab';
 import AdminMarketplaceTab from '@/components/admin/AdminMarketplaceTab';
+import AdminBusinessesTab from '@/components/admin/AdminBusinessesTab';
+import AdminOrdersTab from '@/components/admin/AdminOrdersTab';
+import AdminCommunitiesTab from '@/components/admin/AdminCommunitiesTab';
+import AdminHealthTab from '@/components/admin/AdminHealthTab';
 import RedButtonControl from '@/components/admin/security/RedButtonControl';
 import PurgeAllUsersDialog from '@/components/admin/PurgeAllUsersDialog';
 import { cn } from '@/lib/utils';
@@ -35,8 +40,12 @@ const TABS: { value: string; icon: React.ElementType; label: string; staffOnly?:
   { value: 'reports', icon: Flag, label: 'Reports' },
   { value: 'ads', icon: Megaphone, label: 'Ads' },
   { value: 'marketplace', icon: ShoppingBag, label: 'Marketplace' },
+  { value: 'businesses', icon: Building2, label: 'Businesses', staffOnly: true },
+  { value: 'orders', icon: PackageCheck, label: 'Orders', staffOnly: true },
+  { value: 'communities', icon: Compass, label: 'Communities', staffOnly: true },
   { value: 'verification', icon: BadgeCheck, label: 'Verify' },
   { value: 'settings', icon: Settings, label: 'Settings', staffOnly: true },
+  { value: 'health', icon: Activity, label: 'Health', staffOnly: true },
   { value: 'biometric', icon: ScanFace, label: 'Biometric', staffOnly: true },
   { value: 'security', icon: ShieldAlert, label: 'Security', superOnly: true },
   { value: 'audit', icon: ScrollText, label: 'Audit' },
@@ -167,6 +176,10 @@ export default function Admin() {
             <AdminMarketplaceTab />
           </TabsContent>
 
+          {isAdmin && <TabsContent value="businesses"><AdminBusinessesTab /></TabsContent>}
+          {isAdmin && <TabsContent value="orders"><AdminOrdersTab /></TabsContent>}
+          {isAdmin && <TabsContent value="communities"><AdminCommunitiesTab /></TabsContent>}
+
           <TabsContent value="verification">
             <AdminVerificationTab />
           </TabsContent>
@@ -176,6 +189,8 @@ export default function Admin() {
               <AdminSettingsTab />
             </TabsContent>
           )}
+
+          {isAdmin && <TabsContent value="health"><AdminHealthTab /></TabsContent>}
 
           {isAdmin && (
             <TabsContent value="biometric">

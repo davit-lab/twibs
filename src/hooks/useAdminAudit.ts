@@ -25,6 +25,11 @@ const ACTION_LABELS: Record<string, string> = {
   unhide_content: 'Content unhidden',
   delete_content: 'Content deleted',
   set_system_setting: 'Setting changed',
+  business_active: 'Business restored',
+  business_suspended: 'Business suspended',
+  order_status_changed: 'Order status changed',
+  interest_category_created: 'Interest topic created',
+  interest_category_updated: 'Interest topic updated',
 };
 
 export function getActionLabel(action: string) {
