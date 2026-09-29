@@ -48,6 +48,9 @@ try {
     audioA.autoplay = true; audioA.srcObject = receivedA; document.body.append(audioA); await audioA.play();
     const audioB = document.createElement('audio');
     audioB.autoplay = true; audioB.srcObject = receivedB; document.body.append(audioB); await audioB.play();
+    const videoB = document.createElement('video');
+    videoB.autoplay = true; videoB.muted = true; videoB.playsInline = true; videoB.srcObject = receivedB; document.body.append(videoB); await videoB.play();
+    await waitFor(() => videoB.videoWidth > 0 && videoB.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA);
     const inboundAudioBytes = async (pc) => {
       let total = 0;
       (await pc.getStats()).forEach((row) => { if (row.type === 'inbound-rtp' && row.kind === 'audio') total += row.bytesReceived || 0; });
@@ -64,13 +67,22 @@ try {
     const videoSender = a.getSenders().find((sender) => sender.track?.kind === 'video');
     const audioSender = a.getSenders().find((sender) => sender.track?.kind === 'audio');
     const canvas = document.createElement('canvas'); canvas.width = 1280; canvas.height = 720;
+    const context2d = canvas.getContext('2d');
+    context2d.fillStyle = '#7c3aed'; context2d.fillRect(0, 0, canvas.width, canvas.height);
     const displayStream = canvas.captureStream(15); const displayTrack = displayStream.getVideoTracks()[0];
+    const displayFrames = setInterval(() => {
+      context2d.fillStyle = Date.now() % 2 ? '#7c3aed' : '#111827';
+      context2d.fillRect(0, 0, canvas.width, canvas.height);
+    }, 100);
     const audioTrackBefore = audioSender.track;
     await videoSender.replaceTrack(displayTrack);
     await new Promise((resolve) => setTimeout(resolve, 300));
     const audioSurvived = audioSender.track === audioTrackBefore && audioSender.track?.readyState === 'live';
     await videoSender.replaceTrack(cameraA);
+    clearInterval(displayFrames);
     const cameraRestored = videoSender.track === cameraA && cameraA.readyState === 'live';
+    await waitFor(() => !videoB.paused && videoB.videoWidth > 0);
+    const remoteVideoElementPlaying = !videoB.paused && videoB.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
 
     [...streamA.getTracks(), ...streamB.getTracks(), ...displayStream.getTracks()].forEach((track) => track.stop());
     a.close(); b.close();
@@ -131,6 +143,7 @@ try {
       unmuted,
       audioSurvivedScreenReplace: audioSurvived,
       cameraRestored,
+      remoteVideoElementPlaying,
       allTracksEnded: [...streamA.getTracks(), ...streamB.getTracks(), ...displayStream.getTracks()].every((track) => track.readyState === 'ended'),
       connectionsClosed: a.connectionState === 'closed' && b.connectionState === 'closed',
       repeatedConnection: c.connectionState === 'closed' && d.connectionState === 'closed',

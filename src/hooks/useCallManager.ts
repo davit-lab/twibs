@@ -798,8 +798,6 @@ export function useCallManager(): CallManager {
             setRemoteStream(new MediaStream(current.getTracks()));
           }
         };
-        event.track.onmute = publishRemoteStream;
-        event.track.onunmute = publishRemoteStream;
         event.track.onended = () => {
           const current = remoteStreamRef.current;
           if (!current) return;
@@ -1449,20 +1447,28 @@ export function useCallManager(): CallManager {
 
       let screenStreamLocal: MediaStream;
       try {
+        // Keep the picker request intentionally broad. Several tablet/browser
+        // combinations reject desktop-oriented width/height constraints even
+        // though they can capture a display. Tune the selected track afterward
+        // on a best-effort basis instead.
         screenStreamLocal = await navigator.mediaDevices.getDisplayMedia({
-          video: {
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            frameRate: { ideal: 15, max: 30 },
-          },
+          video: true,
           audio: false,
         });
       } catch (err) {
         const name = (err as { name?: string })?.name;
+        const mobileBrowser = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+          || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
         if (mountedRef.current) {
-          setError(name === 'AbortError' || name === 'NotAllowedError'
-            ? 'Screen sharing was cancelled or not allowed.'
-            : err instanceof Error ? err.message : 'Screen share unavailable');
+          setError(
+            mobileBrowser && name === 'NotAllowedError'
+              ? 'This mobile browser did not allow live screen capture. You can still view another participant’s shared screen.'
+              : name === 'AbortError' || name === 'NotAllowedError'
+                ? 'Screen sharing was cancelled or not allowed.'
+                : name === 'NotSupportedError' || name === 'TypeError'
+                  ? 'Screen sharing is not supported by this browser.'
+                  : err instanceof Error ? err.message : 'Screen share unavailable'
+          );
         }
         return false;
       }
@@ -1475,6 +1481,14 @@ export function useCallManager(): CallManager {
         if (mountedRef.current) setError('No shareable content was selected.');
         return false;
       }
+      void screenTrack.applyConstraints({
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 15, max: 30 },
+      }).catch(() => {
+        // The browser owns display-capture sizing. The unconstrained live track
+        // remains fully usable when a device rejects these quality hints.
+      });
       callDiagnostic('SCREEN_TRACK_ACQUIRED', {
         readyState: screenTrack.readyState,
         width: screenTrack.getSettings().width,

@@ -33,6 +33,18 @@ import { useCall } from './callContext';
 
 const REACTIONS = ['❤️', '😂', '👍', '👏', '😮'];
 
+type FullscreenVideoElement = HTMLVideoElement & {
+  webkitEnterFullscreen?: () => void;
+};
+
+function resumeVideo(element: HTMLVideoElement | null) {
+  if (!element?.srcObject || !element.paused) return;
+  void element.play().catch(() => {
+    // Muted inline video normally autoplays. Mobile browsers can temporarily
+    // reject play while the page is backgrounded; lifecycle listeners retry.
+  });
+}
+
 function formatDuration(totalSeconds: number) {
   const mins = Math.floor(totalSeconds / 60);
   const secs = totalSeconds % 60;
@@ -99,8 +111,11 @@ export function CallScreen() {
   const screenPreviewRef = useRef<HTMLVideoElement | null>(null);
   const screenStageRef = useRef<HTMLDivElement | null>(null);
 
+  // A receiver track commonly becomes temporarily muted during replaceTrack.
+  // Keep the video element mounted through that transition or mobile Safari /
+  // Chromium can permanently lose the rendering surface.
   const hasRemoteVideo = !!remoteStream?.getVideoTracks().some(
-    (track) => track.readyState === 'live' && !track.muted
+    (track) => track.readyState === 'live'
   );
   const isVideoCall = session?.call_type === 'video' || !!localStream?.getVideoTracks().length;
   const isVisualCall = isVideoCall || hasRemoteVideo || isScreenSharing || remoteIsScreenSharing;
@@ -123,12 +138,18 @@ export function CallScreen() {
   // Attach local/remote streams
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
+      if (remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
+      }
+      resumeVideo(remoteVideoRef.current);
     }
   }, [remoteStream, hasRemoteVideo, remoteIsScreenSharing]);
   useEffect(() => {
     if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
+      if (localVideoRef.current.srcObject !== localStream) {
+        localVideoRef.current.srcObject = localStream;
+      }
+      resumeVideo(localVideoRef.current);
     }
   }, [localStream, isScreenSharing, isVideoOff]);
   useEffect(() => {
@@ -137,6 +158,37 @@ export function CallScreen() {
       void screenPreviewRef.current.play().catch(() => {});
     }
   }, [screenStream]);
+
+  // Mobile/tablet browsers pause media when the tab is backgrounded, the
+  // screen rotates, or the system share picker covers the page. Resume the
+  // existing elements without recreating their MediaStreams.
+  useEffect(() => {
+    const resumeVisibleVideo = () => {
+      if (document.visibilityState === 'hidden') return;
+      resumeVideo(remoteVideoRef.current);
+      resumeVideo(localVideoRef.current);
+      resumeVideo(screenPreviewRef.current);
+    };
+    document.addEventListener('visibilitychange', resumeVisibleVideo);
+    window.addEventListener('pageshow', resumeVisibleVideo);
+    window.addEventListener('orientationchange', resumeVisibleVideo);
+    return () => {
+      document.removeEventListener('visibilitychange', resumeVisibleVideo);
+      window.removeEventListener('pageshow', resumeVisibleVideo);
+      window.removeEventListener('orientationchange', resumeVisibleVideo);
+    };
+  }, []);
+
+  const openSharedScreenFullscreen = useCallback(() => {
+    const stage = screenStageRef.current;
+    if (stage?.requestFullscreen) {
+      void stage.requestFullscreen().catch(() => {});
+      return;
+    }
+    // iPhone/iPad Safari exposes fullscreen on the video element instead of a
+    // general Element.requestFullscreen implementation.
+    (remoteVideoRef.current as FullscreenVideoElement | null)?.webkitEnterFullscreen?.();
+  }, []);
 
   useEffect(() => {
     if (!remoteIsScreenSharing) setScreenZoom(1);
@@ -187,7 +239,7 @@ export function CallScreen() {
             <button
               type="button"
               aria-label="View shared screen in fullscreen"
-              onClick={() => void screenStageRef.current?.requestFullscreen?.()}
+              onClick={openSharedScreenFullscreen}
               className="flex h-10 w-10 items-center justify-center rounded-full text-[hsl(var(--muted-foreground))] transition-colors hover:bg-[hsl(var(--muted))]"
             >
               <Maximize2 className="h-5 w-5" />
@@ -318,6 +370,8 @@ export function CallScreen() {
               autoPlay
               playsInline
               muted
+              onLoadedMetadata={(event) => resumeVideo(event.currentTarget)}
+              onCanPlay={(event) => resumeVideo(event.currentTarget)}
               style={remoteIsScreenSharing ? {
                 width: `${screenZoom * 100}%`,
                 height: `${screenZoom * 100}%`,
@@ -346,7 +400,7 @@ export function CallScreen() {
         )}
         {screenStream ? (
           <div className="absolute right-3 top-3 h-28 w-44 overflow-hidden rounded-md border border-white/20 bg-black shadow-lg sm:h-36 sm:w-60">
-            <video ref={screenPreviewRef} autoPlay playsInline muted className="h-full w-full object-contain" />
+            <video ref={screenPreviewRef} autoPlay playsInline muted onLoadedMetadata={(event) => resumeVideo(event.currentTarget)} onCanPlay={(event) => resumeVideo(event.currentTarget)} className="h-full w-full object-contain" />
             <span className="absolute bottom-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">Your screen</span>
           </div>
         ) : localStream?.getVideoTracks().length ? (
@@ -356,6 +410,8 @@ export function CallScreen() {
               autoPlay
               playsInline
               muted
+              onLoadedMetadata={(event) => resumeVideo(event.currentTarget)}
+              onCanPlay={(event) => resumeVideo(event.currentTarget)}
               className={cn('h-full w-full object-cover', isVideoCall && !isScreenSharing && 'scale-x-[-1]')}
             />
             {isVideoOff ? (
@@ -371,7 +427,7 @@ export function CallScreen() {
             <button type="button" aria-label="Zoom out" disabled={screenZoom <= 1} onClick={() => setScreenZoom((value) => Math.max(1, value - 0.25))} className="grid h-8 w-8 place-items-center disabled:opacity-35"><ZoomOut className="h-4 w-4" /></button>
             <span className="w-11 text-center text-[11px] tabular-nums">{Math.round(screenZoom * 100)}%</span>
             <button type="button" aria-label="Zoom in" disabled={screenZoom >= 2} onClick={() => setScreenZoom((value) => Math.min(2, value + 0.25))} className="grid h-8 w-8 place-items-center disabled:opacity-35"><ZoomIn className="h-4 w-4" /></button>
-            <button type="button" aria-label="Fullscreen" onClick={() => void screenStageRef.current?.requestFullscreen?.()} className="grid h-8 w-8 place-items-center"><Maximize2 className="h-4 w-4" /></button>
+            <button type="button" aria-label="Fullscreen" onClick={openSharedScreenFullscreen} className="grid h-8 w-8 place-items-center"><Maximize2 className="h-4 w-4" /></button>
           </div>
         ) : null}
 

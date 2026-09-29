@@ -4,6 +4,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { useCall } from './callContext';
 
+function resumeVideo(element: HTMLVideoElement | null) {
+  if (!element?.srcObject || !element.paused) return;
+  void element.play().catch(() => {});
+}
+
 export function CallMiniPlayer() {
   const call = useCall();
   const { peerProfile, remoteStream, isMuted, phase, isScreenSharing, remoteIsScreenSharing } = call;
@@ -24,7 +29,10 @@ export function CallMiniPlayer() {
 
   useEffect(() => {
     if (videoRef.current && remoteStream) {
-      videoRef.current.srcObject = remoteStream;
+      if (videoRef.current.srcObject !== remoteStream) {
+        videoRef.current.srcObject = remoteStream;
+      }
+      resumeVideo(videoRef.current);
     }
   }, [remoteStream]);
 
@@ -55,7 +63,7 @@ export function CallMiniPlayer() {
     peerProfile?.display_name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
 
   const hasVideo = !!remoteStream && remoteStream.getVideoTracks().some(
-    (track) => track.readyState === 'live' && !track.muted
+    (track) => track.readyState === 'live'
   );
 
   const ends = (
@@ -107,6 +115,8 @@ export function CallMiniPlayer() {
             autoPlay
             playsInline
             muted
+            onLoadedMetadata={(event) => resumeVideo(event.currentTarget)}
+            onCanPlay={(event) => resumeVideo(event.currentTarget)}
             className={cn('h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-black', remoteIsScreenSharing ? 'object-contain' : 'object-cover')}
           />
         ) : (
@@ -148,6 +158,8 @@ export function CallMiniPlayer() {
             autoPlay
             playsInline
             muted
+            onLoadedMetadata={(event) => resumeVideo(event.currentTarget)}
+            onCanPlay={(event) => resumeVideo(event.currentTarget)}
             className={cn('h-14 w-14 overflow-hidden rounded-xl bg-black', remoteIsScreenSharing ? 'object-contain' : 'object-cover')}
           />
         ) : (
