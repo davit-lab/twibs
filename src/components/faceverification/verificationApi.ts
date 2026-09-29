@@ -114,3 +114,28 @@ export function webauthnRegisterVerify(payload: {
 }): Promise<VerificationApiResult<{ registered: boolean }>> {
   return invoke<{ registered: boolean }>('webauthn-register-verify', payload);
 }
+
+export interface WebAuthnAuthOptions {
+  challengeId: string;
+  challenge: string;
+  rpId: string;
+  timeout?: number;
+  userVerification?: UserVerificationRequirement;
+  allowCredentials: Array<{ id: string; type: PublicKeyCredentialType; transports?: AuthenticatorTransport[] }>;
+}
+
+export function webauthnAuthOptions(): Promise<VerificationApiResult<{ options: WebAuthnAuthOptions }>> {
+  return invoke<{ options: WebAuthnAuthOptions }>('webauthn-auth-options', {});
+}
+
+export function webauthnAuthVerify(payload: {
+  challengeId: string;
+  challenge: string;
+  credentialId: string;
+  clientDataJSON: string;
+  authenticatorData: string;
+  signature: string;
+  faceGrantToken?: string;
+}): Promise<VerificationApiResult<FaceVerificationSuccess>> {
+  return invoke<FaceVerificationSuccess>('webauthn-auth-verify', payload);
+}

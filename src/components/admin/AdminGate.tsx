@@ -11,12 +11,17 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import FaceVerification from '@/components/faceverification/FaceVerification';
 import {
+  getStatus,
   revokeAllSessions,
   validateGrant,
+  webauthnAuthOptions,
+  webauthnAuthVerify,
+  type StatusResponse,
 } from '@/components/faceverification/verificationApi';
 import { clearGrant, getGrant, grantTimeRemainingMs, setGrant } from '@/lib/security/adminFaceGrant';
+import { arrayBufferToB64url, b64urlToArrayBuffer } from '@/lib/security/webauthnHelpers';
 import type { FaceVerificationSuccess } from '@/components/faceverification/types';
-import { Loader2, ShieldCheck, Lock } from 'lucide-react';
+import { KeyRound, Loader2, ShieldCheck, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ReactNode } from 'react';
 
@@ -35,10 +40,15 @@ export default function AdminGate({ children }: AdminGateProps) {
   const { isEnabled, isLoading } = useAppSettings();
   const [checking, setChecking] = useState(true);
   const [granted, setGranted] = useState(false);
+  const [status, setStatus] = useState<StatusResponse | null>(null);
+  const [pendingFaceGrant, setPendingFaceGrant] = useState<FaceVerificationSuccess | null>(null);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [passkeyError, setPasskeyError] = useState('');
 
   const lock = useCallback(() => {
     clearGrant();
     setGranted(false);
+    setPendingFaceGrant(null);
     revokeAllSessions().catch(() => undefined);
   }, []);
 
@@ -47,6 +57,8 @@ export default function AdminGate({ children }: AdminGateProps) {
     let cancelled = false;
     (async () => {
       setChecking(true);
+      const statusResult = await getStatus();
+      if (!cancelled && statusResult.ok && statusResult.data) setStatus(statusResult.data);
       const current = getGrant();
       if (current) {
         const res = await validateGrant(current.token);
@@ -79,10 +91,67 @@ export default function AdminGate({ children }: AdminGateProps) {
 
   const handleSuccess = useCallback((result: FaceVerificationSuccess) => {
     if (result.grantToken && result.expiresIn) {
+      if (status?.webauthnMode === 'required') {
+        setPendingFaceGrant(result);
+        return;
+      }
       setGrant(result.grantToken, result.expiresIn, 'face');
       setGranted(true);
     }
-  }, []);
+  }, [status?.webauthnMode]);
+
+  const authenticateWithPasskey = useCallback(async () => {
+    if (!navigator.credentials?.get) {
+      setPasskeyError('Passkeys are not supported by this browser or device.');
+      return;
+    }
+    setPasskeyBusy(true);
+    setPasskeyError('');
+    try {
+      const optionResult = await webauthnAuthOptions();
+      const options = optionResult.data?.options;
+      if (!optionResult.ok || !options || options.allowCredentials.length === 0) {
+        throw new Error('No passkey is registered for this administrator.');
+      }
+      const credential = await navigator.credentials.get({
+        publicKey: {
+          challenge: b64urlToArrayBuffer(options.challenge),
+          rpId: options.rpId,
+          timeout: options.timeout ?? 120000,
+          userVerification: 'required',
+          allowCredentials: options.allowCredentials.map((item) => ({
+            id: b64urlToArrayBuffer(item.id),
+            type: item.type,
+            transports: item.transports,
+          })),
+        },
+      }) as PublicKeyCredential | null;
+      if (!credential) return;
+      const response = credential.response as AuthenticatorAssertionResponse;
+      const verified = await webauthnAuthVerify({
+        challengeId: options.challengeId,
+        challenge: options.challenge,
+        credentialId: credential.id,
+        clientDataJSON: arrayBufferToB64url(response.clientDataJSON),
+        authenticatorData: arrayBufferToB64url(response.authenticatorData),
+        signature: arrayBufferToB64url(response.signature),
+        faceGrantToken: pendingFaceGrant?.grantToken,
+      });
+      if (!verified.ok || !verified.data?.grantToken || !verified.data.expiresIn) {
+        throw new Error(verified.message || 'Passkey verification failed.');
+      }
+      setGrant(verified.data.grantToken, verified.data.expiresIn, 'passkey');
+      setPendingFaceGrant(null);
+      setGranted(true);
+    } catch (error) {
+      const value = error as { name?: string; message?: string };
+      if (value.name !== 'NotAllowedError' && value.name !== 'AbortError') {
+        setPasskeyError(value.message || 'Passkey verification failed.');
+      }
+    } finally {
+      setPasskeyBusy(false);
+    }
+  }, [pendingFaceGrant?.grantToken]);
 
   if (isLoading || checking) {
     return (
@@ -128,6 +197,28 @@ export default function AdminGate({ children }: AdminGateProps) {
     );
   }
 
+  if (pendingFaceGrant) {
+    return (
+      <div className="container flex min-h-[70vh] max-w-lg items-center px-4 py-10">
+        <div className="w-full rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+            <KeyRound className="h-5 w-5 text-primary" />
+          </div>
+          <h1 className="mt-4 text-xl font-semibold">Confirm with your passkey</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Face verification passed. Use your device PIN, fingerprint, or secure face unlock to finish.
+          </p>
+          {passkeyError && <p className="mt-3 text-sm text-destructive">{passkeyError}</p>}
+          <Button className="mt-5 w-full" onClick={authenticateWithPasskey} disabled={passkeyBusy}>
+            {passkeyBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />}
+            Continue with passkey
+          </Button>
+          <Button variant="ghost" className="mt-2 w-full" onClick={lock}>Start over</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container max-w-2xl px-4 py-10">
       <div className="mb-6 text-center">
@@ -138,6 +229,15 @@ export default function AdminGate({ children }: AdminGateProps) {
         </p>
       </div>
       <FaceVerification mode="verify" onSuccess={handleSuccess} />
+      {status && status.webauthnMode !== 'disabled' && status.webauthnCount > 0 && (
+        <div className="mt-4 text-center">
+          <Button variant="outline" onClick={authenticateWithPasskey} disabled={passkeyBusy}>
+            {passkeyBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />}
+            Use device passkey
+          </Button>
+          {passkeyError && <p className="mt-2 text-sm text-destructive">{passkeyError}</p>}
+        </div>
+      )}
     </div>
   );
 }

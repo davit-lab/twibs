@@ -78,8 +78,8 @@ export interface FaceMetrics {
 export function extractFaceMetrics(
   lm: LandmarkLike[],
   blendshapes: BlendshapeLike[] | null | undefined,
-  frameW = 640,
-  frameH = 480,
+  _frameW = 640,
+  _frameH = 480,
 ): FaceMetrics | null {
   if (!lm || lm.length < 300) return null;
 
@@ -97,7 +97,11 @@ export function extractFaceMetrics(
   // Negative yaw = nose right of the eye midline = head turned LEFT.
   // Negative pitch = nose above the eye line = head tilted UP.
   const yaw = ((eyeMidX - nose.x) / interOcular) * 40;
-  const pitch = ((nose.y - eyeMidY) / interOcular) * 40;
+  // The nose naturally sits below the eye line on a front-facing face. Remove
+  // that anatomical baseline before converting movement to an angle; without
+  // this correction a neutral face reads as roughly 25 degrees "down".
+  const neutralNoseDropRatio = 0.625;
+  const pitch = (((nose.y - eyeMidY) / interOcular) - neutralNoseDropRatio) * 40;
   const roll = (Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * 180) / Math.PI;
 
   const geoEye = (ear(LEFT_EYE, lm) + ear(RIGHT_EYE, lm)) / 2;
@@ -136,7 +140,10 @@ export function extractFaceMetrics(
 
   const width = maxX - minX;
   const height = maxY - minY;
-  const faceSize = Math.max(width, height) / Math.max(frameW, frameH);
+  // MediaPipe landmarks are already normalized to the video frame (0..1).
+  // Dividing by pixel dimensions again made a normal face appear ~1000x too
+  // small and prevented the liveness challenge from ever starting.
+  const faceSize = Math.max(width, height);
   const x = (minX + maxX) / 2;
   const y = (minY + maxY) / 2;
   const quality = visCount > 0 ? visSum / visCount : 1;

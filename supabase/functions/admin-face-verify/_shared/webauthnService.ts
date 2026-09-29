@@ -168,11 +168,13 @@ export async function verifyRegistration(
   supabase: SupabaseClient,
   cfg: WebAuthnConfig,
   input: RegisterVerificationInput,
+  expectedAdminId: string,
 ): Promise<{ credentialId: string; publicKey: string; counter: number; aaguid: string }> {
   const stored = await loadWebAuthnChallenge(supabase, input.challengeId);
   if (!stored || stored.status !== "pending" || stored.purpose !== "webauthn_register") {
     throw new Error("invalid or expired challenge");
   }
+  if (stored.created_by !== expectedAdminId) throw new Error("challenge owner mismatch");
   if (new Date(stored.expires_at).getTime() < Date.now()) throw new Error("challenge expired");
   const hash = await sha256Hex(input.challenge);
   if (hash !== stored.challenge_hash) throw new Error("challenge mismatch");
@@ -201,6 +203,8 @@ export async function verifyRegistration(
     await crypto.subtle.digest("SHA-256", new TextEncoder().encode(cfg.rpId)),
   );
   if (toHex(parsed.rpIdHash) !== toHex(rpIdHash)) throw new Error("rpIdHash mismatch");
+  if ((parsed.flags & 0x01) === 0) throw new Error("user not present");
+  if ((parsed.flags & 0x04) === 0) throw new Error("user verification required");
 
   const point = parsed.coseKey ? coseKeyToRawPoint(parsed.coseKey) : null;
   if (!parsed.credId || !point) throw new Error("no credential data");
@@ -239,7 +243,7 @@ export async function webauthnAuthOptions(
     challenge,
     rpId: cfg.rpId,
     timeout: 120_000,
-    userVerification: "preferred",
+    userVerification: "required",
     allowCredentials: (data || []).map((c: { credential_id: string }) => ({
       id: c.credential_id,
       type: "public-key",
@@ -294,11 +298,13 @@ export async function verifyAuthentication(
   supabase: SupabaseClient,
   cfg: WebAuthnConfig,
   input: AuthVerificationInput,
+  expectedAdminId: string,
 ): Promise<{ adminId: string; credentialId: string }> {
   const stored = await loadWebAuthnChallenge(supabase, input.challengeId);
   if (!stored || stored.status !== "pending" || stored.purpose !== "webauthn_auth") {
     throw new Error("invalid or expired challenge");
   }
+  if (stored.created_by !== expectedAdminId) throw new Error("challenge owner mismatch");
   if (new Date(stored.expires_at).getTime() < Date.now()) throw new Error("challenge expired");
   const hash = await sha256Hex(input.challenge);
   if (hash !== stored.challenge_hash) throw new Error("challenge mismatch");
@@ -311,6 +317,7 @@ export async function verifyAuthentication(
     .maybeSingle();
   if (!cred) throw new Error("unknown credential");
   const credential = cred as unknown as WebAuthnCredentialRow;
+  if (credential.admin_id !== expectedAdminId) throw new Error("credential owner mismatch");
 
   const clientDataJSON = fromB64Url(input.clientDataJSON);
   let clientData: { type?: string; challenge?: string; origin?: string };
@@ -334,6 +341,7 @@ export async function verifyAuthentication(
   );
   if (toHex(parsed.rpIdHash) !== toHex(rpIdHash)) throw new Error("rpIdHash mismatch");
   if ((parsed.flags & 0x01) === 0) throw new Error("user not present");
+  if ((parsed.flags & 0x04) === 0) throw new Error("user verification required");
 
   // Counter rollback => the key material may be cloned.
   if (parsed.signCount !== 0 && parsed.signCount <= credential.counter) {

@@ -77,7 +77,8 @@ export function generateSequence(): ChallengeInstruction[] {
 
   const seq: ChallengeInstruction[] = [{ type: "center", label: "Look at the camera", windowMs: 2000 }];
 
-  const chosenGazes = shuffle(gazes).slice(0, 1 + Math.floor(Math.random() * 2)); // 1-2
+  const randomBit = crypto.getRandomValues(new Uint8Array(1))[0] & 1;
+  const chosenGazes = shuffle(gazes).slice(0, 1 + randomBit); // 1-2
   const chosenMicros = shuffle(micros).slice(0, 2); // exactly 2 micros
   const body = shuffle([...chosenGazes, ...chosenMicros]);
 

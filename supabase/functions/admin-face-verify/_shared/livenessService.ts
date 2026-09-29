@@ -78,7 +78,7 @@ const MAX_MULTI_FACE_FRAMES = 0; // any multi-face frame is suspicious
 
 // How many consecutive frames must satisfy an instruction to be accepted.
 function sustainFrames(samplingRate: number): number {
-  return Math.max(2, Math.round(samplingRate * 1.0)); // >= ~1.0s of hold
+  return Math.max(2, Math.round(samplingRate * 1.4)); // >= ~1.4s of hold
 }
 
 export function validateLivenessProof(
@@ -123,6 +123,32 @@ export function validateLivenessProof(
   const validActions = new Set(expectedSeq);
   for (const f of frames) {
     if (!validActions.has(f.action)) return { ok: false, reason: "invalid action label" };
+    const metrics = [
+      f.yaw, f.pitch, f.roll, f.eyeAspect, f.mouthAspect,
+      f.smileAspect, f.faceSize, f.x, f.y, f.quality,
+    ];
+    if (metrics.some((value) => !Number.isFinite(value))) {
+      return { ok: false, reason: "invalid frame metrics" };
+    }
+    if (
+      Math.abs(f.yaw) > 90 || Math.abs(f.pitch) > 90 || Math.abs(f.roll) > 90 ||
+      f.eyeAspect < 0 || f.eyeAspect > 1 ||
+      f.mouthAspect < 0 || f.mouthAspect > 1 ||
+      f.smileAspect < 0 || f.smileAspect > 1 ||
+      f.faceSize < 0 || f.faceSize > 1 ||
+      f.x < 0.12 || f.x > 0.88 || f.y < 0.1 || f.y > 0.9 ||
+      f.quality < 0 || f.quality > 1
+    ) {
+      return { ok: false, reason: "implausible frame metrics" };
+    }
+  }
+
+  // Reject proofs with long sampling gaps. A prerecorded/fabricated proof is
+  // otherwise able to satisfy hold counters using sparse, hand-picked frames.
+  for (let i = 1; i < frames.length; i++) {
+    if (frames[i].t - frames[i - 1].t > 750) {
+      return { ok: false, reason: "irregular frame cadence" };
+    }
   }
 
   // ---- Anti-spoofing counters -------------------------------------------

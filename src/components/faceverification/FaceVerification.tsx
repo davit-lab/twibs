@@ -40,6 +40,37 @@ interface FaceVerificationProps {
 }
 
 const STABLE_FRAMES_REQUIRED = 7;
+const EMBEDDING_SAMPLES = 3;
+const EMBEDDING_CONSISTENCY_MIN = 0.72;
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dot = 0;
+  let aNorm = 0;
+  let bNorm = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    aNorm += a[i] * a[i];
+    bNorm += b[i] * b[i];
+  }
+  return dot / Math.max(Number.EPSILON, Math.sqrt(aNorm * bNorm));
+}
+
+function averageEmbeddings(samples: number[][]): number[] | null {
+  if (samples.length !== EMBEDDING_SAMPLES || samples.some((sample) => sample.length !== 128)) {
+    return null;
+  }
+  for (let i = 0; i < samples.length; i++) {
+    for (let j = i + 1; j < samples.length; j++) {
+      if (cosineSimilarity(samples[i], samples[j]) < EMBEDDING_CONSISTENCY_MIN) return null;
+    }
+  }
+  const average = Array.from({ length: 128 }, (_, index) =>
+    samples.reduce((sum, sample) => sum + sample[index], 0) / samples.length,
+  );
+  const norm = Math.sqrt(average.reduce((sum, value) => sum + value * value, 0));
+  if (!Number.isFinite(norm) || norm === 0) return null;
+  return average.map((value) => value / norm);
+}
 
 export default function FaceVerification({
   mode,
@@ -201,11 +232,18 @@ export default function FaceVerification({
       }
       const video = videoRef.current;
       if (embeddingHook.ready && video && video.readyState >= 2 && video.videoWidth > 0) {
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
-        embedding = await embeddingHook.extractEmbedding(canvas);
+        const samples: number[][] = [];
+        for (let i = 0; i < EMBEDDING_SAMPLES; i++) {
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const sample = await embeddingHook.extractEmbedding(canvas);
+          if (!sample) break;
+          samples.push(sample);
+          if (i < EMBEDDING_SAMPLES - 1) await new Promise((resolve) => setTimeout(resolve, 160));
+        }
+        embedding = averageEmbeddings(samples);
       }
     } catch {
       embedding = null;

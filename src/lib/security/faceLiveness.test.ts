@@ -163,6 +163,23 @@ describe('extractFaceMetrics', () => {
     expect(Math.abs(m!.yaw)).toBeLessThan(2);
   });
 
+  it('yields a near-zero pitch for a neutral front-facing face', () => {
+    const m = extractFaceMetrics(makeMesh(), null, 640, 480);
+    expect(m).not.toBeNull();
+    expect(Math.abs(m!.pitch)).toBeLessThan(2);
+  });
+
+  it('keeps face size in normalized frame coordinates', () => {
+    const mesh = makeMesh();
+    mesh[10] = { x: 0.5, y: 0.25, z: 0 };
+    mesh[152] = { x: 0.5, y: 0.75, z: 0 };
+    mesh[234] = { x: 0.25, y: 0.5, z: 0 };
+    mesh[454] = { x: 0.75, y: 0.5, z: 0 };
+    const m = extractFaceMetrics(mesh, null, 1920, 1080);
+    expect(m).not.toBeNull();
+    expect(m!.faceSize).toBeCloseTo(0.5, 5);
+  });
+
   it('turning the head left (nose right) drives yaw negative', () => {
     // interocular = 0.16; nose 0.09 right of center -> yaw ~= -22.5
     const m = extractFaceMetrics(makeMesh(0.09), null, 640, 480);

@@ -225,7 +225,7 @@ async function handleVerify(body: Json, req: Request): Promise<Response> {
     return fail("generic_failure", "Verification failed. Please try again.");
   }
 
-  const credential = await loadCredential(supabase);
+  const credential = await loadCredential(supabase, user.id);
   if (!credential || !credential.enabled) {
     await writeSecurityEvent(supabase, {
       eventType: "face_auth_not_configured",
@@ -252,7 +252,7 @@ async function handleVerify(body: Json, req: Request): Promise<Response> {
   });
 
   const grant = await issueGrant(supabase, {
-    adminId: credential.admin_id,
+    adminId: user.id,
     challengeId,
     factor: "face",
   });
@@ -260,7 +260,7 @@ async function handleVerify(body: Json, req: Request): Promise<Response> {
   await writeSecurityEvent(supabase, {
     eventType: "face_auth_success",
     success: true,
-    userId: credential.admin_id,
+    userId: user.id,
     ipHash,
     userAgent,
     metadata: { challengeId, similarity: round4(score), threshold },
@@ -268,7 +268,7 @@ async function handleVerify(body: Json, req: Request): Promise<Response> {
   await writeAdminAudit(supabase, {
     action: "admin_face_verify_success",
     targetType: "admin",
-    targetId: credential.admin_id,
+    targetId: user.id,
     details: { method: "face", factor: "face" },
   });
 
@@ -449,7 +449,7 @@ async function handleStatus(req: Request): Promise<Response> {
   const user = await requireStaff(req);
   const supabase = getSupabaseAdmin();
 
-  const credential = await loadCredential(supabase);
+  const credential = await loadCredential(supabase, user.id);
   const { data: settings } = await supabase
     .from("system_settings")
     .select("value")
@@ -473,12 +473,15 @@ async function handleStatus(req: Request): Promise<Response> {
   });
 }
 
-async function handleValidateGrant(body: Json): Promise<Response> {
+async function handleValidateGrant(body: Json, req: Request): Promise<Response> {
+  const user = await requireStaff(req);
   const token = String(body.grantToken ?? "");
   if (!token) return fail("invalid_input", "Missing grant token.");
   const supabase = getSupabaseAdmin();
   const { ok: valid, claims } = await validateGrant(supabase, token);
-  if (!valid) return fail("invalid_grant", "This session is no longer valid.");
+  if (!valid || claims?.sub !== user.id) {
+    return fail("invalid_grant", "This session is no longer valid.");
+  }
   const remaining = Math.max(0, (claims!.exp * 1000 - Date.now()) / 1000);
   return ok({ valid: true, expiresIn: Math.floor(remaining), sub: claims!.sub, factor: claims!.factor });
 }
@@ -525,7 +528,7 @@ async function handleWebAuthnRegisterVerify(body: Json, req: Request): Promise<R
     challenge: String(body.challenge ?? ""),
     clientDataJSON: String(body.clientDataJSON ?? ""),
     attestationObject: String(body.attestationObject ?? ""),
-  });
+  }, user.id);
   await writeSecurityEvent(supabase, {
     eventType: "webauthn_registered",
     success: true,
@@ -556,6 +559,16 @@ async function handleWebAuthnAuthVerify(body: Json, req: Request): Promise<Respo
   const user = await requireStaff(req);
   const supabase = getSupabaseAdmin();
   const cfg = resolveConfig(req.headers.get("origin") || new URL(req.url).origin);
+  const webauthnMode = Deno.env.get("WEBAUTHN_MODE") ?? "optional";
+  const faceGrantToken = String(body.faceGrantToken ?? "");
+  if (webauthnMode === "required") {
+    const faceGrant = faceGrantToken
+      ? await validateGrant(supabase, faceGrantToken)
+      : { ok: false as const };
+    if (!faceGrant.ok || faceGrant.claims?.sub !== user.id || faceGrant.claims?.factor !== "face") {
+      return fail("face_factor_required", "Complete face verification before using your passkey.", 403);
+    }
+  }
   const result = await verifyAuthentication(supabase, cfg, {
     challengeId: String(body.challengeId ?? ""),
     challenge: String(body.challenge ?? ""),
@@ -563,12 +576,13 @@ async function handleWebAuthnAuthVerify(body: Json, req: Request): Promise<Respo
     clientDataJSON: String(body.clientDataJSON ?? ""),
     authenticatorData: String(body.authenticatorData ?? ""),
     signature: String(body.signature ?? ""),
-  });
+  }, user.id);
   const grant = await issueGrant(supabase, {
     adminId: result.adminId,
     challengeId: body.challengeId ? String(body.challengeId) : null,
     factor: "passkey",
   });
+  if (faceGrantToken) await revokeGrant(supabase, faceGrantToken);
   await writeSecurityEvent(supabase, {
     eventType: "webauthn_success",
     success: true,
@@ -637,7 +651,7 @@ serve(async (req) => {
       case "status":
         return await handleStatus(req);
       case "validate-grant":
-        return await handleValidateGrant(body);
+        return await handleValidateGrant(body, req);
       case "revoke":
         return await handleRevoke(body, req);
       case "webauthn-register-options":

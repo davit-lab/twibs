@@ -22,10 +22,12 @@ export const DEFAULT_MODEL_VERSION = "face-api-resnet50-v1";
 
 export async function loadCredential(
   supabase: SupabaseClient,
+  adminId: string,
 ): Promise<BiometricCredential | null> {
   const { data } = await supabase
     .from("admin_biometric_credentials")
     .select("*")
+    .eq("admin_id", adminId)
     .eq("enabled", true)
     .order("version", { ascending: false })
     .limit(1)
@@ -71,7 +73,7 @@ export async function storeCredential(
   template: number[],
   modelVersion: string,
 ): Promise<void> {
-  const existing = await loadCredential(supabase);
+  const existing = await loadCredential(supabase, adminId);
 
   // Rotation: increment version on replace, never keep old raw templates.
   const version = existing ? existing.version + 1 : 1;
