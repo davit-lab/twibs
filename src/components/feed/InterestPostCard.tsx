@@ -158,11 +158,6 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
           </div>
           <p className="text-[13px] text-muted-foreground truncate leading-snug">
             @{username}
-            {category && (
-              <>
-            {' '}· <span className="font-medium text-primary">{category.name}</span>
-              </>
-            )}
             {' '}· {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
           </p>
         </div>
@@ -189,8 +184,8 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
 
       {/* Content */}
       {category && (
-        <div className="mb-2.5">
-          <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/[0.07] px-2.5 py-1 text-[11px] font-bold tracking-[0.02em] text-primary">
+        <div className="mb-2">
+          <span className="text-[12px] font-semibold text-primary">
             {category.name}
           </span>
         </div>
@@ -261,7 +256,7 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
           aria-label={commentsOpen ? 'Close discussion' : 'Open discussion'}
         >
           <MessageCircle className={cn('h-[18px] w-[18px]', commentsOpen && 'fill-current')} />
-          <span>{post.comment_count > 0 ? `${formatCount(post.comment_count)} replies` : 'Reply'}</span>
+          <span>{post.comment_count > 0 ? `${formatCount(post.comment_count)} comments` : 'Discuss'}</span>
         </button>
 
         <div className="flex-1" />
@@ -338,7 +333,7 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
             transition={{ duration: 0.22, ease: 'easeInOut' }}
             className="overflow-hidden"
           >
-            <div className="mt-3 pt-4 border-t border-border/60">
+            <div className="mt-3 border-t border-border/60 pt-3">
               <InterestPostComments postId={post.id} autoFocus={commentsOpen} />
             </div>
           </motion.div>

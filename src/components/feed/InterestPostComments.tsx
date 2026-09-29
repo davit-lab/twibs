@@ -351,7 +351,7 @@ export default function InterestPostComments({ postId, autoFocus = false }: Inte
   }
 
   return (
-    <div className="mt-1 space-y-3 rounded-2xl border border-border/60 bg-surface/35 p-3.5 sm:p-4">
+    <div className="space-y-3">
       <div className="flex items-baseline gap-2">
         <p className="text-sm font-bold tracking-tight">Discussion</p>
         {comments.length > 0 && (
@@ -404,7 +404,7 @@ export default function InterestPostComments({ postId, autoFocus = false }: Inte
       )}
 
       {comments.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border/80 bg-background/50 px-4 py-4 text-center">
+        <div className="px-4 py-3 text-center">
           <p className="text-sm font-semibold">Start the discussion</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Be the first to share your take on this post.
