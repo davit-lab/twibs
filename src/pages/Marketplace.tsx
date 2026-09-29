@@ -1,6 +1,20 @@
 import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { PackageCheck, Plus, Search, ShoppingBag, SlidersHorizontal, Store, X } from 'lucide-react';
+import {
+  ArrowUpDown,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  PackageCheck,
+  Plus,
+  Search,
+  ShoppingBag,
+  SlidersHorizontal,
+  Store,
+  Truck,
+  X,
+} from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import ProductCard from '@/components/marketplace/ProductCard';
 import MarketplaceSponsoredShowcase from '@/components/marketplace/MarketplaceSponsoredShowcase';
@@ -39,7 +53,6 @@ export default function Marketplace() {
   const { accounts } = useBusiness();
   const sellerCta = accounts.length > 0 ? '/b?tab=store' : '/business/create';
   const [searchParams, setSearchParams] = useSearchParams();
-  // Seeded from the URL so a tag or seller link lands on a real search.
   const [rawQuery, setRawQuery] = useState(() => searchParams.get('query') ?? '');
   const [filters, setFilters] = useState<MarketplaceFilters>(DEFAULT_MARKETPLACE_FILTERS);
   const [page, setPage] = useState(0);
@@ -48,9 +61,6 @@ export default function Marketplace() {
   const { data: categories } = useProductCategories();
   const cartCount = useCartCount(!!user);
 
-  // A shopper only ever sees approved listings. RLS also lets a seller see their
-  // own drafts, so they are filtered out here rather than leaked into a browse
-  // surface for everyone else.
   const filtersWithQuery = useMemo<MarketplaceFilters>(
     () => ({ ...filters, query: debouncedQuery.trim() }),
     [filters, debouncedQuery]
@@ -76,76 +86,103 @@ export default function Marketplace() {
     setPage(0);
   };
 
+  const updateSearch = (next: string) => {
+    setRawQuery(next);
+    setPage(0);
+    setSearchParams(next.trim() ? { query: next } : {}, { replace: true });
+  };
+
+  const clearFilters = () => {
+    setRawQuery('');
+    setSearchParams({}, { replace: true });
+    setFilters(DEFAULT_MARKETPLACE_FILTERS);
+    setPage(0);
+  };
+
+  const selectedCategory = categories?.find((category) => category.id === filters.categoryId);
+  const sortLabel = MARKETPLACE_SORTS.find((sort) => sort.value === filters.sort)?.label ?? 'Newest';
   const hasActiveFilters =
-    !!rawQuery ||
+    !!rawQuery.trim() ||
     filters.categoryId !== null ||
     filters.fulfillment !== null ||
     filters.minCents !== null ||
-    filters.maxCents !== null;
+    filters.maxCents !== null ||
+    filters.sort !== DEFAULT_MARKETPLACE_FILTERS.sort;
+  const resultTitle = rawQuery.trim()
+    ? `Results for "${rawQuery.trim()}"`
+    : selectedCategory
+      ? selectedCategory.name
+      : 'New arrivals';
 
   return (
     <MainLayout>
-      <div className="mx-auto w-full max-w-[90rem] px-4 py-5 lg:px-8 lg:py-8">
-        <header className="mb-5 flex flex-col items-start gap-4 border-b border-border pb-5 lg:flex-row lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Marketplace</h1>
-            <p className="mt-1 text-[13px] text-muted-foreground">Shop directly from businesses on Twibs.</p>
-          </div>
-          <nav aria-label="Marketplace account" className="flex w-full items-center gap-2 lg:w-auto lg:justify-end">
-            {user && (
-              <Link
-                to="/orders"
-                className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold transition-colors hover:border-primary/50 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                <PackageCheck className="h-4 w-4" aria-hidden />
-                Orders
-              </Link>
-            )}
-            {user && <CartLink count={cartCount} />}
-            <Button asChild size="sm" variant="outline" className="hidden sm:inline-flex"><Link to={sellerCta}><Plus className="mr-1.5 h-3.5 w-3.5" />Sell</Link></Button>
-          </nav>
-        </header>
+      <main className="mx-auto w-full max-w-[86rem] px-4 pb-28 pt-4 sm:px-5 lg:px-8 lg:pb-10 lg:pt-7">
+        <header className="space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Twibs Shop
+              </p>
+              <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                Marketplace
+              </h1>
+              <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+                Browse products from businesses on Twibs with delivery, pickup, and direct order tracking.
+              </p>
+            </div>
 
-        <div className="-mx-4 mb-7 border-b border-border bg-background/95 px-4 py-3 supports-[backdrop-filter]:backdrop-blur-sm lg:sticky lg:top-0 lg:z-10 lg:mx-0 lg:px-0">
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-[180px] flex-1">
+            <nav aria-label="Marketplace account" className="flex shrink-0 items-center gap-2">
+              {user && (
+                <HeaderLink to="/orders" label="Orders" icon={<PackageCheck className="h-4 w-4" aria-hidden />} />
+              )}
+              {user && <CartLink count={cartCount} />}
+            </nav>
+          </div>
+
+          <section
+            aria-label="Marketplace tools"
+            className="rounded-[1.25rem] border border-border bg-card/70 p-3 shadow-sm"
+          >
+            <div className="flex gap-2">
+              <div className="relative min-w-0 flex-1">
                 <Search
                   className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                   aria-hidden
                 />
                 <Input
                   value={rawQuery}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setRawQuery(next);
-                    setPage(0);
-                    setSearchParams(next ? { query: next } : {}, { replace: true });
-                  }}
-                  placeholder="Search products and businesses"
+                  onChange={(event) => updateSearch(event.target.value)}
+                  placeholder="Search products or stores"
                   aria-label="Search the marketplace"
-                  className="pl-9"
+                  className="h-11 rounded-xl border-border/80 bg-background pl-9 pr-9 text-[15px]"
                 />
                 {rawQuery && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setRawQuery('');
-                      setSearchParams({}, { replace: true });
-                    }}
+                    onClick={() => updateSearch('')}
                     aria-label="Clear search"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="absolute right-3 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
-                    <X className="h-4 w-4" aria-hidden />
+                    <X className="h-3.5 w-3.5" aria-hidden />
                   </button>
                 )}
               </div>
 
+              <Button asChild className="h-11 rounded-xl px-3 sm:px-4">
+                <Link to={sellerCta}>
+                  <Plus className="h-4 w-4 sm:mr-2" aria-hidden />
+                  <span className="hidden sm:inline">{accounts.length > 0 ? 'List item' : 'Sell'}</span>
+                </Link>
+              </Button>
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto]">
               <Select
                 value={filters.fulfillment ?? 'all'}
-                onValueChange={(v) => update({ fulfillment: v === 'all' ? null : (v as MarketplaceFilters['fulfillment']) })}
+                onValueChange={(value) => update({ fulfillment: value === 'all' ? null : (value as MarketplaceFilters['fulfillment']) })}
               >
-                <SelectTrigger className="w-[9.5rem] shrink-0" aria-label="Filter by fulfilment">
+                <SelectTrigger className="h-10 rounded-xl" aria-label="Filter by fulfilment">
+                  <Truck className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden />
                   <SelectValue placeholder="Fulfilment" />
                 </SelectTrigger>
                 <SelectContent>
@@ -156,130 +193,185 @@ export default function Marketplace() {
                 </SelectContent>
               </Select>
 
-              <Select value={filters.sort} onValueChange={(v) => update({ sort: v as MarketplaceFilters['sort'] })}>
-                <SelectTrigger className="w-[9rem] shrink-0 sm:w-[11rem]" aria-label="Sort results">
+              <Select value={filters.sort} onValueChange={(value) => update({ sort: value as MarketplaceFilters['sort'] })}>
+                <SelectTrigger className="h-10 rounded-xl" aria-label="Sort results">
+                  <ArrowUpDown className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {MARKETPLACE_SORTS.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      {s.label}
+                  {MARKETPLACE_SORTS.map((sort) => (
+                    <SelectItem key={sort.value} value={sort.value}>
+                      {sort.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
 
-            {categories && categories.length > 0 && (
-              <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
-                <CategoryChip
-                  active={filters.categoryId === null}
-                  onClick={() => update({ categoryId: null })}
-                >
+              <PriceInput
+                label="Minimum price"
+                placeholder="Min"
+                onChange={(value) => update({ minCents: value })}
+              />
+              <PriceInput
+                label="Maximum price"
+                placeholder="Max"
+                onChange={(value) => update({ maxCents: value })}
+              />
+            </div>
+          </section>
+
+          {categories && categories.length > 0 && (
+            <div className="-mx-4 overflow-x-auto border-y border-border/80 px-4 py-2 [scrollbar-width:none] sm:mx-0 sm:border-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+              <div className="flex min-w-max gap-2">
+                <CategoryChip active={filters.categoryId === null} onClick={() => update({ categoryId: null })}>
                   All
                 </CategoryChip>
-                {categories.map((c) => (
+                {categories.map((category) => (
                   <CategoryChip
-                    key={c.id}
-                    active={filters.categoryId === c.id}
-                    onClick={() => update({ categoryId: c.id })}
+                    key={category.id}
+                    active={filters.categoryId === category.id}
+                    onClick={() => update({ categoryId: category.id })}
                   >
-                    {c.name}
+                    {category.name}
                   </CategoryChip>
                 ))}
               </div>
-            )}
-          </div>
-        </div>
+            </div>
+          )}
+        </header>
 
         <MarketplaceSponsoredShowcase ads={sponsored} />
 
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4"><div><p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{hasActiveFilters ? 'Browse Marketplace' : 'Just listed'}</p><h2 className="mt-1 text-xl font-semibold">{hasActiveFilters ? 'Search results' : 'New arrivals'}</h2></div><div className="flex gap-2"><Input aria-label="Minimum price in USD" className="w-24 sm:w-28" type="number" min="0" step="0.01" placeholder="Min USD" onChange={e => update({ minCents: e.target.value ? Math.max(0,Math.round(Number(e.target.value)*100)) : null })} /><Input aria-label="Maximum price in USD" className="w-24 sm:w-28" type="number" min="0" step="0.01" placeholder="Max USD" onChange={e => update({ maxCents: e.target.value ? Math.max(0,Math.round(Number(e.target.value)*100)) : null })} /></div></div>
-        {isLoading ? (
-          <div className="grid grid-cols-2 gap-x-3 gap-y-7 sm:grid-cols-3 sm:gap-x-5 lg:grid-cols-4 xl:grid-cols-5">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="overflow-hidden rounded-lg border border-border">
-                <Skeleton className="aspect-square w-full" />
-                <div className="space-y-2 p-3">
-                  <Skeleton className="h-3.5 w-4/5" />
-                  <Skeleton className="h-3 w-1/2" />
-                  <Skeleton className="h-3.5 w-1/3" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : error ? (
-          <EmptyState
-            title="Could not load products"
-            body={(error as Error).message || 'Please try again.'}
-          />
-        ) : data.length === 0 ? (
-          <EmptyState
-            title={hasActiveFilters ? 'No products match those filters' : 'No products yet'}
-            body={
-              hasActiveFilters
-                ? 'Try a different search or clear the filters.'
-                : 'Businesses have not listed anything for sale on Twibs yet.'
-            }
-            action={
-              hasActiveFilters ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setRawQuery('');
-                    setSearchParams({}, { replace: true });
-                    setFilters(DEFAULT_MARKETPLACE_FILTERS);
-                    setPage(0);
-                  }}
-                >
-                  <SlidersHorizontal className="mr-2 h-3.5 w-3.5" aria-hidden />
-                  Clear filters
-                </Button>
-              ) : (
-                // Sellers arrive here looking for an upload button, so point them
-                // straight at the Store tab that actually creates listings.
-                <Button size="sm" asChild>
-                  <Link to={sellerCta}>
-                    <Plus className="mr-2 h-3.5 w-3.5" aria-hidden />
-                    {accounts.length > 0 ? 'List a product' : 'Open a business'}
-                  </Link>
-                </Button>
-              )
-            }
-          />
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-8 sm:grid-cols-3 sm:gap-x-5 lg:grid-cols-4 xl:grid-cols-5">
-              {data.flatMap((product, index) => {
-                const cards = [<ProductCard key={product.product_id} product={product} />];
-                if (index === 7 && gridSponsored[0]) {
-                  cards.push(<MarketplaceSponsoredProductCard key={`ad-${gridSponsored[0].advertisement_id}`} ad={gridSponsored[0]} />);
-                }
-                return cards;
-              })}
+        <section className="mt-6" aria-labelledby="marketplace-results-title">
+          <div className="mb-4 flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              <h2 id="marketplace-results-title" className="truncate text-xl font-bold tracking-tight">
+                {hasActiveFilters ? resultTitle : 'New arrivals'}
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {isFetching && !isLoading ? 'Refreshing products...' : `${data.length} shown on this page`}
+              </p>
             </div>
-
-            {(hasMore || page > 0) && (
-              <div className="mt-6 flex justify-center gap-3"><Button variant="outline" onClick={() => setPage(p => Math.max(0,p-1))} disabled={page === 0 || isFetching}>Previous</Button>
-                <Button variant="outline" onClick={() => setPage((p) => p + 1)} disabled={isFetching || !hasMore}>
-                  {isFetching ? 'Loading…' : 'Next page'}
-                </Button>
-              </div>
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" className="h-9 rounded-full px-3" onClick={clearFilters}>
+                <X className="mr-1.5 h-4 w-4" aria-hidden />
+                Clear
+              </Button>
             )}
-          </>
-        )}
+          </div>
+
+          {hasActiveFilters && (
+            <div className="mb-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {rawQuery.trim() && <ActivePill label={rawQuery.trim()} onClear={() => updateSearch('')} />}
+              {selectedCategory && <ActivePill label={selectedCategory.name} onClear={() => update({ categoryId: null })} />}
+              {filters.fulfillment && (
+                <ActivePill label={FULFILLMENT_LABELS[filters.fulfillment]} onClear={() => update({ fulfillment: null })} />
+              )}
+              {filters.sort !== DEFAULT_MARKETPLACE_FILTERS.sort && (
+                <ActivePill label={sortLabel} onClear={() => update({ sort: DEFAULT_MARKETPLACE_FILTERS.sort })} />
+              )}
+              {filters.minCents !== null && <ActivePill label={`From $${filters.minCents / 100}`} onClear={() => update({ minCents: null })} />}
+              {filters.maxCents !== null && <ActivePill label={`To $${filters.maxCents / 100}`} onClear={() => update({ maxCents: null })} />}
+            </div>
+          )}
+
+          {isLoading ? (
+            <ProductSkeletonGrid />
+          ) : error ? (
+            <EmptyState
+              title="Could not load products"
+              body={(error as Error).message || 'Refresh and try again.'}
+              action={<Button size="sm" variant="outline" onClick={() => window.location.reload()}>Refresh</Button>}
+            />
+          ) : data.length === 0 ? (
+            <EmptyState
+              title={hasActiveFilters ? 'No products match that search' : 'No products yet'}
+              body={
+                hasActiveFilters
+                  ? 'Try fewer filters or a shorter product name.'
+                  : 'When businesses publish approved products, they will appear here.'
+              }
+              action={
+                hasActiveFilters ? (
+                  <Button variant="outline" size="sm" onClick={clearFilters}>
+                    <SlidersHorizontal className="mr-2 h-3.5 w-3.5" aria-hidden />
+                    Clear filters
+                  </Button>
+                ) : (
+                  <Button size="sm" asChild>
+                    <Link to={sellerCta}>
+                      <Plus className="mr-2 h-3.5 w-3.5" aria-hidden />
+                      {accounts.length > 0 ? 'List a product' : 'Open a business'}
+                    </Link>
+                  </Button>
+                )
+              }
+            />
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
+                {data.flatMap((product, index) => {
+                  const cards = [<ProductCard key={product.product_id} product={product} />];
+                  if (index === 7 && gridSponsored[0]) {
+                    cards.push(<MarketplaceSponsoredProductCard key={`ad-${gridSponsored[0].advertisement_id}`} ad={gridSponsored[0]} />);
+                  }
+                  return cards;
+                })}
+              </div>
+
+              {(hasMore || page > 0) && (
+                <div className="mt-6 flex items-center justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => setPage((current) => Math.max(0, current - 1))}
+                    disabled={page === 0 || isFetching}
+                  >
+                    <ChevronLeft className="mr-1 h-4 w-4" aria-hidden />
+                    Previous
+                  </Button>
+                  <span className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
+                    Page {page + 1}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => setPage((current) => current + 1)}
+                    disabled={isFetching || !hasMore}
+                  >
+                    {isFetching ? 'Loading' : 'Next'}
+                    <ChevronRight className="ml-1 h-4 w-4" aria-hidden />
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </section>
 
         {!user && data.length > 0 && (
-          <p className="mt-8 rounded-lg border border-border bg-muted/40 px-4 py-3 text-center text-xs text-muted-foreground">
-            <Link to="/auth" className="font-semibold text-primary hover:underline">
+          <p className="mt-8 rounded-xl border border-border bg-card px-4 py-3 text-center text-xs text-muted-foreground">
+            <Link to="/auth" className="font-semibold text-foreground underline-offset-4 hover:underline">
               Sign in
             </Link>{' '}
-            to save products and buy from businesses.
+            to save products, checkout, and message businesses.
           </p>
         )}
-      </div>
+      </main>
     </MainLayout>
+  );
+}
+
+function HeaderLink({ to, label, icon }: { to: string; label: string; icon: ReactNode }) {
+  return (
+    <Link
+      to={to}
+      className="inline-flex h-10 items-center gap-2 rounded-full border border-border bg-card px-3 text-sm font-semibold shadow-sm transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      {icon}
+      <span className="hidden sm:inline">{label}</span>
+    </Link>
   );
 }
 
@@ -287,17 +379,48 @@ function CartLink({ count }: { count: number }) {
   return (
     <Link
       to="/cart"
-      className="relative flex shrink-0 items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-semibold transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      className="relative inline-flex h-10 items-center gap-2 rounded-full border border-border bg-card px-3 text-sm font-semibold shadow-sm transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      aria-label={`Cart, ${count} items`}
     >
       <ShoppingBag className="h-4 w-4" aria-hidden />
       <span className="hidden sm:inline">Cart</span>
       {count > 0 && (
-        <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
+        <span className="grid min-w-5 place-items-center rounded-full bg-foreground px-1.5 py-0.5 text-[10px] font-bold text-background">
           {count}
         </span>
       )}
-      <span className="sr-only">{count} items in cart</span>
     </Link>
+  );
+}
+
+function PriceInput({
+  label,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  onChange: (value: number | null) => void;
+}) {
+  return (
+    <label className="relative">
+      <span className="sr-only">{label}</span>
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
+        $
+      </span>
+      <Input
+        aria-label={label}
+        className="h-10 rounded-xl pl-6"
+        inputMode="decimal"
+        min="0"
+        step="0.01"
+        type="number"
+        placeholder={placeholder}
+        onChange={(event) => {
+          onChange(event.target.value ? Math.max(0, Math.round(Number(event.target.value) * 100)) : null);
+        }}
+      />
+    </label>
   );
 }
 
@@ -308,7 +431,7 @@ function CategoryChip({
 }: {
   active: boolean;
   onClick: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <button
@@ -316,15 +439,49 @@ function CategoryChip({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+        'inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-sm font-medium transition',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
         active
-          ? 'border-primary bg-primary text-primary-foreground'
-          : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'
+          ? 'border-foreground bg-foreground text-background'
+          : 'border-border bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground'
       )}
     >
+      {active && <Check className="h-3.5 w-3.5" aria-hidden />}
       {children}
     </button>
+  );
+}
+
+function ActivePill({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-muted px-3 text-xs font-medium">
+      {label}
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={`Remove ${label}`}
+        className="grid h-5 w-5 place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <X className="h-3 w-3" aria-hidden />
+      </button>
+    </span>
+  );
+}
+
+function ProductSkeletonGrid() {
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
+      {Array.from({ length: 10 }).map((_, index) => (
+        <div key={index} className="overflow-hidden rounded-xl border border-border bg-card">
+          <Skeleton className="aspect-[4/5] w-full rounded-none" />
+          <div className="space-y-2 p-3">
+            <Skeleton className="h-4 w-4/5" />
+            <Skeleton className="h-3 w-1/2" />
+            <Skeleton className="h-4 w-1/3" />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -335,25 +492,21 @@ function EmptyState({
 }: {
   title: string;
   body: string;
-  action?: React.ReactNode;
+  action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border px-6 py-16 text-center">
-      <Store className="mb-3 h-8 w-8 text-muted-foreground" aria-hidden />
+    <div className="rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center">
+      <Store className="mx-auto mb-3 h-8 w-8 text-muted-foreground" aria-hidden />
       <h2 className="text-base font-bold">{title}</h2>
-      <p className="mt-1 max-w-sm text-[13px] text-muted-foreground">{body}</p>
+      <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-muted-foreground">{body}</p>
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }
 
-/**
- * One page of results plus a "is there more" flag, so the grid can render a
- * single page at a time without a second round trip for the count.
- */
 function usePagedSearch(filters: MarketplaceFilters, page: number) {
   const { data, isLoading, isFetching, error } = useMarketplaceSearch(filters, page);
-  const items = useMemo(() => (data ?? []).filter((p) => p.is_public), [data]);
+  const items = useMemo(() => (data ?? []).filter((product) => product.is_public), [data]);
   return {
     data: items,
     isLoading,
