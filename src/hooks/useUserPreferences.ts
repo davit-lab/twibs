@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { detectCountryFromIP, detectBrowserLanguage } from '@/lib/languageDetection';
+import { isBrowserOffline, logUnlessNetworkError } from '@/lib/network';
 
 function applyThemeToDOM() {
   const root = document.documentElement;
@@ -236,11 +237,15 @@ export function useUserPreferences() {
       setLoading(false);
       return;
     }
+    if (isBrowserOffline()) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       await loadPreferencesForUser(user.id, true);
     } catch (error) {
-      console.error('Error fetching preferences:', error);
+      logUnlessNetworkError('Error fetching preferences:', error);
     } finally {
       setLoading(false);
     }
@@ -253,6 +258,11 @@ export function useUserPreferences() {
       setLoading(false);
     }
   }, [user, fetchPreferences]);
+
+  useEffect(() => {
+    window.addEventListener('online', fetchPreferences);
+    return () => window.removeEventListener('online', fetchPreferences);
+  }, [fetchPreferences]);
 
   const applyFontSize = (size: string) => {
     const root = document.documentElement;

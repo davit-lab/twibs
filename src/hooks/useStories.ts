@@ -5,6 +5,7 @@ import { useBusiness } from '@/contexts/BusinessContext';
 import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import { useToast } from '@/hooks/use-toast';
 import type { FeedAd } from '@/lib/ads';
+import { isBrowserOffline, isNetworkError, logUnlessNetworkError } from '@/lib/network';
 import { STORY_MAX_DURATION, parseOverlays, type StoryOverlay } from '@/lib/stories';
 import type { Json } from '@/integrations/supabase/types';
 
@@ -152,6 +153,12 @@ export function useStories(options: UseStoriesOptions = {}) {
 
     const token = ++fetchTokenRef.current;
     setError(null);
+
+    if (isBrowserOffline()) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -314,8 +321,8 @@ export function useStories(options: UseStoriesOptions = {}) {
 
       setGroupedStories(grouped);
     } catch (error) {
-      console.error('Error fetching stories:', error);
-      setError('Could not load stories');
+      logUnlessNetworkError('Error fetching stories:', error);
+      setError(isNetworkError(error) ? null : 'Could not load stories');
     } finally {
       if (fetchTokenRef.current === token) setLoading(false);
     }
@@ -323,6 +330,11 @@ export function useStories(options: UseStoriesOptions = {}) {
 
   useEffect(() => {
     fetchStories();
+  }, [fetchStories]);
+
+  useEffect(() => {
+    window.addEventListener('online', fetchStories);
+    return () => window.removeEventListener('online', fetchStories);
   }, [fetchStories]);
 
   useEffect(() => {

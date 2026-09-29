@@ -4,6 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { showIncomingCallNotification } from '@/lib/pushNotifications';
 import { CallSession } from '@/lib/callTypes';
 import { MAX_INCOMING_QUEUE, RING_TIMEOUT_MS, STALE_CALL_GRACE_MS } from '@/lib/callConstants';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { isBrowserOffline, logUnlessNetworkError } from '@/lib/network';
 
 export interface CallerProfile {
   display_name: string;
@@ -42,6 +44,7 @@ export function useIncomingCalls({ getEngineState }: IncomingCallsOptions = {}) 
   const notificationRef = useRef<Notification | null>(null);
   const processedCallsRef = useRef<Set<string>>(new Set());
   const missedNotifiedRef = useRef<Set<string>>(new Set());
+  const isOnline = useOnlineStatus();
 
   // Refs mirroring state so async realtime handlers never read stale closures
   const incomingCallRef = useRef<CallSession | null>(null);
@@ -77,16 +80,21 @@ export function useIncomingCalls({ getEngineState }: IncomingCallsOptions = {}) 
   // Fetch DND status
   useEffect(() => {
     if (!user) return;
+    if (!isOnline) return;
 
     const fetchDND = async () => {
-      const { data } = await supabase
-        .from('user_preferences')
-        .select('do_not_disturb')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      try {
+        const { data } = await supabase
+          .from('user_preferences')
+          .select('do_not_disturb')
+          .eq('user_id', user.id)
+          .maybeSingle();
 
-      if (data) {
-        setDoNotDisturb(data.do_not_disturb ?? false);
+        if (data) {
+          setDoNotDisturb(data.do_not_disturb ?? false);
+        }
+      } catch (error) {
+        logUnlessNetworkError('[IncomingCalls] Failed to load DND preference:', error);
       }
     };
 
@@ -114,7 +122,7 @@ export function useIncomingCalls({ getEngineState }: IncomingCallsOptions = {}) 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, isOnline]);
 
   // Check if caller is blocked
   const isCallerBlocked = useCallback(async (callerId: string): Promise<boolean> => {
@@ -291,6 +299,7 @@ export function useIncomingCalls({ getEngineState }: IncomingCallsOptions = {}) 
   // Handle incoming calls subscription
   useEffect(() => {
     if (!user) return;
+    if (!isOnline) return;
 
     const channel = supabase
       .channel('global-incoming-calls')
@@ -375,7 +384,7 @@ export function useIncomingCalls({ getEngineState }: IncomingCallsOptions = {}) 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, processIncomingSession, createMissedCallNotification]);
+  }, [user, processIncomingSession, createMissedCallNotification, isOnline]);
 
   const clearIncomingCall = useCallback(() => {
     if (incomingCall) {

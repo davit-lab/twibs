@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { isBrowserOffline, logUnlessNetworkError } from '@/lib/network';
 
 interface BanInfo {
   reason: string;
@@ -21,6 +22,10 @@ export function useUserBan() {
         setLoading(false);
         return;
       }
+      if (isBrowserOffline()) {
+        setLoading(false);
+        return;
+      }
 
       try {
         // Check if user has an active ban
@@ -34,7 +39,7 @@ export function useUserBan() {
           .maybeSingle();
 
         if (error) {
-          console.error('Error checking ban status:', error);
+          logUnlessNetworkError('Error checking ban status:', error);
           setLoading(false);
           return;
         }
@@ -57,13 +62,15 @@ export function useUserBan() {
           setBanInfo(null);
         }
       } catch (err) {
-        console.error('Error checking ban status:', err);
+        logUnlessNetworkError('Error checking ban status:', err);
       } finally {
         setLoading(false);
       }
     };
 
     checkBanStatus();
+    window.addEventListener('online', checkBanStatus);
+    return () => window.removeEventListener('online', checkBanStatus);
   }, [user]);
 
   return { isBanned, banInfo, loading };

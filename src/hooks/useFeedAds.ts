@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchFeedAds } from '@/hooks/useAds';
 import type { FeedAd } from '@/lib/ads';
+import { isBrowserOffline, logUnlessNetworkError } from '@/lib/network';
 
 /**
  * Fetches sponsored ads for the signed-in user. Every call maps to a real
@@ -19,12 +20,16 @@ export function useFeedAds(limit = 2) {
       setLoading(false);
       return;
     }
+    if (isBrowserOffline()) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = await fetchFeedAds(user.id, limit);
       setAds((data as FeedAd[]) || []);
     } catch (e) {
-      console.error('[ads] feed ads fetch error:', e);
+      logUnlessNetworkError('[ads] feed ads fetch error:', e);
       setAds([]);
     } finally {
       setLoading(false);
@@ -33,6 +38,11 @@ export function useFeedAds(limit = 2) {
 
   useEffect(() => {
     refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    window.addEventListener('online', refresh);
+    return () => window.removeEventListener('online', refresh);
   }, [refresh]);
 
   return { ads, loading, refresh };

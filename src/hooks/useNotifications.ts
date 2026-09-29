@@ -3,6 +3,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { isBrowserOffline, logUnlessNetworkError } from '@/lib/network';
 
 export type NotificationType =
   | 'follow'
@@ -187,6 +189,7 @@ export function useNotifications() {
   const { toast } = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const isOnline = useOnlineStatus();
 
   const unreadCount = useMemo(
     () => notifications.filter(n => !n.is_read && n.user_id === user?.id && (n.business_id ?? null) === businessId).length,
@@ -196,6 +199,11 @@ export function useNotifications() {
   const fetchNotifications = useCallback(async () => {
     if (!user || (identity.type === 'business' && !businessId)) {
       setNotifications([]);
+      setLoading(false);
+      return;
+    }
+
+    if (isBrowserOffline()) {
       setLoading(false);
       return;
     }
@@ -238,7 +246,7 @@ export function useNotifications() {
       const enriched = await enrichNotificationTargets(notificationsWithActors);
       if (currentKey.current === activeIdentityKey) setNotifications(enriched);
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+      logUnlessNetworkError('Error fetching notifications:', error);
     } finally {
       setLoading(false);
     }
@@ -249,9 +257,15 @@ export function useNotifications() {
     fetchNotifications();
   }, [fetchNotifications]);
 
+  useEffect(() => {
+    window.addEventListener('online', fetchNotifications);
+    return () => window.removeEventListener('online', fetchNotifications);
+  }, [fetchNotifications]);
+
   // Subscribe to new notifications
   useEffect(() => {
     if (!user) return;
+    if (!isOnline) return;
 
     const channel = supabase
       .channel('notifications-realtime')
@@ -313,7 +327,7 @@ export function useNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, businessId, activeIdentityKey]);
+  }, [user, businessId, activeIdentityKey, isOnline]);
 
   const markAsRead = async (notificationId: string) => {
     if (!user) return;

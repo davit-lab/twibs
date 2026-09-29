@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { isBrowserOffline } from '@/lib/network';
 
 export const SETTING_KEYS = [
   'maintenance_mode',
@@ -40,8 +42,14 @@ const SystemSettingsContext = createContext<SystemSettingsContextType | undefine
 export function SystemSettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Record<AppSettingKey, boolean>>({ ...DEFAULTS });
   const [isLoading, setIsLoading] = useState(true);
+  const isOnline = useOnlineStatus();
 
   const refetch = useCallback(async () => {
+    if (isBrowserOffline()) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const { data, error } = await (supabase as any)
         .from('system_settings')
@@ -65,6 +73,8 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
   }, [refetch]);
 
   useEffect(() => {
+    if (!isOnline) return;
+
     const channel = (supabase as any)
       .channel('system-settings-sync')
       .on(
@@ -76,6 +86,11 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
     return () => {
       (supabase as any).removeChannel(channel);
     };
+  }, [isOnline, refetch]);
+
+  useEffect(() => {
+    window.addEventListener('online', refetch);
+    return () => window.removeEventListener('online', refetch);
   }, [refetch]);
 
   const isEnabled = useCallback((key: AppSettingKey) => settings[key] ?? DEFAULTS[key], [settings]);

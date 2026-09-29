@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { isBrowserOffline, logUnlessNetworkError } from '@/lib/network';
 
 export interface MusicTrack {
   id: string;
@@ -38,6 +39,11 @@ export function useMusicLibrary() {
       setTracks(DEFAULT_MUSIC_TRACKS);
       return;
     }
+    if (isBrowserOffline()) {
+      setTracks((current) => (current.length > 0 ? current : DEFAULT_MUSIC_TRACKS));
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     try {
@@ -47,8 +53,8 @@ export function useMusicLibrary() {
           supabase.storage.from('reel-music').list(user.id, { limit: 100 }),
         ]);
 
-      if (libError) console.error('Error loading library tracks:', libError);
-      if (mineError) console.error('Error loading my tracks:', mineError);
+      if (libError) logUnlessNetworkError('Error loading library tracks:', libError);
+      if (mineError) logUnlessNetworkError('Error loading my tracks:', mineError);
 
       const libraryTracks: MusicTrack[] = (libData || [])
         .filter((f) => f.name)
@@ -73,7 +79,7 @@ export function useMusicLibrary() {
 
       setTracks([...DEFAULT_MUSIC_TRACKS, ...libraryTracks, ...customTracks]);
     } catch (error) {
-      console.error('Error loading music tracks:', error);
+      logUnlessNetworkError('Error loading music tracks:', error);
     } finally {
       setLoading(false);
     }
@@ -81,6 +87,11 @@ export function useMusicLibrary() {
 
   useEffect(() => {
     refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    window.addEventListener('online', refresh);
+    return () => window.removeEventListener('online', refresh);
   }, [refresh]);
 
   return { tracks, loading, refresh };
