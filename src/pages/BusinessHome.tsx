@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { CommerceOverview } from '@/components/business/CommerceOverview';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,10 @@ import { InsightsTab } from '@/components/business/InsightsTab';
 import { CampaignsTab } from '@/components/business/CampaignsTab';
 import { BillingTab } from '@/components/business/BillingTab';
 import { SettingsTab } from '@/components/business/SettingsTab';
+import { OrdersContent } from '@/pages/Orders';
+import { PaymentsTab } from '@/components/business/PaymentsTab';
+import { StoreTab } from '@/components/business/StoreTab';
+import { BusinessInboxTab } from '@/components/business/BusinessInboxTab';
 import { ACCOUNT_TYPE_META, ROLE_META } from '@/lib/business';
 import {
   LayoutDashboard,
@@ -34,6 +39,10 @@ import { cn } from '@/lib/utils';
 const TABS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'promote', label: 'Promote', icon: Megaphone },
+  { id: 'store', label: 'Products & store', icon: Store },
+  { id: 'inbox', label: 'Inbox', icon: Users },
+  { id: 'orders', label: 'Orders', icon: ListChecks },
+  { id: 'payments', label: 'Payments & payouts', icon: Wallet },
   { id: 'content', label: 'Content', icon: FileText },
   { id: 'audience', label: 'Audience', icon: Users },
   { id: 'insights', label: 'Insights', icon: BarChart3 },
@@ -53,6 +62,14 @@ export default function BusinessHome() {
   const requestedTab = searchParams.get('tab') || 'overview';
   const initialTab = TABS.some((t) => t.id === requestedTab) ? requestedTab : 'overview';
   const [tab, setTab] = useState(initialTab);
+
+  // Keep the tab in sync with the URL. Without this, `navigate('/b?tab=promote')`
+  // from CampaignsTab changes the address bar but React Router keeps this
+  // component mounted, so the initial useState value is never re-read and the
+  // button looks broken.
+  useEffect(() => {
+    if (TABS.some((t) => t.id === requestedTab)) setTab(requestedTab);
+  }, [requestedTab]);
 
   if (accountsLoading) {
     return (
@@ -135,14 +152,14 @@ export default function BusinessHome() {
 
   return (
     <MainLayout>
-      <div className="mx-auto max-w-5xl px-4 py-6">
+      <div className="mx-auto max-w-7xl px-4 py-6 pb-28 lg:pb-6">
         <div className="mb-2 flex items-center gap-3">
           <button onClick={() => navigate('/')} className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground" aria-label="Back to home">
             <ArrowLeft className="h-4 w-4" />
           </button>
           <Avatar className="h-11 w-11 ring-2 ring-primary/25">
             <AvatarImage src={activeBusiness.avatar_url || undefined} />
-            <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white text-sm">
+            <AvatarFallback className="bg-muted text-foreground text-sm">
               {getInitials(activeBusiness.name)}
             </AvatarFallback>
           </Avatar>
@@ -178,7 +195,12 @@ export default function BusinessHome() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setTab(item.id)}
+                  onClick={() => {
+                    setTab(item.id);
+                    // Mirror the selection into the URL so it is shareable and
+                    // survives a reload.
+                    navigate({ pathname: '/b', search: `?tab=${item.id}` }, { replace: true });
+                  }}
                   className={cn(
                     'flex items-center gap-1.5 rounded-xl px-3 py-2 text-[13px] font-medium whitespace-nowrap transition-colors',
                     active
@@ -195,8 +217,14 @@ export default function BusinessHome() {
         </div>
 
         <div className="mt-6">
-          {tab === 'overview' && <OverviewTab businessId={activeBusiness.id} />}
+          {tab === 'overview' && <><CommerceOverview businessId={activeBusiness.id} /><OverviewTab businessId={activeBusiness.id} /></>}
           {tab === 'promote' && <PromoteTab businessId={activeBusiness.id} />}
+          {tab === 'orders' && <OrdersContent />}
+          {tab === 'payments' && <PaymentsTab businessId={activeBusiness.id} />}
+          {tab === 'inbox' && <BusinessInboxTab businessId={activeBusiness.id} />}
+          {tab === 'store' && (
+            <StoreTab businessId={activeBusiness.id} businessUsername={activeBusiness.username} />
+          )}
           {tab === 'content' && <ContentTab businessId={activeBusiness.id} />}
           {tab === 'audience' && <AudienceTab businessId={activeBusiness.id} />}
           {tab === 'insights' && <InsightsTab businessId={activeBusiness.id} />}

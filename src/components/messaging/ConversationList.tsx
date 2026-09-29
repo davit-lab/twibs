@@ -39,7 +39,7 @@ interface ConversationListProps {
 
 type PendingAction = { conv: Conversation; action: 'remove' | 'delete' } | null;
 
-const TABS = ['All', 'Unread', 'Groups', 'Communities'] as const;
+const TABS = ['All', 'Unread', 'Businesses', 'Groups', 'Communities'] as const;
 
 export default function ConversationList({
   conversations,
@@ -63,23 +63,28 @@ export default function ConversationList({
   const filteredConversations = conversations.filter(conv => {
     if (activeTab === 'Groups') return conv.type === 'group';
     if (activeTab === 'Communities') return conv.type === 'community';
+    if (activeTab === 'Businesses') return conv.type === 'business';
     if (activeTab === 'Unread') return conv.unread_count > 0;
 
-    const otherUser = conv.participants[0]?.profiles;
-    const searchable = conv.type === 'dm'
-      ? `${otherUser?.display_name || ''} ${otherUser?.username || ''}`
-      : (conv.name || '');
+    // Search the resolved party, so a business thread is findable by the
+    // business name even if the conversation row was created under an old one.
+    const searchable = `${conv.party.name} ${conv.party.username || ''}`;
     return searchable.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
-  const isGroup = (conv: Conversation) => conv.type !== 'dm';
+  const isGroup = (conv: Conversation) => conv.type === 'group' || conv.type === 'community';
+  const isBusinessConv = (conv: Conversation) => conv.type === 'business';
 
   const getTitle = (conv: Conversation) => {
+    if (conv.party.name) return conv.party.name;
     if (isGroup(conv)) return conv.name || 'Unnamed group';
-    return conv.participants[0]?.profiles?.display_name || 'Unknown';
+    return 'Unknown';
   };
 
   const getSubtitle = (conv: Conversation) => {
+    // A business has no presence to report, and "1 member" would be nonsense -
+    // the point of the thread is that the whole team can answer it.
+    if (isBusinessConv(conv)) return conv.business?.category || 'Business';
     if (isGroup(conv)) {
       return `${conv.participant_count} member${conv.participant_count === 1 ? '' : 's'}`;
     }
@@ -89,21 +94,21 @@ export default function ConversationList({
   };
 
   const getAvatar = (conv: Conversation) => {
-    const avatars = conv.participants
-      .slice(0, 3)
-      .map(p => p.profiles?.avatar_url)
-      .filter(Boolean) as string[];
-
     if (isGroup(conv)) {
-      return conv.avatar_url || avatars[0] || undefined;
+      const avatars = conv.participants
+        .slice(0, 3)
+        .map(p => p.profiles?.avatar_url)
+        .filter(Boolean) as string[];
+      return conv.party.avatar_url || conv.avatar_url || avatars[0] || undefined;
     }
-    return conv.participants[0]?.profiles?.avatar_url || undefined;
+    return conv.party.avatar_url || conv.participants[0]?.profiles?.avatar_url || undefined;
   };
 
   const tabCount = (tab: typeof TABS[number]) => {
     if (tab === 'Unread') return conversations.filter(c => c.unread_count > 0).length;
     if (tab === 'Groups') return conversations.filter(c => c.type === 'group').length;
     if (tab === 'Communities') return conversations.filter(c => c.type === 'community').length;
+    if (tab === 'Businesses') return conversations.filter(c => c.type === 'business').length;
     return conversations.length;
   };
 

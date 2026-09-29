@@ -8,7 +8,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import InterestPostComments from './InterestPostComments';
 import LikesDialog from '@/components/social/LikesDialog';
-import MediaLightbox from '@/components/MediaLightbox';
+import MediaViewer from '@/components/media/MediaViewer';
+import PostMediaGallery from '@/components/media/PostMediaGallery';
 import RichText from '@/components/rich/RichText';
 import {
   Heart,
@@ -50,6 +51,33 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [lightboxInitialRect, setLightboxInitialRect] = useState<DOMRect | undefined>();
+
+  const getMediaArray = () => {
+    // Use new media array if available, otherwise fall back to legacy single media
+    if (post.media && post.media.length > 0) {
+      return post.media.map((m) => ({
+        src: m.url,
+        alt: m.alt_text || '',
+        width: m.width,
+        height: m.height,
+        type: m.type,
+      }));
+    }
+    if (post.media_url) {
+      return [{
+        src: post.media_url,
+        alt: post.content.slice(0, 80),
+        width: null,
+        height: null,
+        type: post.media_type,
+      }];
+    }
+    return [];
+  };
+
+  const mediaArray = getMediaArray();
 
   const category = post.interest_categories;
   const username = post.profiles?.username || '';
@@ -163,25 +191,23 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
       </p>
 
       {/* Media */}
-      {post.media_url && (
-        <div className="mt-3 rounded-xl overflow-hidden border border-border/50 bg-surface">
-          {post.media_type?.startsWith('video') ? (
-            <video src={post.media_url} controls className="w-full max-h-[440px] object-cover" />
-          ) : (
-            <button
-              onClick={() => setLightboxOpen(true)}
-              className="block w-full cursor-zoom-in"
-              aria-label="Open image"
-            >
-              <img
-                src={post.media_url}
-                alt=""
-                className="w-full max-h-[440px] object-cover"
-                loading="lazy"
-              />
-            </button>
-          )}
-        </div>
+      {mediaArray.length > 0 && (
+        <PostMediaGallery
+          className="mt-3"
+          items={mediaArray.map((media) => ({
+            url: media.src,
+            type: media.type,
+            alt: media.alt,
+            width: media.width,
+            height: media.height,
+          }))}
+          onOpenImage={(itemIndex, rect) => {
+            const imageIndex = mediaArray.slice(0, itemIndex + 1).filter((media) => !media.type?.startsWith('video')).length - 1;
+            setLightboxIndex(Math.max(0, imageIndex));
+            setLightboxInitialRect(rect);
+            setLightboxOpen(true);
+          }}
+        />
       )}
 
       {/* Actions */}
@@ -313,11 +339,21 @@ export default function InterestPostCard({ post }: { post: InterestPost }) {
         )}
       </AnimatePresence>
 
-      {lightboxOpen && (
-        <MediaLightbox
-          src={post.media_url!}
-          alt={post.content.slice(0, 80)}
-          onClose={() => setLightboxOpen(false)}
+      {lightboxOpen && mediaArray.some((media) => !media.type?.startsWith('video')) && (
+        <MediaViewer
+          images={mediaArray.filter((m) => !m.type?.startsWith('video')).map((m) => ({
+            src: m.src,
+            alt: m.alt,
+            width: m.width,
+            height: m.height,
+          }))}
+          initialIndex={lightboxIndex}
+          onClose={() => {
+            setLightboxOpen(false);
+            setLightboxInitialRect(undefined);
+          }}
+          initialRect={lightboxInitialRect}
+          enableFullscreen={true}
         />
       )}
     </article>

@@ -15,6 +15,7 @@ import {
   extensionFor,
 } from '@/hooks/useBusinessAssetUpload';
 import { useToast } from '@/hooks/use-toast';
+import { friendlyErrorMessage } from '@/lib/errors';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Store,
@@ -52,7 +53,7 @@ function getInitials(name: string) {
 export default function BusinessCreate() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { refresh } = useBusiness();
+  const { refresh, switchToBusiness } = useBusiness();
   const api = useBusinessApi();
 
   const [step, setStep] = useState(0);
@@ -167,10 +168,8 @@ export default function BusinessCreate() {
         goals,
       });
       await refresh();
+      switchToBusiness(account.id);
 
-      // Now that the business has an id, move the avatar out of the creator's
-      // personal staging folder into the business folder the RLS policies
-      // actually govern, so later edits and removals are correctly authorised.
       if (avatarStagedPath) {
         try {
           await relocateStagedAvatar(account.id, avatarStagedPath);
@@ -188,7 +187,7 @@ export default function BusinessCreate() {
       toast({
         variant: 'destructive',
         title: 'Could not create business',
-        description: err instanceof Error ? err.message : 'Something went wrong.',
+        description: friendlyErrorMessage(err, 'Could not create business. Please check your details and try again.'),
       });
     } finally {
       setSubmitting(false);

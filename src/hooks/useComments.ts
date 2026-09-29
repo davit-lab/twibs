@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import { useToast } from '@/hooks/use-toast';
 
@@ -29,6 +30,7 @@ export interface Comment {
 
 export function useComments(postId: string) {
   const { user } = useAuth();
+  const { activeBusiness, mode } = useBusiness();
   const { isEnabled } = useAppSettings();
   const { toast } = useToast();
   const [comments, setComments] = useState<Comment[]>([]);
@@ -164,6 +166,7 @@ export function useComments(postId: string) {
           user_id: user.id,
           parent_id: parentId || null,
           content,
+          business_id: mode === 'business' && activeBusiness ? activeBusiness.id : null,
         })
         .select('*')
         .single();

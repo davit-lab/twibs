@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
@@ -25,7 +26,8 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import CommentSection from '@/components/comments/CommentSection';
-import MediaLightbox from '@/components/MediaLightbox';
+import MediaViewer from '@/components/media/MediaViewer';
+import PostMediaGallery from '@/components/media/PostMediaGallery';
 import RichText from '@/components/rich/RichText';
 import ReportDialog from '@/components/social/ReportDialog';
 import LikesDialog from '@/components/social/LikesDialog';
@@ -94,6 +96,8 @@ interface PostMedia {
   url: string;
   type: string;
   alt_text: string | null;
+  width?: number | null;
+  height?: number | null;
 }
 
 interface PostData {
@@ -141,6 +145,7 @@ const visibilityIcons = {
 
 export default function PostCard({ post, onPostDeleted, onStarChange, reposter, defaultCommentsOpen = false, showRecommendationInfo = false }: PostCardProps) {
   const { user, profile: currentUserProfile } = useAuth();
+  const { activeBusiness, mode } = useBusiness();
   const { preferences } = useUserPreferences();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -157,6 +162,7 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter, 
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [lightboxInitialRect, setLightboxInitialRect] = useState<DOMRect | undefined>();
   const [recommendationOpen, setRecommendationOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
   const [recommendationReasons, setRecommendationReasons] = useState<string[]>([]);
@@ -208,6 +214,7 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter, 
           .insert({
             post_id: post.id,
             user_id: user.id,
+            business_id: mode === 'business' && activeBusiness ? activeBusiness.id : null,
           });
         
         setIsStarred(true);
@@ -707,43 +714,21 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter, 
       {/* Media Grid */}
       {post.post_media && post.post_media.length > 0 && (
         <div className="px-4 mt-3">
-          <div className={cn(
-            "grid gap-1 rounded-2xl overflow-hidden border border-border/40",
-            post.post_media.length === 1 && "grid-cols-1",
-            post.post_media.length === 2 && "grid-cols-2",
-            post.post_media.length >= 3 && "grid-cols-2"
-          )}>
-            {post.post_media.map((media, index) => (
-              <div
-                key={media.id}
-                className={cn(
-                  "relative bg-muted cursor-pointer",
-                  post.post_media.length === 3 && index === 0 && "row-span-2"
-                )}
-              >
-                {media.type === 'image' ? (
-                  <button
-                    onClick={() => setLightboxIndex(index)}
-                    className="block w-full cursor-zoom-in"
-                    aria-label="Open image"
-                  >
-                    <img
-                      src={media.url}
-                      alt={media.alt_text || 'Post image'}
-                      className="w-full h-full object-cover max-h-[400px] opacity-100 transition-opacity"
-                      loading="lazy"
-                    />
-                  </button>
-                ) : (
-                  <video
-                    src={media.url}
-                    className="w-full h-full object-cover max-h-[400px]"
-                    controls
-                  />
-                )}
-              </div>
-            ))}
-          </div>
+          <PostMediaGallery
+            items={post.post_media.map((media) => ({
+              id: media.id,
+              url: media.url,
+              type: media.type,
+              alt: media.alt_text,
+              width: media.width,
+              height: media.height,
+            }))}
+            onOpenImage={(itemIndex, rect) => {
+              const imageIndex = post.post_media.slice(0, itemIndex + 1).filter((media) => media.type === 'image').length - 1;
+              setLightboxIndex(Math.max(0, imageIndex));
+              setLightboxInitialRect(rect);
+            }}
+          />
         </div>
       )}
 
@@ -1011,16 +996,21 @@ export default function PostCard({ post, onPostDeleted, onStarChange, reposter, 
         </DialogContent>
       </Dialog>
 
-      {lightboxIndex !== null && post.post_media[lightboxIndex] && (
-        <MediaLightbox
-          src={post.post_media[lightboxIndex].url}
-          alt={post.post_media[lightboxIndex].alt_text || 'Post photo'}
-          images={post.post_media.map((m) => ({
+      {lightboxIndex !== null && post.post_media.some((media) => media.type === 'image') && (
+        <MediaViewer
+          images={post.post_media.filter((m) => m.type === 'image').map((m) => ({
             src: m.url,
             alt: m.alt_text || 'Post photo',
+            width: m.width,
+            height: m.height,
           }))}
           initialIndex={lightboxIndex}
-          onClose={() => setLightboxIndex(null)}
+          onClose={() => {
+            setLightboxIndex(null);
+            setLightboxInitialRect(undefined);
+          }}
+          initialRect={lightboxInitialRect}
+          enableFullscreen={true}
         />
       )}
     </article>

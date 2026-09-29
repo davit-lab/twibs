@@ -2,6 +2,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useBusinessApi } from '@/hooks/useBusinessApi';
 import { useBusiness } from '@/contexts/BusinessContext';
 import type {
+  AnalyticsRange,
   BusinessAudience,
   BusinessBilling,
   BusinessCampaign,
@@ -11,21 +12,31 @@ import type {
   BusinessSettings,
 } from '@/lib/business';
 
-export function useBusinessOverview(businessId: string | undefined) {
+export function useBusinessOverview(
+  businessId: string | undefined,
+  range?: AnalyticsRange
+) {
   const api = useBusinessApi();
   return useQuery<BusinessOverview>({
-    queryKey: ['business', businessId, 'overview'],
-    queryFn: () => api.getBusinessOverview(businessId as string),
+    // The range is part of the key so switching periods refetches instead of
+    // showing the previous window's numbers under a new heading.
+    queryKey: ['business', businessId, 'overview', range?.key ?? 'lifetime', range?.from ?? null, range?.to ?? null],
+    queryFn: () => api.getBusinessOverview(businessId as string, range),
     enabled: !!businessId,
+    placeholderData: (prev) => prev,
   });
 }
 
-export function useBusinessInsights(businessId: string | undefined) {
+export function useBusinessInsights(
+  businessId: string | undefined,
+  range?: AnalyticsRange
+) {
   const api = useBusinessApi();
   return useQuery<BusinessInsights>({
-    queryKey: ['business', businessId, 'insights'],
-    queryFn: () => api.getBusinessInsights(businessId as string),
+    queryKey: ['business', businessId, 'insights', range?.key ?? 'lifetime', range?.from ?? null, range?.to ?? null],
+    queryFn: () => api.getBusinessInsights(businessId as string, range),
     enabled: !!businessId,
+    placeholderData: (prev) => prev,
   });
 }
 

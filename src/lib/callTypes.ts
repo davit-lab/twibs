@@ -44,6 +44,7 @@ export interface CallSession {
   started_at: string | null;
   ended_at: string | null;
   ended_reason: string | null;
+  screen_sharing_by: string | null;
   created_at: string;
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications, NotificationType } from '@/hooks/useNotifications';
@@ -7,7 +7,6 @@ import NotificationItem from '@/components/notifications/NotificationItem';
 import AggregatedNotificationRow from '@/components/notifications/AggregatedNotificationRow';
 import { NotificationGroup } from '@/components/notifications/NotificationGroup';
 import NotificationEmptyState from '@/components/notifications/NotificationEmptyState';
-import WelcomeBackNotification, { WelcomeCounts } from '@/components/notifications/WelcomeBackNotification';
 import {
   DATE_BUCKETS,
   getDateBucket,
@@ -22,7 +21,7 @@ import { cn } from '@/lib/utils';
 type TabValue = 'all' | 'social' | 'activity' | 'messages';
 
 export default function Notifications() {
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const {
     notifications,
@@ -34,7 +33,6 @@ export default function Notifications() {
     clearAll,
   } = useNotifications();
   const [activeTab, setActiveTab] = useState<TabValue>('all');
-  const streamRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -68,26 +66,12 @@ export default function Notifications() {
     { value: 'messages', label: 'Messages', count: messageNotifs.length },
   ];
 
-  const unreadList = notifications.filter(n => !n.is_read);
-  const welcomeCounts: WelcomeCounts = {
-    unread: unreadCount,
-    messages: unreadList.filter(n => n.type === 'message' || n.type === 'missed_call').length,
-    likes: unreadList.filter(n => n.type === 'star').length,
-    follows: unreadList.filter(n => n.type === 'follow').length,
-    comments: unreadList.filter(n => n.type === 'comment').length,
-    mentions: unreadList.filter(n => n.type === 'mention').length,
-  };
-
   const rows = groupNotifications(visibleNotifications);
 
   const buckets = DATE_BUCKETS.map(bucket => ({
     bucket,
     rows: rows.filter(row => getDateBucket(row.items[0].created_at) === bucket),
   })).filter(b => b.rows.length > 0);
-
-  const handleSeeWhatsNew = () => {
-    streamRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
 
   const emptyCopy: Record<TabValue, { title: string; hint: string }> = {
     all: {
@@ -184,17 +168,8 @@ export default function Notifications() {
           </div>
         </nav>
 
-        {/* Welcome back */}
-        {activeTab === 'all' && !loading && unreadCount > 0 && (
-          <WelcomeBackNotification
-            displayName={profile?.display_name || undefined}
-            counts={welcomeCounts}
-            onSeeWhatsNew={handleSeeWhatsNew}
-          />
-        )}
-
         {/* Stream */}
-        <div ref={streamRef} className="mt-4 scroll-mt-24">
+        <div className="mt-4 scroll-mt-24">
           {loading ? (
             <div className="space-y-1.5 pt-2">
               {[1, 2, 3, 4, 5].map(i => (

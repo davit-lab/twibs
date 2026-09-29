@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/layout/MainLayout';
 import FollowButton from '@/components/social/FollowButton';
@@ -7,10 +8,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, X, Users, BadgeCheck, Crown, Star, Eye, Play, FileText, ArrowRight, Clapperboard, MessageCircle, MapPin, Navigation } from 'lucide-react';
+import { Search, X, Users, BadgeCheck, Crown, Star, Eye, Play, FileText, ArrowUpRight, Clapperboard, MessageCircle, MapPin, Navigation, Store, Building2, Link2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePremiumStatus } from '@/hooks/usePremiumStatus';
-import { useExplore, ExploreTab, ExploreUser, ExplorePost, ExploreReel } from '@/hooks/useExplore';
+import { useExplore, ExploreTab, ExploreUser, ExploreBusiness, ExplorePost, ExploreReel } from '@/hooks/useExplore';
+import { useBusinessApi } from '@/hooks/useBusinessApi';
+import { ACCOUNT_TYPE_META } from '@/lib/business';
 import { useMutedUsers } from '@/hooks/useSafety';
 import TrendingList from '@/components/social/TrendingList';
 import SponsoredPost from '@/components/ads/SponsoredPost';
@@ -24,33 +27,31 @@ const TABS: { value: ExploreTab; label: string; icon: React.ElementType }[] = [
   { value: 'reels', label: 'Reels', icon: Clapperboard },
   { value: 'posts', label: 'Posts', icon: FileText },
   { value: 'people', label: 'People', icon: Users },
+  { value: 'businesses', label: 'Businesses', icon: Building2 },
 ];
 
 function SectionHeader({ title, subtitle, seeAll, href }: { title: string; subtitle?: string; seeAll?: () => void; href?: string }) {
   return (
-    <div className="mb-4">
-      <div className="flex items-end justify-between gap-4">
-        <div className="min-w-0">
-          <h2 className="text-xl font-black tracking-tight md:text-2xl">{title}</h2>
-          {subtitle && <p className="mt-0.5 text-[13px] text-muted-foreground">{subtitle}</p>}
-        </div>
-        {seeAll ? (
-          <button
-            onClick={seeAll}
-            className="flex shrink-0 items-center gap-1 whitespace-nowrap pb-0.5 text-xs font-bold text-muted-foreground transition-colors hover:text-primary"
-          >
-            See all <ArrowRight className="h-3 w-3" />
-          </button>
-        ) : href ? (
-          <a
-            href={href}
-            className="flex shrink-0 items-center gap-1 whitespace-nowrap pb-0.5 text-xs font-bold text-muted-foreground transition-colors hover:text-primary"
-          >
-            See all <ArrowRight className="h-3 w-3" />
-          </a>
-        ) : null}
+    <div className="mb-5 flex items-end justify-between gap-4 border-b border-border pb-3">
+      <div className="min-w-0">
+        <h2 className="text-lg font-semibold tracking-[-0.02em] md:text-xl">{title}</h2>
+        {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
       </div>
-      <div className="mt-3 h-px bg-border" />
+      {seeAll ? (
+        <button
+          onClick={seeAll}
+          className="flex shrink-0 items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          View all <ArrowUpRight className="h-4 w-4" />
+        </button>
+      ) : href ? (
+        <Link
+          to={href}
+          className="flex shrink-0 items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          View all <ArrowUpRight className="h-4 w-4" />
+        </Link>
+      ) : null}
     </div>
   );
 }
@@ -77,9 +78,9 @@ function UserCard({ userProfile, onFollowChange }: { userProfile: ExploreUser; o
   const href = `/profile/${userProfile.username}`;
 
   return (
-    <div className="group relative flex flex-col gap-3 rounded-2xl border border-border/60 bg-card p-4 transition-all duration-200 hover:border-primary/35 hover:shadow-md hover:shadow-primary/5 motion-safe:hover:-translate-y-0.5">
+    <article className="group relative flex min-h-[154px] flex-col gap-3 border-t border-border bg-background py-4 transition-colors hover:bg-muted/20 sm:px-3">
       <div className="flex items-start gap-3">
-        <a href={href} className="relative shrink-0">
+        <Link to={href} className="relative shrink-0">
           <div
             className={cn(
               'rounded-full transition-shadow duration-300',
@@ -100,13 +101,13 @@ function UserCard({ userProfile, onFollowChange }: { userProfile: ExploreUser; o
               </AvatarFallback>
             </Avatar>
           </div>
-        </a>
+        </Link>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <a href={href} className="min-w-0 font-bold hover:text-primary transition-colors">
+            <Link to={href} className="min-w-0 font-semibold hover:text-primary transition-colors">
               <span className="truncate">{userProfile.display_name}</span>
-            </a>
+            </Link>
             {userProfile.is_verified && <BadgeCheck className="h-4 w-4 shrink-0 text-primary" />}
             {isPremium && <Crown className="h-3.5 w-3.5 shrink-0 text-amber-500" />}
           </div>
@@ -127,25 +128,137 @@ function UserCard({ userProfile, onFollowChange }: { userProfile: ExploreUser; o
         <p className="line-clamp-2 text-[13px] leading-relaxed text-foreground/75">{userProfile.bio}</p>
       )}
 
-      <div className="flex items-center gap-x-2.5 gap-y-1.5 border-t border-border/60 pt-3">
+      <div className="mt-auto flex items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
         {showDistance ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
+          <span className="inline-flex items-center gap-1 font-medium text-foreground">
             <MapPin className="h-3.5 w-3.5" />
             {formatDistanceKm(userProfile.distanceKm!)}
           </span>
         ) : userProfile.location ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+          <span className="inline-flex items-center gap-1 font-medium text-muted-foreground">
             <MapPin className="h-3.5 w-3.5 text-muted-foreground/60" />
             {userProfile.location}
           </span>
         ) : null}
 
-        <span className="text-[11px] font-semibold text-muted-foreground">
+        <span className="ml-auto text-xs font-medium text-muted-foreground">
           {formatCount(userProfile.follower_count)}{' '}
-          <span className="text-[9px] uppercase tracking-wider text-muted-foreground/70">followers</span>
+          <span>followers</span>
         </span>
       </div>
-    </div>
+    </article>
+  );
+}
+
+function BusinessCard({ business, onFollowChange }: { business: ExploreBusiness; onFollowChange: () => void }) {
+  const { user } = useAuth();
+  const api = useBusinessApi();
+  const [busy, setBusy] = useState(false);
+  const hue = getHue(business.username || business.name);
+  const initials = business.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'B';
+  const href = `/business/${business.username}`;
+  const typeLabel = ACCOUNT_TYPE_META[business.account_type as keyof typeof ACCOUNT_TYPE_META]?.label ?? 'Business';
+
+  const toggleFollow = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user || busy) return;
+    setBusy(true);
+    try {
+      if (business.is_following) {
+        await api.unfollowBusiness(business.id, user.id);
+      } else {
+        await api.followBusiness(business.id, user.id);
+      }
+      onFollowChange();
+    } catch {
+      /* surfaced by the profile page; keep the card quiet here */
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <article className="group relative flex flex-col overflow-hidden border border-border bg-background transition-colors hover:border-foreground/25">
+      {business.cover_url && (
+        <Link to={href} className="block h-28 w-full overflow-hidden border-b border-border bg-muted md:h-32">
+          <img src={business.cover_url} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.025]" />
+        </Link>
+      )}
+
+      <div className="flex items-start gap-3 px-4 pt-4">
+        <Link to={href} className="relative shrink-0">
+          <div className="rounded-full ring-1 ring-border transition-shadow duration-300">
+            <Avatar className="h-12 w-12">
+              <AvatarImage src={business.avatar_url || undefined} />
+              <AvatarFallback
+                style={{ backgroundColor: `hsl(${hue} 40% 14%)`, color: `hsl(${hue} 85% 72%)` }}
+                className="text-sm font-bold"
+              >
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+          </div>
+        </Link>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <Link to={href} className="min-w-0 font-semibold transition-colors hover:text-primary">
+              <span className="truncate">{business.name}</span>
+            </Link>
+          </div>
+          <p className="mt-0.5 truncate text-xs font-medium text-muted-foreground">@{business.username}</p>
+          <span className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+            <Store className="h-3 w-3 text-primary" />
+            {typeLabel}
+          </span>
+        </div>
+
+        {user ? (
+          <Button
+            onClick={toggleFollow}
+            disabled={busy}
+            size="sm"
+            variant={business.is_following ? 'outline' : 'default'}
+            className="shrink-0"
+          >
+            {busy ? '…' : business.is_following ? 'Following' : 'Follow'}
+          </Button>
+        ) : null}
+      </div>
+
+      <div className="px-4">
+        {business.description && (
+          <p className="line-clamp-2 text-[13px] leading-relaxed text-foreground/75">{business.description}</p>
+        )}
+      </div>
+
+      <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border px-4 py-3 text-xs text-muted-foreground">
+        {business.category && (
+          <span className="inline-flex items-center gap-1 font-medium">
+            <Building2 className="h-3.5 w-3.5 text-muted-foreground/60" />
+            {business.category}
+          </span>
+        )}
+        {business.location && (
+          <span className="inline-flex items-center gap-1 font-medium">
+            <MapPin className="h-3.5 w-3.5 text-muted-foreground/60" />
+            {business.location}
+          </span>
+        )}
+        {business.website && (
+          <span className="inline-flex max-w-[140px] items-center gap-1 truncate font-medium">
+            <Link2 className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/60" />
+            <span className="truncate">{business.website.replace(/^https?:\/\//, '')}</span>
+          </span>
+        )}
+
+        <span className="ml-auto text-xs font-medium text-muted-foreground">
+          {formatCount(business.followers_count || 0)}{' '}
+          <span>followers</span>
+        </span>
+      </div>
+    </article>
   );
 }
 
@@ -159,7 +272,7 @@ function PostCard({ post }: { post: ExplorePost }) {
   };
 
   return (
-    <a href={`/profile/${profiles.username}`} className="group block rounded-2xl border border-border/60 bg-card p-4 transition-all duration-200 hover:border-primary/35 hover:shadow-md hover:shadow-primary/5 motion-safe:hover:-translate-y-0.5">
+    <Link to={`/profile/${profiles.username}`} className="group block border-t border-border py-5 transition-colors hover:bg-muted/20 sm:px-3">
       <div className="mb-3 flex items-center gap-3">
         <Avatar className="h-9 w-9">
           <AvatarImage src={profiles.avatar_url || undefined} />
@@ -176,10 +289,10 @@ function PostCard({ post }: { post: ExplorePost }) {
         </div>
       </div>
 
-      <p className="mb-3 line-clamp-4 text-[15px] leading-relaxed text-foreground/90">{post.content}</p>
+      <p className="mb-4 line-clamp-4 text-[15px] leading-6 text-foreground/90">{post.content}</p>
 
       {image && (
-        <div className="relative mb-3 overflow-hidden rounded-xl bg-muted">
+        <div className="relative mb-4 overflow-hidden bg-muted">
           <img src={image.url} alt="" loading="lazy" className="aspect-[16/9] w-full object-cover transition-transform duration-300 motion-safe:group-hover:scale-[1.01]" />
           {rest.length > 0 && (
             <span className="absolute right-2 top-2 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white">
@@ -189,11 +302,11 @@ function PostCard({ post }: { post: ExplorePost }) {
         </div>
       )}
 
-      <div className="flex items-center gap-5 border-t border-border/60 pt-3 text-xs font-semibold text-muted-foreground">
+      <div className="flex items-center gap-5 text-xs font-medium text-muted-foreground">
         <span className="flex items-center gap-1.5"><Star className="h-3.5 w-3.5" />{formatCount(post.star_count)}</span>
         <span className="flex items-center gap-1.5"><MessageCircle className="h-3.5 w-3.5" />{formatCount(post.comment_count)}</span>
       </div>
-    </a>
+    </Link>
   );
 }
 
@@ -269,7 +382,7 @@ function ReelCard({ reel, grid }: { reel: ExploreReel; grid?: boolean }) {
     <a
       href="/reels"
       className={cn(
-        'group block rounded-2xl border border-border/60 bg-card transition-all duration-200 hover:border-primary/40 motion-safe:hover:-translate-y-0.5',
+        'group block overflow-hidden border border-border bg-card transition-colors hover:border-foreground/30',
         grid ? 'overflow-hidden' : 'w-[160px] shrink-0 snap-start sm:w-44 lg:w-48'
       )}
     >
@@ -308,12 +421,12 @@ function ReelCard({ reel, grid }: { reel: ExploreReel; grid?: boolean }) {
 
 export default function Explore() {
   const { profile: currentUserProfile, user } = useAuth();
-  const { users, posts, reels, loading, error, refetch, searchQuery, setSearchQuery, activeTab, setActiveTab, handleFollowChange, hasAny, viewerLocationKnown, distancesReady, distancesLoading } = useExplore();
+  const { users, businesses, posts, reels, loading, error, refetch, searchQuery, setSearchQuery, activeTab, setActiveTab, handleFollowChange, hasAny, viewerLocationKnown, distancesReady, distancesLoading } = useExplore();
   const { data: mutedIds = [] } = useMutedUsers();
   const [ads, setAds] = useState<FeedAd[]>([]);
   const visiblePosts = posts.filter(p => !mutedIds.includes(p.user_id));
   const trimmedQuery = searchQuery.trim();
-  const counts = { people: users.length, posts: visiblePosts.length, reels: reels.length };
+  const counts = { people: users.length, businesses: businesses.length, posts: visiblePosts.length, reels: reels.length };
 
   useEffect(() => {
     let cancelled = false;
@@ -353,6 +466,7 @@ export default function Explore() {
   const searchPlaceholder = {
     all: 'Search people, posts, reels...',
     people: 'Search people by name, username, city...',
+    businesses: 'Search businesses, categories, locations...',
     posts: 'Search posts...',
     reels: 'Search reels...',
   }[activeTab];
@@ -383,6 +497,23 @@ export default function Explore() {
         {[1, 2, 3, 4].map(i => (
           <div key={i} className="w-[160px] shrink-0 overflow-hidden rounded-2xl border border-border/60 bg-card sm:w-44">
             <Skeleton className="aspect-[9/16] rounded-none" />
+          </div>
+        ))}
+      </div>
+    ),
+    businesses: (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-12 w-12 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-3.5 w-28" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            </div>
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-2/3" />
           </div>
         ))}
       </div>
@@ -464,9 +595,10 @@ export default function Explore() {
 
   const renderContent = () => {
     if (loading) {
-      if (activeTab === 'all') return <div className="space-y-10 md:space-y-12">{skeletons.reels}{skeletons.posts}{skeletons.users}</div>;
+      if (activeTab === 'all') return <div className="space-y-10 md:space-y-12">{skeletons.reels}{skeletons.posts}{skeletons.businesses}{skeletons.users}</div>;
       if (activeTab === 'reels') return skeletons.reels;
       if (activeTab === 'posts') return skeletons.posts;
+      if (activeTab === 'businesses') return skeletons.businesses;
       return skeletons.users;
     }
 
@@ -492,6 +624,15 @@ export default function Explore() {
               <SectionHeader title="Popular posts" subtitle="What the community is posting" seeAll={() => setActiveTab('posts')} />
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {withAds(visiblePosts.slice(0, 6).map(p => <PostCard key={p.id} post={p} />))}
+              </div>
+            </section>
+          )}
+
+          {businesses.length > 0 && (
+            <section>
+              <SectionHeader title="Businesses to discover" subtitle="Brands and creators you can follow" seeAll={() => setActiveTab('businesses')} />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {businesses.slice(0, 4).map(b => <BusinessCard key={b.id} business={b} onFollowChange={handleFollowChange} />)}
               </div>
             </section>
           )}
@@ -533,6 +674,17 @@ export default function Explore() {
         : <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{withAds(visiblePosts.map(p => <PostCard key={p.id} post={p} />))}</div>;
     }
 
+    if (activeTab === 'businesses') {
+      return (
+        <div>
+          <SectionHeader title="Businesses to discover" subtitle="Brands and creators on Twibs" />
+          {businesses.length === 0
+            ? emptyState('businesses')
+            : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{businesses.map(b => <BusinessCard key={b.id} business={b} onFollowChange={handleFollowChange} />)}</div>}
+        </div>
+      );
+    }
+
     return (
       <div>
         <SectionHeader title="People to discover" href="/people" />
@@ -546,22 +698,18 @@ export default function Explore() {
 
   return (
     <MainLayout>
-      <div className="min-h-screen bg-background pb-24 md:pb-10">
-        {/* Editorial Hero */}
-        <div className="border-b border-border">
-          <div className="mx-auto max-w-5xl px-4 pt-9 pb-8 md:px-6 md:pt-12 md:pb-10">
-            <div className="flex items-end justify-between gap-8">
-              <div className="max-w-2xl">
-                <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.25em] text-primary">Discover</p>
-                <h1 className="mt-2 text-[2.4rem] font-black leading-[1.05] tracking-tight md:text-6xl md:leading-none">Explore</h1>
-                <p className="mt-3 text-[15px] text-muted-foreground md:text-base">People, posts and reels worth discovering.</p>
+      <div className="min-h-screen bg-background pb-24 md:pb-12">
+        <header className="border-b border-border">
+          <div className="mx-auto max-w-6xl px-4 py-7 md:px-8 md:py-10">
+            <div className="grid items-end gap-6 md:grid-cols-[minmax(0,1fr)_minmax(320px,460px)]">
+              <div>
+                <h1 className="text-3xl font-semibold tracking-[-0.04em] md:text-5xl">Explore</h1>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground md:text-base">
+                  Find people, ideas, and businesses from across Twibs.
+                </p>
               </div>
-              <p className="hidden max-w-[220px] pb-0.5 text-right text-[13px] leading-relaxed text-muted-foreground/70 md:block">
-                A living feed from the community — reels, conversations and people, refreshed as they happen.
-              </p>
-            </div>
 
-            <div className="relative mt-7">
+              <div className="relative">
               <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder={searchPlaceholder}
@@ -574,37 +722,38 @@ export default function Explore() {
                   }
                 }}
                 aria-label="Search Explore"
-                className="h-12 rounded-xl border-border/60 bg-card pl-12 pr-12 text-base font-medium focus-visible:ring-primary/30"
+                className="h-12 rounded-none border-x-0 border-t-0 border-b-border bg-transparent pl-11 pr-11 text-base shadow-none focus-visible:border-foreground focus-visible:ring-0"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
                   aria-label="Clear search"
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-muted-foreground transition-colors hover:text-foreground"
                 >
                   <X className="h-4 w-4" />
                 </button>
               )}
             </div>
+            </div>
           </div>
-        </div>
+        </header>
 
         {/* Sticky Segmented Navigation */}
-        <div className="sticky top-0 z-40 border-b border-border bg-background/95">
-          <div className="mx-auto max-w-5xl px-4 md:px-6">
-            <div className="flex items-center gap-2 overflow-x-auto py-3 pr-24 scrollbar-hide lg:pr-0">
+        <div className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-md">
+          <div className="mx-auto max-w-6xl px-4 md:px-8">
+            <div className="flex items-center gap-7 overflow-x-auto scrollbar-hide">
               {TABS.map(({ value, label, icon: Icon }) => {
                 const active = activeTab === value;
-                const count = value === 'all' ? null : counts[value as 'people' | 'posts' | 'reels'];
+                const count = value === 'all' ? null : counts[value as keyof typeof counts];
                 return (
                   <button
                     key={value}
                     onClick={() => setActiveTab(value)}
                     className={cn(
-                      'flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition-colors duration-200',
+                      'relative flex h-12 shrink-0 items-center gap-1.5 border-b-2 px-0 text-sm font-medium whitespace-nowrap transition-colors duration-200',
                       active
-                        ? 'bg-foreground text-background shadow-sm'
-                        : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
+                        ? 'border-foreground text-foreground'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
                     )}
                   >
                     <Icon className="h-4 w-4" strokeWidth={active ? 2.5 : 1.75} />
@@ -612,8 +761,8 @@ export default function Explore() {
                     {count != null && (
                       <span
                         className={cn(
-                          'rounded-full px-1.5 py-0.5 text-[10px] font-black tabular-nums',
-                          active ? 'bg-background/20 text-background' : 'bg-surface-2 text-muted-foreground'
+                          'text-[11px] tabular-nums',
+                          active ? 'text-foreground' : 'text-muted-foreground/70'
                         )}
                       >
                         {count}
@@ -627,7 +776,7 @@ export default function Explore() {
         </div>
 
         {/* Content */}
-        <div className="mx-auto max-w-5xl space-y-10 px-4 pt-6 md:space-y-12 md:px-6 md:pt-8">
+        <div className="mx-auto max-w-6xl space-y-10 px-4 pt-7 md:space-y-14 md:px-8 md:pt-10">
           {trimmedQuery && (
             <div className="flex items-center justify-between gap-4 pt-1">
               <p className="min-w-0 truncate text-sm font-medium text-muted-foreground">

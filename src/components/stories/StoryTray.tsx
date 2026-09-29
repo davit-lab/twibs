@@ -136,6 +136,7 @@ export default function StoryTray({
         )}
 
         {groups.map((group, index) => {
+          if (group.user_id === user?.id) return null;
           const isAd = !!group.ad;
           return (
             <button

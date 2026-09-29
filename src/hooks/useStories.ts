@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import { useToast } from '@/hooks/use-toast';
 import type { FeedAd } from '@/lib/ads';
 import { STORY_MAX_DURATION, parseOverlays, type StoryOverlay } from '@/lib/stories';
+import type { Json } from '@/integrations/supabase/types';
 
 export interface Story {
   id: string;
@@ -124,6 +126,7 @@ function enrichStoryRow(row: Record<string, unknown>): Story {
 
 export function useStories(options: UseStoriesOptions = {}) {
   const { user } = useAuth();
+  const { activeBusiness, mode } = useBusiness();
   const { isEnabled } = useAppSettings();
   const { toast } = useToast();
   const [stories, setStories] = useState<Story[]>([]);
@@ -322,6 +325,15 @@ export function useStories(options: UseStoriesOptions = {}) {
     fetchStories();
   }, [fetchStories]);
 
+  useEffect(() => {
+    if (!enabled || stories.length === 0) return;
+    const now = Date.now();
+    const nearestExpiry = Math.min(...stories.map((story) => new Date(story.expires_at).getTime()).filter((value) => value > now));
+    if (!Number.isFinite(nearestExpiry)) return;
+    const timeout = window.setTimeout(fetchStories, Math.min(2_147_483_647, Math.max(1_000, nearestExpiry - now + 250)));
+    return () => window.clearTimeout(timeout);
+  }, [enabled, fetchStories, stories]);
+
   const viewStory = async (storyId: string) => {
     if (!user) return;
 
@@ -340,20 +352,6 @@ export function useStories(options: UseStoriesOptions = {}) {
   // Uploading
   // -------------------------------------------------------------------------
 
-  function uploadFileWithProgress(url: string, file: File, onProgress: (f: number) => void): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('PUT', url);
-      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) onProgress(Math.min(0.92, e.loaded / e.total));
-      };
-      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error('Upload failed')));
-      xhr.onerror = () => reject(new Error('Upload failed — check your connection.'));
-      xhr.send(file);
-    });
-  }
-
   const uploadStory = async (file: File, opts: UploadStoryOptions = {}) => {
     if (!user) throw new Error('Not authenticated');
     if (!isEnabled('story_posting_enabled')) throw new Error('Story posting is currently disabled by the admin.');
@@ -365,7 +363,8 @@ export function useStories(options: UseStoriesOptions = {}) {
 
     const mediaType = opts.media_type ?? (file.type.startsWith('video/') ? 'video' : 'image');
     const fileExt = (file.name.split('.').pop() || (mediaType === 'video' ? 'mp4' : 'jpg')).toLowerCase();
-    const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+    const fileName = `${user.id}/${crypto.randomUUID()}.${fileExt}`;
+    let stored = false;
 
     setUploading(true);
     try {
@@ -374,8 +373,25 @@ export function useStories(options: UseStoriesOptions = {}) {
       // Try a signed URL (real byte progress). Fall back to the regular upload
       // API if signed upload is disabled on the bucket.
       const signed = await supabase.storage.from('stories').createSignedUploadUrl(fileName);
-      if (!signed.error && signed.data?.signedUrl) {
-        await uploadFileWithProgress(signed.data.signedUrl, file, (p) => tick({ phase: 'uploading', progress: p }));
+      if (!signed.error && signed.data?.token) {
+        let uploadProgress = 0.08;
+        tick({ phase: 'uploading', progress: uploadProgress });
+        const pulse = window.setInterval(() => {
+          uploadProgress = Math.min(0.9, uploadProgress + 0.07);
+          tick({ phase: 'uploading', progress: uploadProgress });
+        }, 240);
+        try {
+          const { error: uploadError } = await supabase.storage.from('stories').uploadToSignedUrl(
+            fileName,
+            signed.data.token,
+            file,
+            { contentType: file.type, cacheControl: '31536000', upsert: false },
+          );
+          if (uploadError) throw uploadError;
+          stored = true;
+        } finally {
+          window.clearInterval(pulse);
+        }
       } else {
         let uploadProgress = 0;
         // simulate progress ticks so the UI never appears frozen
@@ -383,9 +399,17 @@ export function useStories(options: UseStoriesOptions = {}) {
           uploadProgress = Math.min(0.9, uploadProgress + 0.08);
           tick({ phase: 'uploading', progress: uploadProgress });
         }, 220);
-        const { error: uploadError } = await supabase.storage.from('stories').upload(fileName, file);
-        window.clearInterval(pulse);
-        if (uploadError) throw uploadError;
+        try {
+          const { error: uploadError } = await supabase.storage.from('stories').upload(fileName, file, {
+            contentType: file.type,
+            cacheControl: '31536000',
+            upsert: false,
+          });
+          if (uploadError) throw uploadError;
+          stored = true;
+        } finally {
+          window.clearInterval(pulse);
+        }
       }
 
       tick({ phase: 'publishing', progress: 0.98 });
@@ -402,13 +426,18 @@ export function useStories(options: UseStoriesOptions = {}) {
           duration: mediaType === 'video' ? Math.min(opts.duration ?? STORY_MAX_DURATION, STORY_MAX_DURATION) : 5,
           music_url: opts.music?.url ?? null,
           music_name: opts.music?.name ?? null,
-          overlays: opts.overlays ?? [],
+          overlays: (opts.overlays ?? []) as unknown as Json,
           like_count: 0,
+          business_id: mode === 'business' && activeBusiness ? activeBusiness.id : null,
         })
         .select()
         .single();
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        await supabase.storage.from('stories').remove([fileName]);
+        stored = false;
+        throw insertError;
+      }
 
       tick({ phase: 'done', progress: 1 });
 
@@ -418,8 +447,9 @@ export function useStories(options: UseStoriesOptions = {}) {
       });
 
       await fetchStories();
-      return data as Story;
+      return data as unknown as Story;
     } catch (err) {
+      if (stored) await supabase.storage.from('stories').remove([fileName]);
       tick({ phase: 'publishing', progress: 1 });
       throw err;
     } finally {
@@ -431,6 +461,7 @@ export function useStories(options: UseStoriesOptions = {}) {
     if (!user) return;
 
     try {
+      const target = stories.find((story) => story.id === storyId);
       const { error } = await supabase
         .from('stories')
         .delete()
@@ -438,6 +469,21 @@ export function useStories(options: UseStoriesOptions = {}) {
         .eq('user_id', user.id);
 
       if (error) throw error;
+
+      if (target?.media_url) {
+        try {
+          const pathname = new URL(target.media_url).pathname;
+          const marker = '/storage/v1/object/public/stories/';
+          const markerIndex = pathname.indexOf(marker);
+          if (markerIndex >= 0) {
+            const storagePath = decodeURIComponent(pathname.slice(markerIndex + marker.length));
+            if (storagePath) await supabase.storage.from('stories').remove([storagePath]);
+          }
+        } catch {
+          // The database row is already deleted; a malformed legacy URL must
+          // not keep the story visible in local state.
+        }
+      }
 
       const remove = (s: Story) => s.id !== storyId;
       setStories((prev) => prev.filter(remove));
@@ -475,13 +521,25 @@ export function useStories(options: UseStoriesOptions = {}) {
             .from('story_likes')
             .delete()
             .eq('story_id', storyId)
-            .eq('user_id', user.id);
+            .eq('user_id', user.id)
+            .is('business_id', null);
           if (error) throw error;
         } else {
-          const { error } = await supabase
+          // Check if like already exists (partial unique index on (story_id, user_id) WHERE business_id IS NULL)
+          const { data: existing } = await supabase
             .from('story_likes')
-            .upsert({ story_id: storyId, user_id: user.id, reaction: 'like' }, { onConflict: 'story_id,user_id' });
-          if (error) throw error;
+            .select('id')
+            .eq('story_id', storyId)
+            .eq('user_id', user.id)
+            .is('business_id', null)
+            .maybeSingle();
+
+          if (!existing) {
+            const { error } = await supabase
+              .from('story_likes')
+              .insert({ story_id: storyId, user_id: user.id, reaction: 'like' });
+            if (error) throw error;
+          }
         }
       } catch (error) {
         console.error('Error toggling story like:', error);
@@ -515,13 +573,24 @@ export function useStories(options: UseStoriesOptions = {}) {
 
       try {
         if (remove) {
-          const { error } = await supabase.from('story_likes').delete().eq('story_id', storyId).eq('user_id', user.id);
+          const { error } = await supabase.from('story_likes').delete().eq('story_id', storyId).eq('user_id', user.id).is('business_id', null);
           if (error) throw error;
         } else {
-          const { error } = await supabase
+          // Check if like already exists (partial unique index on (story_id, user_id) WHERE business_id IS NULL)
+          const { data: existing } = await supabase
             .from('story_likes')
-            .upsert({ story_id: storyId, user_id: user.id, reaction }, { onConflict: 'story_id,user_id' });
-          if (error) throw error;
+            .select('id')
+            .eq('story_id', storyId)
+            .eq('user_id', user.id)
+            .is('business_id', null)
+            .maybeSingle();
+
+          if (!existing) {
+            const { error } = await supabase
+              .from('story_likes')
+              .insert({ story_id: storyId, user_id: user.id, reaction });
+            if (error) throw error;
+          }
         }
       } catch (error) {
         console.error('Error reacting to story:', error);

@@ -7,7 +7,7 @@ import SponsoredPost from '@/components/ads/SponsoredPost';
 import { fetchFeedAds } from '@/hooks/useAds';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Loader2, Sparkles, Zap, MessageCircle, TrendingUp, Users } from 'lucide-react';
+import { RefreshCw, Loader2, Sparkles } from 'lucide-react';
 import { useMutedUsers, useHiddenFeedPosts } from '@/hooks/useSafety';
 import { businessAccountEmbed } from '@/lib/business/businessSupport';
 import { cn } from '@/lib/utils';
@@ -133,13 +133,6 @@ export default function Feed({ userId, businessId, refreshTrigger, onRefreshComp
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [feedType, setFeedType] = useState<FeedType>('all');
-  const [catchUp, setCatchUp] = useState<null | {
-    posts: number;
-    fromFriends: number;
-    trending: number;
-    messages: number;
-    creatorsFollowing: number;
-  }>(null);
   
   const PAGE_SIZE = 10;
   const segmentedRef = useRef<HTMLDivElement | null>(null);
@@ -150,48 +143,6 @@ export default function Feed({ userId, businessId, refreshTrigger, onRefreshComp
   useEffect(() => {
     onFeedTypeChange?.(feedType);
   }, [feedType, onFeedTypeChange]);
-
-  // Catch Me Up: show a summary when the user hasn't opened the app in 3+ days.
-  useEffect(() => {
-    if (!user || isEntityView) return;
-    let cancelled = false;
-    let lastVisit: string | null = null;
-    try {
-      lastVisit = localStorage.getItem('twibsers-last-visit');
-    } catch { /* ignore */ }
-    const now = Date.now();
-    localStorage.setItem('twibsers-last-visit', new Date().toISOString());
-    if (!lastVisit) return;
-
-    const threeDays = 3 * 24 * 60 * 60 * 1000;
-    if (now - new Date(lastVisit).getTime() < threeDays) return;
-
-    (async () => {
-      try {
-        const since = new Date(now - threeDays).toISOString();
-        const [{ count: posts }, { data: newPosts }, { count: messages }, { data: newFollowers }] = await Promise.all([
-          supabase.from('posts').select('*', { count: 'exact', head: true }).gte('created_at', since).eq('hidden', false),
-          supabase.from('posts').select('user_id').gte('created_at', since).eq('hidden', false).limit(300),
-          supabase.from('messages').select('*', { count: 'exact', head: true }).gte('created_at', since).or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`),
-          supabase.from('follows').select('following_id').eq('following_id', user.id).gte('created_at', since).limit(200),
-        ]);
-        if (cancelled) return;
-        const creatorCount = Math.min((newPosts || []).length, 20);
-        const newCreatorIds = new Set((newFollowers || []).map((f) => f.following_id));
-        const friendPostsCount = (newPosts || []).filter((p) => newCreatorIds.has(p.user_id)).length;
-        setCatchUp({
-          posts: posts || 0,
-          fromFriends: friendPostsCount,
-          trending: Math.min(posts || 0, 9),
-          messages: messages || 0,
-          creatorsFollowing: creatorCount,
-        });
-      } catch (e) {
-        console.error('Catch me up error:', e);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [user, isEntityView]);
 
   // Keep latest filter state available to the realtime channel (avoids stale closures)
   const feedTypeRef = useRef(feedType);
@@ -688,44 +639,6 @@ export default function Feed({ userId, businessId, refreshTrigger, onRefreshComp
         <HomeInterestFeed />
       ) : (
         <>
-          {catchUp && !isEntityView && (catchUp.posts > 0 || catchUp.messages > 0) && (
-            <div className="mb-4 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.07] to-accent/[0.05] p-4 overflow-hidden">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
-                  <Zap className="h-4.5 w-4.5 text-primary" />
-                </div>
-                <div>
-                  <p className="font-bold leading-tight">While you were away</p>
-                  <p className="text-xs text-muted-foreground">You're 3 days behind — here's the summary</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="flex items-center gap-2 rounded-xl bg-card/70 border border-border/60 px-3 py-2.5">
-                  <Sparkles className="h-4 w-4 text-primary shrink-0" />
-                  <span className="font-semibold tabular-nums">{catchUp.posts}</span>
-                  <span className="text-muted-foreground">new posts</span>
-                </div>
-                <div className="flex items-center gap-2 rounded-xl bg-card/70 border border-border/60 px-3 py-2.5">
-                  <Users className="h-4 w-4 text-primary shrink-0" />
-                  <span className="font-semibold tabular-nums">{catchUp.fromFriends}</span>
-                  <span className="text-muted-foreground">from people you follow</span>
-                </div>
-                <div className="flex items-center gap-2 rounded-xl bg-card/70 border border-border/60 px-3 py-2.5">
-                  <TrendingUp className="h-4 w-4 text-primary shrink-0" />
-                  <span className="font-semibold tabular-nums">{catchUp.trending}</span>
-                  <span className="text-muted-foreground">trending discussions</span>
-                </div>
-                <div className="flex items-center gap-2 rounded-xl bg-card/70 border border-border/60 px-3 py-2.5">
-                  <MessageCircle className="h-4 w-4 text-primary shrink-0" />
-                  <span className="font-semibold tabular-nums">{catchUp.messages}</span>
-                  <span className="text-muted-foreground">new messages</span>
-                </div>
-              </div>
-              <p className="mt-3 text-xs text-muted-foreground/80 text-right font-medium">
-                You're caught up.
-              </p>
-            </div>
-          )}
           {items.length === 0 ? (
             <div className="text-center py-16 px-4">
               <div className="bg-card rounded-3xl border border-border/60 shadow-sm shadow-black/[0.03] p-8 max-w-sm mx-auto">

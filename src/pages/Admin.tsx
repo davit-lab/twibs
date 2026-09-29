@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import {
-  Users, FileText, Clapperboard, BookOpen, Flag, BadgeCheck,
+  Users, FileText, Clapperboard, BookOpen, Flag, BadgeCheck, ShoppingBag,
   Settings, ScrollText, Loader2, Trash, ShieldAlert, ScanFace, Megaphone,
 } from 'lucide-react';
 import AdminControlCenter from '@/components/admin/AdminControlCenter';
@@ -21,6 +21,7 @@ import AdminAuditTab from '@/components/admin/AdminAuditTab';
 import AdminDeletedUsersTab from '@/components/admin/AdminDeletedUsersTab';
 import AdminFaceAuthTab from '@/components/admin/AdminFaceAuthTab';
 import AdminAdsTab from '@/components/admin/AdminAdsTab';
+import AdminMarketplaceTab from '@/components/admin/AdminMarketplaceTab';
 import RedButtonControl from '@/components/admin/security/RedButtonControl';
 import PurgeAllUsersDialog from '@/components/admin/PurgeAllUsersDialog';
 import { cn } from '@/lib/utils';
@@ -33,6 +34,7 @@ const TABS: { value: string; icon: React.ElementType; label: string; staffOnly?:
   { value: 'books', icon: BookOpen, label: 'Books' },
   { value: 'reports', icon: Flag, label: 'Reports' },
   { value: 'ads', icon: Megaphone, label: 'Ads' },
+  { value: 'marketplace', icon: ShoppingBag, label: 'Marketplace' },
   { value: 'verification', icon: BadgeCheck, label: 'Verify' },
   { value: 'settings', icon: Settings, label: 'Settings', staffOnly: true },
   { value: 'biometric', icon: ScanFace, label: 'Biometric', staffOnly: true },
@@ -159,6 +161,10 @@ export default function Admin() {
 
           <TabsContent value="ads">
             <AdminAdsTab />
+          </TabsContent>
+
+          <TabsContent value="marketplace">
+            <AdminMarketplaceTab />
           </TabsContent>
 
           <TabsContent value="verification">

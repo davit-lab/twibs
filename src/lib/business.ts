@@ -33,7 +33,14 @@ export interface BusinessAccount {
   my_role?: BusinessRole | 'none';
 }
 
-export interface BusinessOverview {
+/** Range metadata echoed by the analytics RPCs so the UI can label the numbers. */
+export interface AnalyticsRangeMeta {
+  range_from: string | null;
+  range_to: string | null;
+  is_lifetime: boolean;
+}
+
+export interface BusinessOverview extends AnalyticsRangeMeta {
   followers_count: number;
   followers_gained_7d: number;
   active_promotions: number;
@@ -43,6 +50,9 @@ export interface BusinessOverview {
   impressions: number;
   engagement: number;
   clicks: number;
+  /** Null when the window has no impressions — shown as "—" rather than a fake 0%. */
+  ctr: number | null;
+  engagement_rate: number | null;
   recent_content: {
     id: string;
     content: string;
@@ -52,7 +62,7 @@ export interface BusinessOverview {
   }[];
 }
 
-export interface BusinessInsights {
+export interface BusinessInsights extends AnalyticsRangeMeta {
   totals: {
     reach: number;
     impressions: number;
@@ -65,9 +75,20 @@ export interface BusinessInsights {
     follows: number;
     engagements: number;
     spend_cents: number;
+    ctr: number | null;
+    engagement_rate: number | null;
   };
   daily: {
     date: string;
+    impressions: number;
+    engagements: number;
+    spend_cents: number;
+  }[];
+  /** Per-campaign performance inside the window, highest impressions first. */
+  campaigns: {
+    campaign_id: string;
+    name: string;
+    status: BusinessCampaign['status'];
     impressions: number;
     engagements: number;
     spend_cents: number;
@@ -220,3 +241,89 @@ export const ROLE_CAN = {
   canViewRestricted: (role: BusinessRole | null | undefined): boolean =>
     role === 'owner' || role === 'admin' || role === 'analyst',
 };
+// ---------------------------------------------------------------------------
+// Analytics date ranges
+// ---------------------------------------------------------------------------
+// The backend RPCs get_business_overview / get_business_insights accept an
+// optional [from, to) window. Passing no window means lifetime. The client
+// keeps a single range object so Overview and Insights always describe the same
+// period and the label can never disagree with the numbers.
+
+export type AnalyticsRangeKey = 'today' | '7d' | '30d' | '90d' | 'lifetime' | 'custom';
+
+export interface AnalyticsRange {
+  key: AnalyticsRangeKey;
+  /** ISO timestamps, or null for lifetime (backend default). */
+  from: string | null;
+  to: string | null;
+}
+
+export const ANALYTICS_RANGE_PRESETS: { key: AnalyticsRangeKey; label: string }[] = [
+  { key: 'today', label: 'Today' },
+  { key: '7d', label: '7 days' },
+  { key: '30d', label: '30 days' },
+  { key: '90d', label: '90 days' },
+  { key: 'lifetime', label: 'All time' },
+];
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Build the range to send to the RPC.
+ *
+ * The window is [from, to) and both ends are resolved to whole local days so a
+ * "30 days" window covers exactly 30 calendar days rather than 30*24h drifting
+ * across a daylight-saving boundary. `to` is exclusive, so the end day is
+ * included via the following midnight.
+ */
+export function buildAnalyticsRange(
+  key: AnalyticsRangeKey,
+  custom?: { from?: string | null; to?: string | null },
+): AnalyticsRange {
+  if (key === 'lifetime') return { key, from: null, to: null };
+
+  if (key === 'custom') {
+    const from = custom?.from ? new Date(custom.from) : null;
+    const to = custom?.to ? new Date(custom.to) : null;
+    if (!from || Number.isNaN(from.getTime()) || !to || Number.isNaN(to.getTime())) {
+      return { key: '30d', from: null, to: null };
+    }
+    // Guard against a reversed custom window: swap rather than silently
+    // returning an empty range, which would read as "no results".
+    const [start, end] = from.getTime() > to.getTime() ? [to, from] : [from, to];
+    return { key, from: start.toISOString(), to: addDays(end, 1).toISOString() };
+  }
+
+  const days = key === 'today' ? 1 : Number(key.replace('d', ''));
+  const now = new Date();
+  return {
+    key,
+    from: startOfDay(addDays(now, -(days - 1))).toISOString(),
+    to: addDays(startOfDay(now), 1).toISOString(),
+  };
+}
+
+function addDays(d: Date, days: number): Date {
+  return new Date(d.getTime() + days * DAY_MS);
+}
+
+function startOfDay(d: Date): Date {
+  const out = new Date(d);
+  out.setHours(0, 0, 0, 0);
+  return out;
+}
+
+/** Human label for the selected window, used as the heading sub-text. */
+export function describeAnalyticsRange(range: AnalyticsRange): string {
+  const preset = ANALYTICS_RANGE_PRESETS.find((p) => p.key === range.key);
+  if (range.key !== 'custom') return preset?.label ?? 'Selected period';
+  if (!range.from || !range.to) return 'Selected period';
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return `${fmt(range.from)} – ${fmt(range.to)}`;
+}
+
+/** True when the backend reported a window (as opposed to lifetime). */
+export function isWindowedRange(meta?: { is_lifetime?: boolean } | null): boolean {
+  return meta?.is_lifetime === false;
+}

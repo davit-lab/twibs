@@ -4,15 +4,18 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const AVATAR_BUCKET = 'avatars';
 const COVER_BUCKET = 'covers';
+const PRODUCT_BUCKET = 'product-images';
 
 export const MAX_BYTES = 10 * 1024 * 1024;
 export const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+// The product bucket additionally accepts AVIF, so its allow-list is its own.
+export const ALLOWED_PRODUCT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
 
 /** Aliases so call sites read as intent rather than as the hook's internals. */
 export const MAX_AVATAR_BYTES = MAX_BYTES;
 export const ALLOWED_AVATAR_TYPES = ALLOWED;
 
-export type BusinessAssetKind = 'avatar' | 'cover';
+export type BusinessAssetKind = 'avatar' | 'cover' | 'product';
 
 export interface BusinessAssetInput {
   kind: BusinessAssetKind;
@@ -29,6 +32,7 @@ export const extensionFor = (mime: string, fallback: string) => {
     'image/png': 'png',
     'image/webp': 'webp',
     'image/gif': 'gif',
+    'image/avif': 'avif',
   };
   return map[mime] || fallback;
 };
@@ -51,10 +55,16 @@ export function useBusinessAssetUpload() {
       if (!user) throw new Error('You must be signed in to upload business media.');
       if (!businessId) throw new Error('Missing business id for upload.');
 
-      const bucket = kind === 'avatar' ? AVATAR_BUCKET : COVER_BUCKET;
+      const bucket =
+        kind === 'avatar' ? AVATAR_BUCKET : kind === 'cover' ? COVER_BUCKET : PRODUCT_BUCKET;
       const source = blob ?? file;
-      if (!ALLOWED.includes(source.type)) {
-        throw new Error('Please choose a JPG, PNG, WebP or GIF image.');
+      const allowed = kind === 'product' ? ALLOWED_PRODUCT_TYPES : ALLOWED;
+      if (!allowed.includes(source.type)) {
+        throw new Error(
+          kind === 'product'
+            ? 'Please choose a JPG, PNG, WebP or AVIF image.'
+            : 'Please choose a JPG, PNG, WebP or GIF image.'
+        );
       }
       if (source.size > MAX_BYTES) {
         throw new Error('Images must be 10MB or smaller.');
@@ -63,7 +73,9 @@ export function useBusinessAssetUpload() {
       setUploading(kind);
       try {
         const ext = extensionFor(source.type, 'jpg');
-        const path = `${businessId}/business-${kind}-${Date.now()}.${ext}`;
+        // Folder layout is the authorisation: a leading business id is what
+        // can_manage_asset_folder() reads to decide who may write here.
+        const path = `${businessId}/${kind === 'product' ? 'product' : `business-${kind}`}-${crypto.randomUUID()}.${ext}`;
         const { error: uploadError } = await supabase.storage
           .from(bucket)
           .upload(path, source, { cacheControl: '3600', upsert: false });
@@ -86,7 +98,8 @@ export function useBusinessAssetUpload() {
   const remove = useCallback(
     async (publicUrl: string | null | undefined, kind: BusinessAssetKind) => {
       if (!publicUrl) return;
-      const bucket = kind === 'avatar' ? AVATAR_BUCKET : COVER_BUCKET;
+      const bucket =
+        kind === 'avatar' ? AVATAR_BUCKET : kind === 'cover' ? COVER_BUCKET : PRODUCT_BUCKET;
       const marker = `/object/public/${bucket}/`;
       const idx = publicUrl.indexOf(marker);
       if (idx === -1) return; // Not one of ours (e.g. legacy external URL) — leave it alone.

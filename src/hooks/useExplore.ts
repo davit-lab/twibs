@@ -168,6 +168,11 @@ export function useExplore() {
   );
 
   const fetchData = useCallback(async () => {
+    // Deliberate no-op read. `refreshKey` is the refetch trigger used by
+    // handleFollowChange, the realtime posts/reels subscription and the exposed
+    // refetch(). Reading it here makes this callback's identity change so the
+    // effect below re-runs. Do not drop it from the dependency array.
+    void refreshKey;
     const gen = ++genRef.current;
     setError(false);
     setLoading(true);
@@ -261,6 +266,28 @@ export function useExplore() {
       setUsers(withCounts);
       attachDistances(withCounts);
     }
+    if (businessesResult.data) {
+      // Resolve the viewer's follow state for the businesses in this page so the
+      // card can render the correct toggle without an extra request per card.
+      const followedIds = new Set<string>();
+      if (user) {
+        const { data: followed } = await supabase
+          .from('business_followers')
+          .select('business_id')
+          .eq('user_id', user.id);
+        if (genRef.current !== gen) return;
+        for (const row of (followed || []) as { business_id: string }[]) {
+          followedIds.add(row.business_id);
+        }
+      }
+      setBusinesses(
+        (businessesResult.data as Omit<ExploreBusiness, 'is_following'>[]).map((b) => ({
+          ...b,
+          is_following: followedIds.has(b.id),
+        }))
+      );
+    }
+
     if (postsResult.data) setPosts(postsResult.data as unknown as ExplorePost[]);
     if (reelsResult.data) {
       const reelRows = (reelsResult.data as (Omit<ExploreReel, 'profiles'>)[]);
@@ -315,6 +342,7 @@ export function useExplore() {
 
   return {
     users,
+    businesses,
     posts,
     reels,
     loading,
@@ -328,6 +356,6 @@ export function useExplore() {
     viewerLocationKnown,
     distancesReady,
     distancesLoading,
-    hasAny: users.length > 0 || posts.length > 0 || reels.length > 0,
+    hasAny: users.length > 0 || businesses.length > 0 || posts.length > 0 || reels.length > 0,
   };
 }

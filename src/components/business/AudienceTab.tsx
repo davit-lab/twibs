@@ -57,7 +57,7 @@ export function AudienceTab({ businessId }: { businessId: string }) {
         <MetricCard label="Total reach" value={audience.total_reach} icon={<Users className="h-4 w-4" />} />
         <MetricCard label="Returning viewers" value={audience.returning_viewers} icon={<Repeat className="h-4 w-4" />} hint="Saw your ad 2+ times" />
         <MetricCard label="Followers" value={audience.followers} icon={<UserRound className="h-4 w-4" />} />
-        <MetricCard label="Engagers" value={audience.top_engagers.length} icon={<Users className="h-4 w-4" />} />
+        <MetricCard label="Top engagers" value={audience.top_engagers.length} icon={<Users className="h-4 w-4" />} hint="Most active with your ads" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

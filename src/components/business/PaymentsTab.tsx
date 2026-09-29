@@ -1,0 +1,12 @@
+import { useQuery } from '@tanstack/react-query';
+import { commerceAction } from '@/hooks/useCommerce';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+import { useState } from 'react';
+type State = { configured: boolean; charges_enabled?: boolean; payouts_enabled?: boolean; currently_due?: string[]; disabled_reason?: string };
+export function PaymentsTab({ businessId }: { businessId: string }) {
+  const [busy, setBusy] = useState(false);
+  const { data, error, isLoading, refetch } = useQuery({ queryKey: ['business-payment-status', businessId], queryFn: () => commerceAction<State>({ action: 'status', businessId }) });
+  async function open(action: string) { setBusy(true); try { const result = await commerceAction({ action, businessId }); window.location.assign(result.url); } catch(e) { toast.error((e as Error).message); } finally { setBusy(false); } }
+  return <div className="space-y-5"><h2 className="text-xl font-bold">Payments & payouts</h2><p className="text-sm text-muted-foreground">Customer payments use Stripe Checkout. Your business receives payouts through its own connected account.</p>{isLoading ? <p>Checking provider status…</p> : error ? <div role="alert"><p>{(error as Error).message}</p><Button variant="outline" className="mt-3" onClick={() => void refetch()}>Retry</Button></div> : <><dl className="grid grid-cols-2 gap-4 border-y py-5 text-sm"><dt>Customer payments</dt><dd>{data?.charges_enabled ? 'Enabled' : 'Setup required'}</dd><dt>Business payouts</dt><dd>{data?.payouts_enabled ? 'Enabled' : 'Setup required'}</dd></dl>{data?.disabled_reason && <p className="text-sm">Provider status: {data.disabled_reason}</p>}{!!data?.currently_due?.length && <div><h3 className="font-semibold">Required by Stripe</h3><ul className="mt-2 list-inside list-disc text-sm text-muted-foreground">{data.currently_due.map(item => <li key={item}>{item.replace(/_/g,' ')}</li>)}</ul></div>}<div className="flex gap-3"><Button disabled={busy} onClick={() => void open('setup')}>{data?.configured ? 'Review payment setup' : 'Set up payments'}</Button>{data?.configured && <Button disabled={busy} variant="outline" onClick={() => void open('dashboard')}>Payouts & transactions</Button>}</div><p className="text-xs text-muted-foreground">Stripe collects and verifies required information. Twibs does not register your business with government authorities. Payout schedules and requirements are shown in your provider dashboard.</p></>}</div>;
+}

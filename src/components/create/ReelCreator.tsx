@@ -1,16 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useReels } from '@/hooks/useReels';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useMusicLibrary, MusicTrack } from '@/hooks/useMusicLibrary';
 import {
-  Loader2, Upload, X, Play, Music, Image, ChevronLeft,
+  Loader2, Upload, X, Play, Music, Image, ChevronLeft, ChevronRight,
   Volume2, VolumeX, Check, Trash2, Video, Camera, SwitchCamera,
   Circle, Square, Clock,
 } from 'lucide-react';
@@ -98,7 +96,7 @@ export default function ReelCreator({ open, onOpenChange }: ReelCreatorProps) {
     const options: { url: string; blob: Blob }[] = [];
     const paintFrame = async (index: number) => {
       if (index >= frames) {
-        video.currentTime = 0;
+        video.currentTime = duration / (frames * 2);
         setThumbnailOptions(options);
         setSelectedThumbnail(options.length > 0 ? 'auto-0' : 'none');
         return;
@@ -214,9 +212,9 @@ export default function ReelCreator({ open, onOpenChange }: ReelCreatorProps) {
       if (cameraVideoRef.current) {
         cameraVideoRef.current.srcObject = stream;
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Camera error:', error);
-      setCameraError(error.message || 'Failed to access camera');
+      setCameraError(error instanceof Error ? error.message : 'Failed to access camera');
       toast({
         variant: 'destructive',
         title: 'Camera access denied',
@@ -241,9 +239,9 @@ export default function ReelCreator({ open, onOpenChange }: ReelCreatorProps) {
       if (cameraVideoRef.current) {
         cameraVideoRef.current.srcObject = stream;
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Camera error:', error);
-      setCameraError(error.message || 'Failed to access camera');
+      setCameraError(error instanceof Error ? error.message : 'Failed to access camera');
     }
   };
 
@@ -269,6 +267,12 @@ export default function ReelCreator({ open, onOpenChange }: ReelCreatorProps) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, uploadMode]);
+
+  useEffect(() => {
+    if (cameraVideoRef.current && cameraStream) {
+      cameraVideoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream]);
 
   const startRecording = () => {
     if (!cameraStream) return;
@@ -315,7 +319,7 @@ export default function ReelCreator({ open, onOpenChange }: ReelCreatorProps) {
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       if (recordingTimerRef.current) {
@@ -347,11 +351,11 @@ export default function ReelCreator({ open, onOpenChange }: ReelCreatorProps) {
       if (error) throw error;
       toast({ title: 'Music uploaded!', description: 'Your track is now available.' });
       await refreshMusicTracks();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         variant: 'destructive',
         title: 'Upload failed',
-        description: error.message || 'Failed to upload music.',
+        description: error instanceof Error ? error.message : 'Failed to upload music.',
       });
     } finally {
       setUploadingMusic(false);
@@ -424,6 +428,16 @@ export default function ReelCreator({ open, onOpenChange }: ReelCreatorProps) {
     return null;
   };
 
+  const selectThumbnail = (index: number) => {
+    setSelectedThumbnail(`auto-${index}`);
+    const video = videoRef.current;
+    if (video && Number.isFinite(video.duration) && video.duration > 0) {
+      video.pause();
+      setIsPlaying(false);
+      video.currentTime = (video.duration / 6) * (index + 0.5);
+    }
+  };
+
   // ---- Publish ----
   const handlePublish = async () => {
     if (!videoFile || uploading) return;
@@ -452,11 +466,11 @@ export default function ReelCreator({ open, onOpenChange }: ReelCreatorProps) {
       resetToCreate();
       onOpenChange(false);
       navigate('/reels');
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         variant: 'destructive',
         title: 'Upload failed',
-        description: error.message || 'Failed to upload reel.',
+        description: error instanceof Error ? error.message : 'Failed to upload reel.',
       });
     } finally {
       setUploading(false);
@@ -479,394 +493,220 @@ export default function ReelCreator({ open, onOpenChange }: ReelCreatorProps) {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent hideCloseButton className="grid max-w-3xl max-h-[90vh] p-0 gap-0 overflow-hidden grid-rows-[auto_1fr_auto]">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border/60">
-            <div className="flex items-center gap-2">
-              {stage !== 'create' ? (
-                <Button variant="ghost" size="icon" onClick={() => setStage(stage === 'publish' ? 'details' : 'create')} aria-label="Back">
-                  <ChevronLeft className="h-5 w-5" />
-                </Button>
-              ) : (
-                <span className="w-9" />
-              )}
-              <h2 className="text-lg font-black tracking-tight">
-                {stage === 'create' ? 'Create reel' : stage === 'details' ? 'Details' : 'Publishing'}
-              </h2>
-            </div>
-            <button
-              onClick={handleClose}
-              aria-label="Close"
-              className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground hover:bg-surface-2 hover:text-foreground transition-colors"
-            >
-              <X className="h-5 w-5" />
-            </button>
+      <DialogContent
+        hideCloseButton
+        className="grid h-[100dvh] max-h-[100dvh] w-full max-w-none grid-rows-[auto_1fr_auto] gap-0 overflow-hidden rounded-none border-0 bg-[#090909] p-0 text-white shadow-none sm:h-[94dvh] sm:max-h-[900px] sm:w-[min(94vw,980px)] sm:rounded-[28px] sm:border sm:border-white/10 sm:shadow-2xl"
+      >
+        <DialogTitle className="sr-only">Create reel</DialogTitle>
+        <DialogDescription className="sr-only">Upload or record a video, choose its cover and sound, then publish it as a reel.</DialogDescription>
+
+        <header className="flex h-14 items-center justify-between border-b border-white/[0.07] px-3 sm:px-4">
+          <div className="flex min-w-10 items-center">
+            {stage !== 'create' && (
+              <button
+                type="button"
+                onClick={() => setStage(stage === 'publish' ? 'details' : 'create')}
+                disabled={uploading}
+                aria-label="Back"
+                className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/10 disabled:opacity-40"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+            )}
           </div>
+          <div className="text-center">
+            <h2 className="text-[15px] font-semibold tracking-tight">
+              {stage === 'create' ? 'New reel' : stage === 'details' ? 'Edit reel' : 'Share reel'}
+            </h2>
+            {stage !== 'publish' && <p className="text-[10px] text-zinc-500">{stage === 'create' ? 'Up to 60 seconds' : 'Preview and finish'}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={uploading}
+            aria-label="Close"
+            className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/10 hover:text-white disabled:opacity-40"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </header>
 
-          <div className="min-h-0 overflow-y-auto overscroll-contain">
-            <div className="p-5">
-              {/* Stage: pick / record */}
-              {stage === 'create' && (
-                <div className="space-y-4">
-                  <Tabs value={uploadMode} onValueChange={(v) => setUploadMode(v as 'upload' | 'record')} className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="upload" className="gap-2"><Upload className="h-4 w-4" /> Upload</TabsTrigger>
-                      <TabsTrigger value="record" className="gap-2"><Video className="h-4 w-4" /> Record</TabsTrigger>
-                    </TabsList>
+        <main className="min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain">
+          {stage === 'create' && (
+            <div className="flex min-h-full flex-col items-center px-4 py-4 sm:justify-center sm:py-6">
+              <input ref={fileInputRef} type="file" accept="video/*" onChange={handleFileSelect} className="hidden" />
 
-                    <TabsContent value="upload" className="pt-4">
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="video/*"
-                        onChange={handleFileSelect}
-                        className="hidden"
-                      />
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const file = e.dataTransfer.files?.[0];
-                          if (file) acceptVideoFile(file);
-                        }}
-                        className="w-full h-56 rounded-2xl border-2 border-dashed border-border/70 bg-surface-2/40 flex flex-col items-center justify-center gap-3 text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors cursor-pointer"
-                      >
-                        <span className="grid place-items-center w-14 h-14 rounded-2xl bg-surface-2">
-                          <Upload className="h-6 w-6" />
-                        </span>
-                        <span className="text-sm font-semibold">Choose a video to upload</span>
-                        <span className="text-xs">MP4, WebM · up to {MAX_DURATION}s · max 100MB</span>
-                      </button>
-                    </TabsContent>
-
-                    <TabsContent value="record" className="pt-4">
-                      <div className="relative aspect-[9/16] max-h-[70vh] sm:max-h-[520px] mx-auto rounded-2xl overflow-hidden bg-black border border-border/60">
-                        {cameraStream ? (
-                          <video
-                            ref={cameraVideoRef}
-                            autoPlay
-                            playsInline
-                            muted
-                            className="absolute inset-0 h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="absolute inset-0 flex flex-col items-center justify-center text-white/50 gap-3">
-                            {cameraError ? (
-                              <>
-                                <Camera className="h-8 w-8" />
-                                <p className="text-sm px-6 text-center">{cameraError}</p>
-                              </>
-                            ) : (
-                              <Loader2 className="h-8 w-8 animate-spin" />
-                            )}
-                          </div>
-                        )}
-
-                        {isRecording && (
-                          <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur px-3 py-1.5 rounded-full text-white text-xs font-bold">
-                            <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-                            {formatTime(recordingTime)}
-                            <span className="text-white/60">/ {MAX_DURATION}s</span>
-                          </div>
-                        )}
-
-                        {cameraStream && !isRecording && (
-                          <button
-                            onClick={switchCamera}
-                            className="absolute top-3 right-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur hover:bg-black/75 transition-colors"
-                            aria-label="Switch camera"
-                          >
-                            <SwitchCamera className="h-4 w-4" />
-                          </button>
-                        )}
-
-                        {cameraStream && (
-                          <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
-                            {isRecording ? (
-                              <button
-                                onClick={stopRecording}
-                                className="flex items-center gap-2 rounded-full bg-red-500 text-white font-bold text-sm px-5 py-2.5 hover:bg-red-600 transition-colors shadow-lg"
-                              >
-                                <Square className="h-4 w-4 fill-current" />
-                                Stop
-                              </button>
-                            ) : (
-                              <button
-                                onClick={startRecording}
-                                className="flex items-center gap-2 rounded-full bg-white text-black font-bold text-sm px-5 py-2.5 hover:bg-white/90 transition-colors shadow-lg"
-                              >
-                                <Circle className="h-4 w-4 fill-current text-red-500" />
-                                Record
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      <p className="text-center text-xs text-muted-foreground mt-3">
-                        Recordings are limited to {MAX_DURATION} seconds.
-                      </p>
-                    </TabsContent>
-                  </Tabs>
-                </div>
-              )}
-
-              {/* Stage: details */}
-              {stage === 'details' && videoUrl && (
-                <div className="grid gap-5 sm:grid-cols-[minmax(0,17rem)_1fr]">
-                  {/* Preview */}
-                  <div className="space-y-3">
-                    <div className="grid place-items-center rounded-2xl overflow-hidden bg-black border border-border/60 max-h-[46vh] sm:max-h-none">
-                      <div className="relative aspect-[9/16] max-h-[46vh] sm:max-h-none">
-                      <video
-                        ref={videoRef}
-                        src={videoUrl}
-                        className="absolute inset-0 h-full w-full object-cover"
-                        loop
-                        playsInline
-                        muted={isMuted}
-                        onLoadedMetadata={handleVideoLoaded}
-                        onClick={togglePlay}
-                      />
-                      {!isPlaying && (
-                        <div className="absolute inset-0 grid place-items-center pointer-events-none">
-                          <span className="grid place-items-center h-16 w-16 rounded-full bg-black/55 backdrop-blur text-white">
-                            <Play className="h-7 w-7 ml-1" fill="currentColor" />
-                          </span>
-                        </div>
-                      )}
-                      <div className="absolute bottom-3 left-3 flex items-center gap-2">
-                        <button
-                          onClick={() => { setIsPlaying(false); videoRef.current?.pause(); setIsMuted(m => !m); }}
-                          aria-label={isMuted ? 'Unmute' : 'Mute'}
-                          className="flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur hover:bg-black/75 transition-colors"
-                        >
-                          {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                        </button>
-                        <span className="rounded-full bg-black/55 backdrop-blur px-2.5 py-1 text-[11px] font-semibold text-white/90 flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" />
-                          {formatTime(videoDuration)}
-                        </span>
-                      </div>
-                      <audio ref={audioRef} className="hidden" loop />
-                    </div>
-                    </div>
-                  </div>
-
-                  {/* Details form */}
-                  <div className="space-y-5">
-                    <div>
-                      <label className="text-sm font-semibold mb-2 block">Caption</label>
-                      <Textarea
-                        placeholder="Write a caption…"
-                        value={caption}
-                        onChange={(e) => setCaption(e.target.value)}
-                        rows={2}
-                        className="resize-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-sm font-semibold mb-2 block">Cover</label>
-                      <div className="flex gap-2 flex-wrap">
-                        {thumbnailOptions.map((t, i) => (
-                          <button
-                            key={`auto-${i}`}
-                            onClick={() => setSelectedThumbnail(`auto-${i}`)}
-                            className={cn(
-                              'relative w-16 h-24 rounded-lg overflow-hidden border-2 transition-all',
-                              selectedThumbnail === `auto-${i}`
-                                ? 'border-primary ring-2 ring-primary/30'
-                                : 'border-transparent hover:border-border'
-                            )}
-                          >
-                            <img src={t.url} alt="Thumbnail" className="w-full h-full object-cover" />
-                          </button>
-                        ))}
-                        {customThumbnail && (
-                          <button
-                            onClick={() => setSelectedThumbnail('custom')}
-                            className={cn(
-                              'relative w-16 h-24 rounded-lg overflow-hidden border-2 transition-all',
-                              selectedThumbnail === 'custom'
-                                ? 'border-primary ring-2 ring-primary/30'
-                                : 'border-transparent hover:border-border'
-                            )}
-                          >
-                            <img src={customThumbnail.url} alt="Custom thumbnail" className="w-full h-full object-cover" />
-                          </button>
-                        )}
-                        <input
-                          ref={thumbnailInputRef}
-                          type="file"
-                          accept="image/*"
-                          onChange={handleThumbnailSelect}
-                          className="hidden"
-                        />
-                        <button
-                          onClick={() => thumbnailInputRef.current?.click()}
-                          className="w-16 h-24 rounded-lg border border-dashed border-border/70 flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors text-[10px] font-semibold"
-                        >
-                          <Image className="h-4 w-4" />
-                          Upload
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="text-sm font-semibold">Music</label>
-                        <input
-                          ref={musicInputRef}
-                          type="file"
-                          accept="audio/*"
-                          onChange={handleMusicUpload}
-                          className="hidden"
-                        />
-                        <Button variant="outline" size="sm" disabled={uploadingMusic} onClick={() => musicInputRef.current?.click()}>
-                          {uploadingMusic ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Music className="h-3.5 w-3.5 mr-1.5" />}
-                          Upload track
-                        </Button>
-                      </div>
-
-                      {selectedMusicTrack && selectedMusicTrack.id !== 'none' ? (
-                        <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-surface p-3 mb-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Music className="h-4 w-4 text-primary flex-shrink-0" />
-                            <span className="text-sm font-semibold truncate">{selectedMusicTrack.name}</span>
-                          </div>
-                          <button
-                            onClick={() => setSelectedMusic('none')}
-                            className="text-muted-foreground hover:text-foreground flex-shrink-0"
-                            aria-label="Remove music"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground mb-2">No music selected.</p>
-                      )}
-
-                      {selectedMusicTrack && selectedMusicTrack.id !== 'none' && selectedMusicTrack.url && (
-                        <div className="flex items-center gap-2 mb-2">
-                          <Volume2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                          <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            value={musicVolume}
-                            onChange={(e) => setMusicVolume(Number(e.target.value))}
-                            className="w-full accent-[hsl(var(--primary))]"
-                          />
-                        </div>
-                      )}
-
-                      <Tabs value={musicTab} onValueChange={(v) => setMusicTab(v as 'library' | 'mine')} className="w-full">
-                        <TabsList className="grid w-full grid-cols-2">
-                          <TabsTrigger value="library">Library</TabsTrigger>
-                          <TabsTrigger value="mine">My tracks</TabsTrigger>
-                        </TabsList>
-                        <TabsContent value={musicTab} className="pt-2">
-                          <div className="max-h-44 overflow-y-auto space-y-1 pr-1">
-                            {visibleTracks.map((track) => (
-                              <div key={track.id}>
-                                <button
-                                  onClick={() => setSelectedMusic(track.id)}
-                                  className={cn(
-                                    'w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition-colors',
-                                    selectedMusic === track.id
-                                      ? 'bg-primary/10 text-foreground font-semibold'
-                                      : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground'
-                                  )}
-                                >
-                                  <span className="flex-1 truncate text-left">{track.name}</span>
-                                  {selectedMusic === track.id && <Check className="h-4 w-4 text-primary flex-shrink-0" />}
-                                </button>
-                                {track.isCustom && (
-                                  <button
-                                    onClick={() => handleDeleteMusic(track)}
-                                    className="w-full text-left pl-10 pt-0.5 text-[11px] text-muted-foreground/70 hover:text-destructive transition-colors flex items-center gap-1"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                    Delete track
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </TabsContent>
-                      </Tabs>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Stage: publish */}
-              {stage === 'publish' && (
-                <div className="flex flex-col items-center justify-center py-10 text-center">
-                  <div className="relative mb-6 h-32 w-24 rounded-2xl overflow-hidden bg-black">
-                    {videoUrl && <video src={videoUrl} muted className="absolute inset-0 h-full w-full object-cover" />}
-                    <div className="absolute inset-x-0 bottom-0 h-1 bg-white/15">
-                      <div
-                        className="h-full bg-white transition-all duration-200"
-                        style={{ width: `${uploadProgress}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mb-4 flex items-center gap-2">
-                    {uploading ? (
-                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <div
+                className="relative aspect-[9/16] max-h-[65vh] w-full max-w-[330px] overflow-hidden rounded-[26px] bg-[#161616] shadow-[0_28px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/10"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const file = event.dataTransfer.files?.[0];
+                  if (file) acceptVideoFile(file);
+                }}
+              >
+                {uploadMode === 'record' ? (
+                  <>
+                    {cameraStream ? (
+                      <video ref={cameraVideoRef} autoPlay playsInline muted className={cn('absolute inset-0 h-full w-full object-cover', facingMode === 'user' && '-scale-x-100')} />
                     ) : (
-                      <Check className="h-5 w-5 text-primary" />
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-8 text-center text-white/55">
+                        {cameraError ? <><Camera className="h-8 w-8" /><p className="text-sm">{cameraError}</p></> : <Loader2 className="h-7 w-7 animate-spin" />}
+                      </div>
                     )}
-                    <p className="font-bold">
-                      {uploading ? uploadLabel : 'Ready to publish'}
-                    </p>
-                  </div>
 
-                  {!uploading && (
-                    <p className="text-sm text-muted-foreground max-w-xs mb-6">
-                      {caption ? `"${caption.length > 48 ? caption.slice(0, 48) + '…' : caption}"` : 'No caption'} ·{' '}
-                      {selectedMusicTrack && selectedMusicTrack.id !== 'none' ? selectedMusicTrack.name : 'No music'} ·{' '}
-                      {formatTime(videoDuration)}
-                    </p>
-                  )}
+                    <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/50 to-transparent" />
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/60 to-transparent" />
 
-                  <div className="flex items-center gap-2">
-                    {!uploading && (
-                      <Button variant="outline" onClick={() => setStage('details')}>
-                        Back to edit
-                      </Button>
+                    {isRecording && (
+                      <div className="absolute left-1/2 top-4 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 text-xs font-semibold backdrop-blur-xl">
+                        <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+                        {formatTime(recordingTime)} <span className="text-white/50">/ 1:00</span>
+                      </div>
                     )}
-                    <Button onClick={handlePublish} disabled={!canPublish}>
-                      {uploading ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          {uploadLabel}
-                        </>
-                      ) : (
-                        'Publish'
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
 
-          {/* Footer / continue */}
-          {stage === 'details' && (
-            <div className="flex items-center justify-between gap-3 p-4 border-t border-border/60">
-              <Button variant="ghost" onClick={handleClose}>
-                Cancel
-              </Button>
-              <Button onClick={() => setStage('publish')} disabled={!videoFile}>
-                Continue
-                <ChevronLeft className="h-4 w-4 ml-2 rotate-180" />
-              </Button>
+                    {cameraStream && !isRecording && (
+                      <button type="button" onClick={switchCamera} className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-xl" aria-label="Switch camera">
+                        <SwitchCamera className="h-5 w-5" />
+                      </button>
+                    )}
+
+                    {cameraStream && (
+                      <button
+                        type="button"
+                        onClick={isRecording ? stopRecording : startRecording}
+                        aria-label={isRecording ? 'Stop recording' : 'Start recording'}
+                        className="absolute bottom-5 left-1/2 flex h-[74px] w-[74px] -translate-x-1/2 items-center justify-center rounded-full border-[3px] border-white bg-white/15 shadow-xl backdrop-blur transition active:scale-95"
+                      >
+                        {isRecording ? <Square className="h-7 w-7 fill-red-500 text-red-500" /> : <Circle className="h-14 w-14 fill-white text-white" />}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
+                    <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black">
+                      <Video className="h-6 w-6" strokeWidth={1.8} />
+                    </span>
+                    <h3 className="mt-5 text-xl font-semibold tracking-tight">Add a video</h3>
+                    <p className="mt-2 max-w-[220px] text-xs leading-5 text-zinc-400">Choose a vertical video from your library or record one now.</p>
+                    <button type="button" onClick={() => fileInputRef.current?.click()} className="mt-6 h-11 rounded-full bg-white px-6 text-sm font-semibold text-black transition hover:bg-zinc-200 active:scale-[0.98]">
+                      Choose video
+                    </button>
+                    <p className="mt-3 text-[10px] text-zinc-600">MP4 or WebM · 60 sec · 100 MB</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 flex rounded-full border border-white/10 bg-white/[0.05] p-1">
+                <button type="button" onClick={() => setUploadMode('upload')} className={cn('flex h-10 min-w-28 items-center justify-center gap-2 rounded-full px-4 text-xs font-semibold transition', uploadMode === 'upload' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white')}>
+                  <Upload className="h-4 w-4" /> Library
+                </button>
+                <button type="button" onClick={() => setUploadMode('record')} className={cn('flex h-10 min-w-28 items-center justify-center gap-2 rounded-full px-4 text-xs font-semibold transition', uploadMode === 'record' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white')}>
+                  <Camera className="h-4 w-4" /> Camera
+                </button>
+              </div>
             </div>
           )}
+
+          {stage === 'details' && videoUrl && (
+            <div className="grid min-w-0 gap-0 lg:min-h-full lg:grid-cols-[minmax(320px,0.9fr)_minmax(0,1.1fr)]">
+              <section className="flex min-w-0 items-center justify-center bg-black px-4 py-3 lg:border-r lg:border-white/[0.07] lg:py-6">
+                <div className="relative aspect-[9/16] w-[72vw] max-w-[280px] shrink-0 overflow-hidden rounded-[22px] bg-zinc-950 shadow-xl ring-1 ring-white/10 sm:w-[240px] lg:w-full lg:max-w-[310px] lg:rounded-[24px] lg:shadow-2xl">
+                  <video ref={videoRef} src={videoUrl} className="absolute inset-0 h-full w-full object-contain" loop playsInline muted={isMuted} onLoadedMetadata={handleVideoLoaded} onClick={togglePlay} />
+                  {!isPlaying && (
+                    <button type="button" onClick={togglePlay} aria-label="Play video" className="absolute inset-0 flex items-center justify-center bg-black/10">
+                      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-xl"><Play className="ml-1 h-6 w-6 fill-current" /></span>
+                    </button>
+                  )}
+                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+                    <button type="button" onClick={() => { setIsPlaying(false); videoRef.current?.pause(); setIsMuted(value => !value); }} className="flex h-9 w-9 items-center justify-center rounded-full bg-black/55 backdrop-blur-xl" aria-label={isMuted ? 'Unmute' : 'Mute'}>
+                      {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                    </button>
+                    <span className="flex items-center gap-1.5 rounded-full bg-black/55 px-3 py-1.5 text-[11px] font-medium backdrop-blur-xl"><Clock className="h-3.5 w-3.5" />{formatTime(videoDuration)}</span>
+                  </div>
+                  <audio ref={audioRef} className="hidden" loop />
+                </div>
+              </section>
+
+              <section className="min-w-0 space-y-5 overflow-hidden border-t border-white/[0.07] px-4 py-4 sm:px-6 lg:overflow-y-auto lg:border-t-0 lg:px-8 lg:py-7">
+                <div className="min-w-0">
+                  <div className="mb-2 flex items-center justify-between"><label className="text-sm font-semibold">Caption</label><span className="text-[11px] tabular-nums text-zinc-600">{caption.length}/220</span></div>
+                  <Textarea placeholder="Write a caption…" value={caption} maxLength={220} onChange={(event) => setCaption(event.target.value)} rows={3} className="resize-none rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-zinc-600 focus-visible:ring-white/30" />
+                </div>
+
+                <div>
+                  <div className="mb-3 flex items-center justify-between"><label className="text-sm font-semibold">Cover</label><span className="text-[11px] text-zinc-500">Choose a frame</span></div>
+                  <div className="flex w-full max-w-full gap-2 overflow-x-auto overscroll-x-contain pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {thumbnailOptions.map((thumbnail, index) => (
+                      <button key={`auto-${index}`} type="button" onClick={() => selectThumbnail(index)} className={cn('relative aspect-[9/14] w-14 shrink-0 overflow-hidden rounded-lg transition', selectedThumbnail === `auto-${index}` ? 'ring-2 ring-white ring-offset-2 ring-offset-[#090909]' : 'opacity-65 hover:opacity-100')}>
+                        <img src={thumbnail.url} alt={`Cover option ${index + 1}`} className="h-full w-full object-cover" />
+                        {selectedThumbnail === `auto-${index}` && <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-black"><Check className="h-3 w-3" /></span>}
+                      </button>
+                    ))}
+                    {customThumbnail && (
+                      <button type="button" onClick={() => setSelectedThumbnail('custom')} className={cn('relative aspect-[9/14] w-14 shrink-0 overflow-hidden rounded-lg', selectedThumbnail === 'custom' ? 'ring-2 ring-white ring-offset-2 ring-offset-[#090909]' : 'opacity-65')}><img src={customThumbnail.url} alt="Custom cover" className="h-full w-full object-cover" /></button>
+                    )}
+                    <input ref={thumbnailInputRef} type="file" accept="image/*" onChange={handleThumbnailSelect} className="hidden" />
+                    <button type="button" onClick={() => thumbnailInputRef.current?.click()} className="flex aspect-[9/14] w-14 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] text-[9px] text-zinc-400 hover:bg-white/[0.08]"><Image className="h-4 w-4" />Custom</button>
+                  </div>
+                </div>
+
+                <div className="min-w-0 overflow-hidden">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div><label className="text-sm font-semibold">Sound</label><p className="mt-0.5 text-[11px] text-zinc-500">Add music to your reel</p></div>
+                    <input ref={musicInputRef} type="file" accept="audio/*" onChange={handleMusicUpload} className="hidden" />
+                    <button type="button" disabled={uploadingMusic} onClick={() => musicInputRef.current?.click()} className="flex h-9 items-center gap-2 rounded-full border border-white/10 px-3 text-xs font-semibold text-zinc-300 hover:bg-white/10 disabled:opacity-50">
+                      {uploadingMusic ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />} Upload sound
+                    </button>
+                  </div>
+
+                  <div className="mb-3 flex w-fit rounded-full bg-white/[0.05] p-1">
+                    {(['library', 'mine'] as const).map(tab => <button key={tab} type="button" onClick={() => setMusicTab(tab)} className={cn('h-8 rounded-full px-4 text-xs font-semibold capitalize transition', musicTab === tab ? 'bg-white text-black' : 'text-zinc-500 hover:text-white')}>{tab === 'mine' ? 'My sounds' : 'Library'}</button>)}
+                  </div>
+
+                  <div className="flex w-full max-w-full touch-pan-x gap-2 overflow-x-auto overscroll-x-contain pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {visibleTracks.map(track => (
+                      <div key={track.id} className="group relative shrink-0">
+                        <button type="button" onClick={() => setSelectedMusic(track.id)} className={cn('flex h-16 w-36 items-center gap-3 rounded-xl border px-3 text-left transition', selectedMusic === track.id ? 'border-white bg-white text-black' : 'border-white/10 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08]')}>
+                          <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full', selectedMusic === track.id ? 'bg-black/10' : 'bg-white/10')}><Music className="h-4 w-4" /></span>
+                          <span className="min-w-0 flex-1 truncate text-xs font-semibold">{track.name}</span>
+                          {selectedMusic === track.id && <Check className="h-4 w-4 shrink-0" />}
+                        </button>
+                        {track.isCustom && <button type="button" onClick={() => handleDeleteMusic(track)} aria-label={`Delete ${track.name}`} className="absolute -right-1 -top-1 hidden h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white group-hover:flex"><Trash2 className="h-3 w-3" /></button>}
+                      </div>
+                    ))}
+                  </div>
+
+                  {selectedMusicTrack && selectedMusicTrack.id !== 'none' && selectedMusicTrack.url && (
+                    <div className="mt-3 flex items-center gap-3 rounded-xl bg-white/[0.04] px-3 py-2"><Volume2 className="h-4 w-4 text-zinc-500" /><input type="range" min={0} max={100} value={musicVolume} onChange={(event) => setMusicVolume(Number(event.target.value))} className="w-full accent-white" /><button type="button" onClick={() => setSelectedMusic('none')} className="text-xs font-medium text-zinc-400 hover:text-white">Remove</button></div>
+                  )}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {stage === 'publish' && (
+            <div className="flex min-h-full flex-col items-center justify-center px-6 py-10 text-center">
+              <div className="relative aspect-[9/16] h-56 overflow-hidden rounded-[22px] bg-black shadow-2xl ring-1 ring-white/10">
+                {videoUrl && <video src={videoUrl} muted className="absolute inset-0 h-full w-full object-cover" />}
+                {uploading && <div className="absolute inset-0 flex items-center justify-center bg-black/35"><Loader2 className="h-8 w-8 animate-spin" /></div>}
+                <div className="absolute inset-x-0 bottom-0 h-1 bg-white/20"><div className="h-full bg-white transition-all duration-200" style={{ width: `${uploadProgress}%` }} /></div>
+              </div>
+              <h3 className="mt-6 text-xl font-semibold tracking-tight">{uploading ? uploadLabel : 'Your reel is ready'}</h3>
+              <p className="mt-2 max-w-sm text-sm text-zinc-500">{uploading ? `${Math.round(uploadProgress)}% complete — keep this window open.` : 'Review complete. Share it when you are ready.'}</p>
+              {!uploading && <button type="button" onClick={handlePublish} disabled={!canPublish} className="mt-6 flex h-12 min-w-40 items-center justify-center rounded-full bg-white px-7 text-sm font-semibold text-black transition hover:bg-zinc-200 active:scale-[0.98]">Share reel</button>}
+            </div>
+          )}
+        </main>
+
+        {stage === 'details' && (
+          <footer className="flex items-center justify-between border-t border-white/[0.07] bg-[#090909]/95 px-4 py-3 backdrop-blur-xl sm:px-6">
+            <button type="button" onClick={resetToCreate} className="text-sm font-medium text-zinc-400 transition hover:text-white">Replace video</button>
+            <button type="button" onClick={() => setStage('publish')} disabled={!videoFile} className="flex h-11 items-center gap-2 rounded-full bg-white px-6 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:opacity-40">
+              Next <ChevronRight className="h-4 w-4" />
+            </button>
+          </footer>
+        )}
       </DialogContent>
       <canvas ref={canvasRef} className="hidden" />
     </Dialog>

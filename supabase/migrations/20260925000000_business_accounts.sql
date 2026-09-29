@@ -60,7 +60,7 @@ END $$;
 -- ADVERTISER ACCOUNTS: business identity columns
 -- =============================================
 ALTER TABLE public.advertiser_accounts
-  ADD COLUMN IF NOT EXISTS goals TEXT[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS goals TEXT[] NOT NULL DEFAULT '{}'::text[],
   ADD COLUMN IF NOT EXISTS followers_count INT NOT NULL DEFAULT 0;
 
 
@@ -399,13 +399,19 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.business_members
-    WHERE business_id = p_business_id
-      AND user_id = auth.uid()
-      AND role IN ('owner', 'admin')
-  )
-$$;
+  SELECT
+    EXISTS (
+      SELECT 1 FROM public.advertiser_accounts a
+      WHERE a.id = p_business_id
+        AND a.user_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.business_members m
+      WHERE m.business_id = p_business_id
+        AND m.user_id = auth.uid()
+        AND m.role IN ('owner', 'admin')
+    )
+  $$;
 
 -- =============================================
 -- RPC: CREATE BUSINESS ACCOUNT (4-step onboarding backend)
@@ -429,13 +435,51 @@ SET search_path = public
 AS $$
 DECLARE
   v_account public.advertiser_accounts;
+  v_name TEXT;
+  v_username TEXT;
 BEGIN
   IF auth.uid() IS NULL THEN
-    RAISE EXCEPTION 'Not authenticated';
+    RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501';
   END IF;
 
   IF p_account_type NOT IN ('business', 'creator', 'organization', 'project') THEN
-    RAISE EXCEPTION 'A business account must be of type business, creator, organization or project';
+    RAISE EXCEPTION 'A business account must be of type business, creator, organization or project'
+    USING ERRCODE = '22023';
+  END IF;
+
+  v_name := trim(coalesce(p_name, ''));
+  IF v_name = '' THEN
+    RAISE EXCEPTION 'Name is required' USING ERRCODE = '22023';
+  END IF;
+  IF length(v_name) > 100 THEN
+    RAISE EXCEPTION 'Name must be 100 characters or fewer' USING ERRCODE = '22023';
+  END IF;
+
+  v_username := trim(coalesce(p_username, ''));
+  IF v_username = '' THEN
+    RAISE EXCEPTION 'Username is required' USING ERRCODE = '22023';
+  END IF;
+  IF length(v_username) < 3 OR length(v_username) > 30 THEN
+    RAISE EXCEPTION 'Username must be 3–30 characters' USING ERRCODE = '22023';
+  END IF;
+  IF v_username !~ '^[a-zA-Z0-9_]+$' THEN
+    RAISE EXCEPTION 'Username may only contain letters, numbers and underscores' USING ERRCODE = '22023';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM public.advertiser_accounts WHERE username = v_username) THEN
+    RAISE EXCEPTION 'That username is already taken' USING ERRCODE = '23505';
+  END IF;
+
+  IF p_description IS NOT NULL AND length(trim(p_description)) > 500 THEN
+    RAISE EXCEPTION 'Description must be 500 characters or fewer' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_website IS NOT NULL AND trim(p_website) <> '' AND trim(p_website) !~ '^https?://' THEN
+    RAISE EXCEPTION 'Website must start with http:// or https://' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_goals IS NOT NULL AND cardinality(p_goals) > 10 THEN
+    RAISE EXCEPTION 'Choose no more than 10 goals' USING ERRCODE = '22023';
   END IF;
 
   SELECT * INTO v_account
@@ -445,15 +489,21 @@ BEGIN
   );
 
   INSERT INTO public.business_members (business_id, user_id, role)
-  VALUES (v_account.id, auth.uid(), 'owner');
+  VALUES (v_account.id, auth.uid(), 'owner')
+  ON CONFLICT (business_id, user_id) DO NOTHING;
 
   INSERT INTO public.business_settings (business_id, discovery_priority, quality_signals, audience_expansion)
-  VALUES (v_account.id, 'normal', '{}'::jsonb, true);
+  VALUES (v_account.id, 'normal', '{}'::jsonb, true)
+  ON CONFLICT (business_id) DO NOTHING;
 
   INSERT INTO public.business_balances (business_id, balance_cents, currency)
-  VALUES (v_account.id, 0, 'USD');
+  VALUES (v_account.id, 0, 'USD')
+  ON CONFLICT (business_id) DO NOTHING;
 
-  UPDATE public.advertiser_accounts SET goals = COALESCE(p_goals, '{}') WHERE id = v_account.id;
+  UPDATE public.advertiser_accounts
+  SET goals = COALESCE(p_goals, '{}'::text[])
+  WHERE id = v_account.id
+  RETURNING * INTO v_account;
 
   RETURN v_account;
 END;

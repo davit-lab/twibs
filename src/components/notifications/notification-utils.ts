@@ -113,6 +113,8 @@ export function aggregateTitle(items: Notification[]): string {
 
 export function getNotificationLink(notification: Notification): string | null {
   switch (notification.target_type) {
+    case 'order':
+      return notification.target_id ? `/orders?order=${notification.target_id}` : null;
     case 'profile':
       return notification.actor ? `/profile/${notification.actor.username}` : null;
     case 'post':

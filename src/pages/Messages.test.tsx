@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
 import Messages from './Messages';
 
+vi.mock('@/contexts/ActiveIdentityContext', () => ({ useActiveIdentity: () => ({ identity: { type: 'personal', userId: 'user-1', businessId: null } }) }));
+
 const mockUseAuth = vi.fn();
 const mockUseConversations = vi.fn();
 
@@ -53,6 +55,8 @@ describe('Messages layout', () => {
     mockUseConversations.mockReturnValue({
       conversations: [],
       loading: false,
+      error: null,
+      fetchConversations: vi.fn(),
       startConversation: vi.fn(),
       createGroup: vi.fn(),
       createCommunity: vi.fn(),
@@ -71,5 +75,15 @@ describe('Messages layout', () => {
     expect(sidebar).toHaveClass('md:w-72');
     expect(sidebar).toHaveClass('lg:w-80');
     expect(screen.getByRole('button', { name: /Chats/i })).toBeInTheDocument();
+  });
+
+  it('does not render an empty inbox when loading the inbox failed', () => {
+    mockUseConversations.mockReturnValueOnce({
+      conversations: [], loading: false, error: new Error('network'), fetchConversations: vi.fn(),
+      startConversation: vi.fn(), createGroup: vi.fn(), createCommunity: vi.fn(), joinByCode: vi.fn(), leaveConversation: vi.fn(), deleteConversation: vi.fn(),
+    });
+    render(<Messages />);
+    expect(screen.getByText(/Chats could not be loaded/i)).toBeInTheDocument();
+    expect(screen.queryByText('ConversationList')).not.toBeInTheDocument();
   });
 });

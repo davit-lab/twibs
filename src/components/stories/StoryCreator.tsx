@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, Image as ImageIcon, Music, Type, X, Clapperboard, Loader2, ChevronRight } from 'lucide-react';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Camera, Image as ImageIcon, Music, Type, X, Clapperboard, Loader2, ChevronRight, Clock3, RefreshCw } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import CameraModal from '@/components/media/CameraModal';
 import type { MediaEditorResult } from '@/components/media/FilterEditor';
 import StoryEditor from '@/components/stories/StoryEditor';
 import StoryVideoTrimmer, { type TrimRange } from '@/components/stories/StoryVideoTrimmer';
 import StoryMusicPicker from '@/components/stories/StoryMusicPicker';
 import StoryOverlayRenderer from '@/components/stories/StoryOverlayRenderer';
+import StoryMediaBackdrop from '@/components/stories/StoryMediaBackdrop';
 import type { MusicTrack } from '@/hooks/useMusicLibrary';
 import {
   STORY_BACKGROUNDS,
@@ -68,11 +69,14 @@ export default function StoryCreator({ open, onOpenChange, onUpload }: StoryCrea
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [uploadPhase, setUploadPhase] = useState<'preparing' | 'uploading' | 'publishing' | 'done'>('preparing');
+  const [imageDuration, setImageDuration] = useState(STORY_IMAGE_DURATION);
   const [workingLabel, setWorkingLabel] = useState<string | null>(null);
 
   const galleryRef = useRef<HTMLInputElement>(null);
   const prevOpenRef = useRef(false);
   const autosaveTimer = useRef<number | null>(null);
+  const mediaUrlRef = useRef<string | null>(null);
 
   // Object URLs are stable per draft across renders.
   const draftUrls = useMemo(() => {
@@ -85,8 +89,7 @@ export default function StoryCreator({ open, onOpenChange, onUpload }: StoryCrea
 
   useEffect(() => {
     return () => draftUrls.forEach((url) => URL.revokeObjectURL(url));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [draftUrls]);
 
   // -------------------------------------------------------------------------
   // lifecycle
@@ -104,6 +107,8 @@ export default function StoryCreator({ open, onOpenChange, onUpload }: StoryCrea
     setStep('menu');
     setUploading(false);
     setProgress(0);
+    setUploadPhase('preparing');
+    setImageDuration(STORY_IMAGE_DURATION);
     setUploadError(null);
     setWorkingLabel(null);
   };
@@ -119,11 +124,14 @@ export default function StoryCreator({ open, onOpenChange, onUpload }: StoryCrea
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    mediaUrlRef.current = media?.url ?? null;
+  }, [media?.url]);
+
+  useEffect(() => {
     return () => {
       unblockCallOverlay();
-      if (media?.url) URL.revokeObjectURL(media.url);
+      if (mediaUrlRef.current) URL.revokeObjectURL(mediaUrlRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -284,7 +292,7 @@ export default function StoryCreator({ open, onOpenChange, onUpload }: StoryCrea
   // -------------------------------------------------------------------------
 
   const publishDuration = (m: MediaSource) =>
-    m.type === 'video' ? Math.min(m.duration, STORY_MAX_DURATION) : STORY_IMAGE_DURATION;
+    m.type === 'video' ? Math.min(m.duration, STORY_MAX_DURATION) : imageDuration;
 
   const share = async () => {
     if (!media || uploading) return;
@@ -298,7 +306,10 @@ export default function StoryCreator({ open, onOpenChange, onUpload }: StoryCrea
         duration: publishDuration(media),
         media_type: media.type,
         overlays,
-        onProgress: (state) => setProgress(Math.round(state.progress * 100)),
+        onProgress: (state) => {
+          setUploadPhase(state.phase);
+          setProgress(Math.round(state.progress * 100));
+        },
       });
       if (draftId) deleteStoryDraft(draftId).catch(() => {});
       reset();
@@ -322,79 +333,111 @@ export default function StoryCreator({ open, onOpenChange, onUpload }: StoryCrea
       className={cn(
         'w-full max-w-none border-0 bg-black p-0 text-white shadow-none',
         'h-[100dvh] max-h-[100dvh] overflow-hidden rounded-none',
-        'sm:mx-auto sm:h-[96dvh] sm:max-h-[940px] sm:w-[min(96vw,1080px)] sm:rounded-2xl sm:ring-1 sm:ring-white/10',
+        'sm:mx-auto sm:h-[94dvh] sm:max-h-[920px] sm:w-[min(94vw,980px)] sm:rounded-[28px] sm:ring-1 sm:ring-white/10',
       )}
     >
       <DialogTitle className="sr-only">Create a story</DialogTitle>
+      <DialogDescription className="sr-only">Choose, edit, and publish a photo, video, or text story.</DialogDescription>
 
       {/* ------------------------------ MENU ------------------------------ */}
       {step === 'menu' && (
-        <div className="flex h-full flex-col pt-[max(env(safe-area-inset-top,0px),12px)] pb-[max(env(safe-area-inset-bottom,0px),16px)]">
-          <header className="flex items-center justify-between px-4">
+        <div className="flex h-full flex-col overflow-hidden bg-black pt-[max(env(safe-area-inset-top,0px),10px)] pb-[max(env(safe-area-inset-bottom,0px),12px)]">
+          <header className="flex h-12 shrink-0 items-center justify-between px-3">
             <button
               type="button"
               onClick={handleClose}
               aria-label="Close"
-              className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-900 hover:text-white"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/10 hover:text-white"
             >
               <X className="h-5 w-5" />
             </button>
-            <h2 className="text-base font-semibold tracking-tight text-white">New story</h2>
+            <div className="text-center">
+              <h2 className="text-[15px] font-semibold tracking-tight text-white">Add to story</h2>
+              <p className="text-[10px] text-zinc-500">Visible for 24 hours</p>
+            </div>
             <span className="w-10" />
           </header>
 
-          <div className="grid grid-cols-3 gap-2.5 px-4 pt-6">
-            <MenuItemButton
-              icon={<Camera className="h-6 w-6" />}
-              label="Photo"
-              hint="Camera"
-              onClick={() => {
-                setCameraStartMode('photo');
-                setCameraOpen(true);
-              }}
-            />
-            <MenuItemButton
-              icon={<Clapperboard className="h-6 w-6" />}
-              label="Video"
-              hint="Camera"
-              onClick={() => {
-                setCameraStartMode('video');
-                setCameraOpen(true);
-              }}
-            />
-            <MenuItemButton
-              icon={<ImageIcon className="h-6 w-6" />}
-              label="Gallery"
-              hint="Device"
-              onClick={() => galleryRef.current?.click()}
-            />
-          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 sm:px-8">
+            <div className="mx-auto flex w-full max-w-[340px] flex-col items-center pt-3 sm:max-w-[380px] sm:pt-5">
+              <div className="relative aspect-[9/14] max-h-[52vh] w-full overflow-hidden rounded-[26px] border border-white/10 bg-[#171717] shadow-[0_24px_70px_rgba(0,0,0,0.55)]">
+                <div className="absolute inset-0 bg-[linear-gradient(145deg,#202020_0%,#111111_58%,#181818_100%)]" />
+                <div className="absolute left-4 top-4 h-5 w-5 border-l border-t border-white/20" />
+                <div className="absolute right-4 top-4 h-5 w-5 border-r border-t border-white/20" />
+                <div className="absolute bottom-4 left-4 h-5 w-5 border-b border-l border-white/20" />
+                <div className="absolute bottom-4 right-4 h-5 w-5 border-b border-r border-white/20" />
 
-          <button
-            type="button"
-            onClick={() => setStep('bg')}
-            className="mx-4 mt-3 flex items-center gap-4 rounded-2xl border border-white/10 bg-zinc-900/40 px-4 py-4 text-left transition hover:border-white/20 hover:bg-zinc-900"
-          >
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-600/20 text-violet-300">
-              <Type className="h-5 w-5" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-white">Text story</span>
-              <span className="block text-xs text-zinc-500">A bold, editorial moment on a background</span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600" />
-          </button>
+                <div className="relative flex h-full flex-col items-center justify-center px-8 text-center">
+                  <span className="mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-white text-black shadow-[0_10px_35px_rgba(255,255,255,0.12)]">
+                    <ImageIcon className="h-6 w-6" strokeWidth={1.8} />
+                  </span>
+                  <h3 className="text-xl font-semibold tracking-tight text-white">Create your story</h3>
+                  <p className="mt-1.5 max-w-[220px] text-xs leading-5 text-zinc-400">Choose a photo or video, then make it yours.</p>
+                  <button
+                    type="button"
+                    onClick={() => galleryRef.current?.click()}
+                    className="mt-6 h-11 rounded-full bg-white px-6 text-sm font-semibold text-black transition hover:bg-zinc-200 active:scale-[0.98]"
+                  >
+                    Choose from library
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCameraStartMode('photo');
+                      setCameraOpen(true);
+                    }}
+                    className="mt-2 flex h-10 items-center gap-2 rounded-full px-5 text-sm font-medium text-white transition hover:bg-white/10"
+                  >
+                    <Camera className="h-4 w-4" />
+                    Open camera
+                  </button>
+                </div>
+              </div>
 
-          {drafts.length > 0 && (
-            <div className="mt-6 px-4">
-              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Drafts</h3>
+              <div className="mt-4 grid w-full grid-cols-3 rounded-2xl border border-white/10 bg-white/[0.04] p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCameraStartMode('photo');
+                    setCameraOpen(true);
+                  }}
+                  className="flex h-12 items-center justify-center gap-2 rounded-xl text-xs font-semibold text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                >
+                  <Camera className="h-4 w-4" /> Photo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCameraStartMode('video');
+                    setCameraOpen(true);
+                  }}
+                  className="flex h-12 items-center justify-center gap-2 rounded-xl text-xs font-semibold text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                >
+                  <Clapperboard className="h-4 w-4" /> Video
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep('bg')}
+                  className="flex h-12 items-center justify-center gap-2 rounded-xl text-xs font-semibold text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                >
+                  <Type className="h-4 w-4" /> Text
+                </button>
+              </div>
+            </div>
+
+            {drafts.length > 0 && (
+            <div className="mx-auto mt-5 w-full max-w-[520px]">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-xs font-semibold text-zinc-300">Your drafts</h3>
+                <span className="text-[11px] text-zinc-600">Saved on this device</span>
+              </div>
               <div className="flex gap-2 overflow-x-auto pb-2 [scrollbar-width:thin]">
                 {drafts.slice(0, 8).map((draft) => (
                   <button
                     key={draft.id}
                     type="button"
                     onClick={() => resumeDraft(draft)}
-                    className="relative flex h-32 w-20 shrink-0 flex-col overflow-hidden rounded-xl ring-1 ring-white/10 transition hover:ring-violet-500/60"
+                    className="relative flex aspect-[9/14] w-20 shrink-0 flex-col overflow-hidden rounded-xl ring-1 ring-white/10 transition hover:ring-white/40"
                   >
                     {draft.mediaType === 'video' ? (
                       <>
@@ -412,7 +455,7 @@ export default function StoryCreator({ open, onOpenChange, onUpload }: StoryCrea
                     </span>
                     {draft.music && draft.music.id !== 'none' && (
                       <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60">
-                        <Music className="h-3 w-3 text-violet-300" />
+                        <Music className="h-3 w-3 text-white" />
                       </span>
                     )}
                   </button>
@@ -421,7 +464,8 @@ export default function StoryCreator({ open, onOpenChange, onUpload }: StoryCrea
             </div>
           )}
 
-          {uploadError && <p className="mx-4 mt-4 text-center text-xs text-red-400">{uploadError}</p>}
+            {uploadError && <p className="mx-auto mt-3 max-w-[520px] rounded-xl bg-red-500/10 px-3 py-2 text-center text-xs text-red-300">{uploadError}</p>}
+          </div>
         </div>
       )}
 
@@ -479,7 +523,7 @@ export default function StoryCreator({ open, onOpenChange, onUpload }: StoryCrea
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-4">
             <div className="relative mx-auto aspect-[9/16] max-h-[56vh] overflow-hidden rounded-2xl bg-zinc-950 ring-1 ring-white/10">
-              <video src={media.url} className="absolute inset-0 h-full w-full object-cover" autoPlay loop muted playsInline />
+              <video src={media.url} className="absolute inset-0 h-full w-full object-contain" autoPlay loop muted playsInline />
               {workingLabel && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/60">
                   <div className="flex flex-col items-center gap-3">
@@ -569,16 +613,22 @@ export default function StoryCreator({ open, onOpenChange, onUpload }: StoryCrea
             >
               <X className="h-5 w-5" />
             </button>
-            <h2 className="text-base font-semibold text-white">Share</h2>
+            <div className="text-center">
+              <h2 className="text-sm font-semibold text-white">Ready to share</h2>
+              <p className="text-[10px] text-zinc-500">Final preview</p>
+            </div>
             <span className="w-10" />
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4">
             <div className="relative mx-auto aspect-[9/16] max-h-[56vh] overflow-hidden rounded-2xl bg-zinc-950 ring-1 ring-white/10">
               {media.type === 'video' ? (
-                <video src={media.url} className="absolute inset-0 h-full w-full object-cover" autoPlay loop muted playsInline />
+                <video src={media.url} className="absolute inset-0 h-full w-full object-contain" autoPlay loop muted playsInline />
               ) : (
-                <img src={media.url} alt="Story preview" className="absolute inset-0 h-full w-full object-cover" />
+                <>
+                  <StoryMediaBackdrop src={media.url} mediaType="image" />
+                  <img src={media.url} alt="Story preview" className="absolute inset-0 h-full w-full object-contain" />
+                </>
               )}
               <StoryOverlayRenderer overlays={overlays} />
             </div>
@@ -605,6 +655,41 @@ export default function StoryCreator({ open, onOpenChange, onUpload }: StoryCrea
                 </span>
                 <ChevronRight className="h-4 w-4 text-zinc-600" />
               </button>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => galleryRef.current?.click()}
+                  disabled={uploading}
+                  className="flex h-12 items-center gap-3 rounded-xl border border-white/10 bg-zinc-900/50 px-4 text-sm font-medium text-zinc-200 transition hover:border-white/20 disabled:opacity-50"
+                >
+                  <RefreshCw className="h-4 w-4 text-zinc-400" />
+                  Replace media
+                </button>
+                <div className="flex h-12 items-center gap-2 rounded-xl border border-white/10 bg-zinc-900/50 px-3">
+                  <Clock3 className="h-4 w-4 shrink-0 text-zinc-400" />
+                  {media.type === 'image' ? (
+                    <div className="flex min-w-0 flex-1 justify-end gap-1">
+                      {[3, 5, 7, 10].map((seconds) => (
+                        <button
+                          key={seconds}
+                          type="button"
+                          onClick={() => setImageDuration(seconds)}
+                          className={cn(
+                            'h-7 min-w-7 rounded-md px-1.5 text-xs font-semibold transition',
+                            imageDuration === seconds ? 'bg-white text-black' : 'text-zinc-400 hover:bg-white/10 hover:text-white',
+                          )}
+                          aria-label={`Show story for ${seconds} seconds`}
+                        >
+                          {seconds}s
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="ml-auto text-xs text-zinc-400">{Math.ceil(publishDuration(media))}s</span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -619,7 +704,7 @@ export default function StoryCreator({ open, onOpenChange, onUpload }: StoryCrea
               {uploading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Publishing
+                  {uploadPhase === 'preparing' ? 'Preparing' : uploadPhase === 'uploading' ? 'Uploading' : 'Publishing'}
                 </>
               ) : (
                 <>
@@ -630,7 +715,7 @@ export default function StoryCreator({ open, onOpenChange, onUpload }: StoryCrea
             </button>
             {uploading && (
               <div className="mt-2">
-                <ProgressBar value={progress} label={`Uploading ${progress}%`} />
+                <ProgressBar value={progress} label={`${progress}%`} />
               </div>
             )}
           </div>
@@ -680,22 +765,6 @@ export default function StoryCreator({ open, onOpenChange, onUpload }: StoryCrea
     >
       {content}
     </Dialog>
-  );
-}
-
-function MenuItemButton({ icon, label, hint, onClick }: { icon: React.ReactNode; label: string; hint: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-zinc-900/40 px-2 py-5 transition hover:border-violet-500/40 hover:bg-zinc-900 active:scale-[0.98]"
-    >
-      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-900 text-zinc-300 ring-1 ring-white/10 transition group-hover:text-violet-300">
-        {icon}
-      </span>
-      <span className="text-sm font-semibold text-white">{label}</span>
-      <span className="text-[11px] text-zinc-500">{hint}</span>
-    </button>
   );
 }
 

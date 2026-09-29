@@ -14,8 +14,9 @@ import {
   Settings,
   ChevronDown,
   Maximize2,
+  ZoomIn,
+  ZoomOut,
   Volume2,
-  VolumeX,
   Signal,
   Send,
   UserRound,
@@ -80,21 +81,29 @@ export function CallScreen() {
     isMuted,
     isVideoOff,
     isScreenSharing,
+    remoteIsScreenSharing,
     mediaError,
+    error,
     isOutgoingRinging,
     minimized,
     reactions,
+    dismissEndScreen,
   } = call;
 
   const [elapsed, setElapsed] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [speakerOn, setSpeakerOn] = useState(false);
+  const [screenZoom, setScreenZoom] = useState(1);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const screenPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const screenStageRef = useRef<HTMLDivElement | null>(null);
 
+  const hasRemoteVideo = !!remoteStream?.getVideoTracks().some(
+    (track) => track.readyState === 'live' && !track.muted
+  );
   const isVideoCall = session?.call_type === 'video' || !!localStream?.getVideoTracks().length;
+  const isVisualCall = isVideoCall || hasRemoteVideo || isScreenSharing || remoteIsScreenSharing;
   const isConnected = phase === 'connected';
   const isReconnecting = phase === 'reconnecting';
 
@@ -116,37 +125,29 @@ export function CallScreen() {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
     }
-  }, [remoteStream]);
-  useEffect(() => {
-    if (remoteAudioRef.current && remoteStream) {
-      remoteAudioRef.current.srcObject = remoteStream;
-    }
-  }, [remoteStream]);
+  }, [remoteStream, hasRemoteVideo, remoteIsScreenSharing]);
   useEffect(() => {
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream;
     }
-  }, [localStream]);
+  }, [localStream, isScreenSharing, isVideoOff]);
+  useEffect(() => {
+    if (screenPreviewRef.current && screenStream) {
+      screenPreviewRef.current.srcObject = screenStream;
+      void screenPreviewRef.current.play().catch(() => {});
+    }
+  }, [screenStream]);
+
+  useEffect(() => {
+    if (!remoteIsScreenSharing) setScreenZoom(1);
+  }, [remoteIsScreenSharing]);
 
   // Auto-close the end screen so it never blocks navigation forever.
   useEffect(() => {
     if (phase !== 'ended') return;
-    const t = window.setTimeout(() => call.dismissEndScreen(), END_SCREEN_AUTO_CLOSE_MS);
+    const t = window.setTimeout(() => dismissEndScreen(), END_SCREEN_AUTO_CLOSE_MS);
     return () => window.clearTimeout(t);
-  }, [phase, call.dismissEndScreen]);
-
-  const toggleSpeaker = useCallback(() => {
-    const el: HTMLMediaElement | null =
-      (remoteVideoRef.current as HTMLMediaElement | null) ?? remoteAudioRef.current;
-    if (!el || typeof el.setSinkId !== 'function') {
-      setSpeakerOn((v) => !v);
-      return;
-    }
-    const next = !speakerOn;
-    const out = call.devices.audioOutputs[0]?.deviceId;
-    el.setSinkId(next && out ? out : '').catch(() => {});
-    setSpeakerOn(next);
-  }, [speakerOn, call.devices.audioOutputs]);
+  }, [phase, dismissEndScreen]);
 
   const initials =
     peerProfile?.display_name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
@@ -182,7 +183,16 @@ export function CallScreen() {
           </p>
         </div>
         <div className="flex items-center gap-1.5">
-          {isConnected && isVideoCall && !isScreenSharing ? (
+          {isConnected && remoteIsScreenSharing ? (
+            <button
+              type="button"
+              aria-label="View shared screen in fullscreen"
+              onClick={() => void screenStageRef.current?.requestFullscreen?.()}
+              className="flex h-10 w-10 items-center justify-center rounded-full text-[hsl(var(--muted-foreground))] transition-colors hover:bg-[hsl(var(--muted))]"
+            >
+              <Maximize2 className="h-5 w-5" />
+            </button>
+          ) : isConnected && isVideoCall && !isScreenSharing ? (
             <button
               type="button"
               aria-label="Picture in picture"
@@ -211,7 +221,7 @@ export function CallScreen() {
       {bg}
 
       <div className="relative z-10 flex min-h-0 flex-1 flex-col justify-end">
-        {phase === 'ended' ? <EndScreen /> : isVideoCall && (isConnected || isReconnecting) ? (
+        {phase === 'ended' ? <EndScreen /> : isVisualCall && (isConnected || isReconnecting) ? (
           <VideoStage />
         ) : (
           <VoiceStage />
@@ -228,7 +238,6 @@ export function CallScreen() {
           }}
         />
       </div>
-
       {/* Reactions floating above everything in the stage */}
       <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
         {reactions.map((r) => (
@@ -266,6 +275,24 @@ export function CallScreen() {
         </div>
       ) : null}
 
+      {call.audioPlaybackBlocked && phase !== 'ended' ? (
+        <div className="absolute inset-x-0 top-20 z-40 flex justify-center px-4">
+          <button type="button" onClick={() => void call.resumeRemoteAudio()} className="flex items-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-4 py-3 text-sm font-semibold shadow-xl">
+            <Volume2 className="h-4 w-4" />
+            Tap to hear the call
+          </button>
+        </div>
+      ) : null}
+
+      {error && !mediaError && !call.audioPlaybackBlocked && phase !== 'ended' ? (
+        <div className="absolute inset-x-0 top-20 z-40 flex justify-center px-4">
+          <div className="flex max-w-md items-center gap-3 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-4 py-3 shadow-xl">
+            <p className="text-sm">{error}</p>
+            <button type="button" onClick={call.clearMediaError} className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Dismiss</button>
+          </div>
+        </div>
+      ) : null}
+
       {/* ---------- reconnecting banner ---------- */}
       {isReconnecting ? (
         <div className="absolute inset-x-0 top-0 z-40 flex justify-center pt-6">
@@ -278,23 +305,32 @@ export function CallScreen() {
   );
 
   function VideoStage() {
-    const showRemote = !!remoteStream && remoteStream.getVideoTracks().length > 0;
+    const showRemote = hasRemoteVideo;
     return (
-      <div className="relative flex min-h-0 flex-1 items-center justify-center px-3 pb-4">
-        {screenStream ? (
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            className="h-full w-full rounded-2xl object-contain"
-          />
-        ) : showRemote ? (
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            className="h-full w-full rounded-2xl bg-black object-contain sm:object-cover"
-          />
+      <div ref={screenStageRef} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black px-0 pb-4 sm:mx-3 sm:rounded-lg">
+        {showRemote ? (
+          <div className={cn(
+            'flex h-full w-full items-center justify-center',
+            remoteIsScreenSharing && screenZoom > 1 ? 'overflow-auto' : 'overflow-hidden'
+          )}>
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              muted
+              style={remoteIsScreenSharing ? {
+                width: `${screenZoom * 100}%`,
+                height: `${screenZoom * 100}%`,
+                maxWidth: 'none',
+                maxHeight: 'none',
+                flex: '0 0 auto',
+              } : undefined}
+              className={cn(
+                'h-full w-full bg-black transition-[width,height] duration-150',
+                remoteIsScreenSharing ? 'object-contain' : 'object-cover'
+              )}
+            />
+          </div>
         ) : (
           <div className="flex flex-col items-center gap-4">
             <div className="h-28 w-28 animate-pulse overflow-hidden rounded-full border border-[hsl(var(--border))]">
@@ -308,8 +344,13 @@ export function CallScreen() {
             </p>
           </div>
         )}
-        {localStream ? (
-          <div className="absolute right-4 top-4 h-36 w-24 overflow-hidden rounded-xl border border-[hsl(var(--border))] bg-black shadow-lg">
+        {screenStream ? (
+          <div className="absolute right-3 top-3 h-28 w-44 overflow-hidden rounded-md border border-white/20 bg-black shadow-lg sm:h-36 sm:w-60">
+            <video ref={screenPreviewRef} autoPlay playsInline muted className="h-full w-full object-contain" />
+            <span className="absolute bottom-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">Your screen</span>
+          </div>
+        ) : localStream?.getVideoTracks().length ? (
+          <div className="absolute right-4 top-4 h-36 w-24 overflow-hidden rounded-md border border-[hsl(var(--border))] bg-black shadow-lg">
             <video
               ref={localVideoRef}
               autoPlay
@@ -325,10 +366,19 @@ export function CallScreen() {
           </div>
         ) : null}
 
-        {screenStream ? (
-          <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-xs text-white backdrop-blur">
-            <Monitor className="h-3.5 w-3.5" />
-            Presenting screen
+        {remoteIsScreenSharing ? (
+          <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-md border border-white/15 bg-black/75 p-1 text-white">
+            <button type="button" aria-label="Zoom out" disabled={screenZoom <= 1} onClick={() => setScreenZoom((value) => Math.max(1, value - 0.25))} className="grid h-8 w-8 place-items-center disabled:opacity-35"><ZoomOut className="h-4 w-4" /></button>
+            <span className="w-11 text-center text-[11px] tabular-nums">{Math.round(screenZoom * 100)}%</span>
+            <button type="button" aria-label="Zoom in" disabled={screenZoom >= 2} onClick={() => setScreenZoom((value) => Math.min(2, value + 0.25))} className="grid h-8 w-8 place-items-center disabled:opacity-35"><ZoomIn className="h-4 w-4" /></button>
+            <button type="button" aria-label="Fullscreen" onClick={() => void screenStageRef.current?.requestFullscreen?.()} className="grid h-8 w-8 place-items-center"><Maximize2 className="h-4 w-4" /></button>
+          </div>
+        ) : null}
+
+        {isScreenSharing ? (
+          <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3 rounded-md border border-white/15 bg-black/80 px-3 py-2 text-white">
+            <span className="flex min-w-0 items-center gap-2 text-xs font-semibold"><Monitor className="h-4 w-4 shrink-0" />You're sharing your screen</span>
+            <button type="button" onClick={() => void call.stopScreenShare()} className="shrink-0 rounded-md bg-white px-3 py-1.5 text-xs font-bold text-black">Stop sharing</button>
           </div>
         ) : null}
       </div>
@@ -360,7 +410,6 @@ export function CallScreen() {
             {isConnected ? formatDuration(elapsed) : isOutgoingRinging ? 'Ringing…' : 'Connecting…'}
           </p>
         </div>
-        <audio ref={remoteAudioRef} autoPlay />
       </div>
     );
   }
@@ -429,19 +478,16 @@ export function CallScreen() {
           <>
             <div className="flex items-center gap-5">
               {videoMode ? (
-                <SquareButton active={!isVideoOff} onClick={() => void call.toggleVideo()} label={isVideoOff ? 'Turn on camera' : 'Turn off camera'}>
+                <SquareButton active={!isVideoOff} disabled={isScreenSharing} onClick={() => void call.toggleVideo()} label={isVideoOff ? 'Turn on camera' : 'Turn off camera'}>
                   {isVideoOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5" />}
                 </SquareButton>
               ) : (
-                <SquareButton onClick={() => void call.toggleVideo()} label="Turn on video">
+                <SquareButton disabled={isScreenSharing} onClick={() => void call.toggleVideo()} label="Turn on video">
                   <Video className="h-5 w-5" />
                 </SquareButton>
               )}
               <SquareButton active={!isMuted} onClick={() => void call.toggleMute()} label={isMuted ? 'Unmute' : 'Mute'}>
                 {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-              </SquareButton>
-              <SquareButton active={speakerOn} onClick={toggleSpeaker} label={speakerOn ? 'Speaker off' : 'Speaker on'}>
-                {speakerOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
               </SquareButton>
             </div>
             <div className="flex items-center gap-5">
@@ -452,7 +498,7 @@ export function CallScreen() {
                 <Settings className="h-5 w-5" />
               </SquareButton>
               {videoMode ? (
-                <SquareButton onClick={() => void call.switchCamera()} label="Switch camera">
+                <SquareButton disabled={isScreenSharing} onClick={() => void call.switchCamera()} label="Switch camera">
                   <SwitchCamera className="h-5 w-5" />
                 </SquareButton>
               ) : null}

@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppSettings } from '@/contexts/SystemSettingsContext';
+import { useActiveIdentity } from '@/contexts/ActiveIdentityContext';
+import type { BusinessAccount } from '@/lib/business';
+import type { BusinessParty } from './useConversations';
 
 export type MessageEffectType = 'confetti' | 'fireworks' | 'laser' | 'fire' | 'halo';
 
@@ -54,6 +57,15 @@ export interface Message {
   };
   forwarded_message?: Message | null;
   optimistic?: boolean;
+  failed?: boolean;
+  /** Present when the message was sent as a business identity */
+  sender_business?: BusinessParty | null;
+  /**
+   * Business identity this message was sent as, as stored on the row. Null
+   * means the sender was acting as their personal account even inside a
+   * business thread.
+   */
+  sender_business_id?: string | null;
 }
 
 interface TypingUser {
@@ -62,6 +74,14 @@ interface TypingUser {
 }
 
 export const MESSAGE_PAGE_SIZE = 50;
+
+function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
+  const byId = new Map(existing.map(message => [message.id, message]));
+  for (const message of incoming) byId.set(message.id, { ...byId.get(message.id), ...message });
+  return [...byId.values()].sort((a, b) =>
+    a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)
+  );
+}
 
 type RawMessage = {
   id: string;
@@ -77,11 +97,29 @@ type RawMessage = {
   client_id: string | null;
   reply_to_message_id: string | null;
   location_session_id: string | null;
+  /** Business identity the message was sent as; null means personal. */
+  sender_business_id: string | null;
 };
+
+/**
+ * Resolve the business identity a message was actually sent as.
+ *
+ * The identity must come from the stored `sender_business_id`, never from the
+ * conversation. Deriving it from the thread assumed every message in a business
+ * thread came from the business, which relabelled the customer's own replies
+ * and made a customer message indistinguishable from a real business reply.
+ */
+function resolveSenderBusiness(
+  row: { sender_business_id?: string | null },
+  conversationBusiness: BusinessParty | null
+): BusinessParty | null {
+  if (!row.sender_business_id || !conversationBusiness) return null;
+  return conversationBusiness.id === row.sender_business_id ? conversationBusiness : null;
+}
 
 function toClientMessage(
   m: RawMessage,
-  extra: { attachments?: MessageAttachment[]; profiles?: Message['profiles'] } = {}
+  extra: { attachments?: MessageAttachment[]; profiles?: Message['profiles']; sender_business?: BusinessParty | null } = {}
 ): Message {
   return {
     id: m.id,
@@ -97,24 +135,35 @@ function toClientMessage(
     client_id: m.client_id,
     reply_to_message_id: m.reply_to_message_id,
     location_session_id: m.location_session_id,
+    sender_business_id: m.sender_business_id ?? null,
     attachments: extra.attachments || [],
     profiles: extra.profiles,
     forwarded_message: null,
+    sender_business: extra.sender_business ?? null,
   };
 }
 
-export function useMessages(conversationId: string | null) {
+export function useMessages(conversationId: string | null, conversation?: { type: string; business_id: string | null; business?: BusinessParty | null } | null) {
   const { user } = useAuth();
+  const { identity } = useActiveIdentity();
   const { isEnabled } = useAppSettings();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // Monotonic token so a stale fetch (from a previously-open conversation) can
   // never overwrite the messages of the currently-open conversation.
   const fetchTokenRef = useRef(0);
+
+  // The conversation's business identity, used to name messages that were
+  // actually sent as that business.
+  const conversationBusiness = conversation?.business || null;
+  const activeBusiness = identity.type === 'business' && identity.business && conversation?.business_id === identity.business.id
+    ? identity.business
+    : null;
 
   const fetchMessages = useCallback(async () => {
     if (!conversationId || !user) {
@@ -122,6 +171,7 @@ export function useMessages(conversationId: string | null) {
       fetchTokenRef.current++;
       setMessages([]);
       setHasMore(false);
+      setError(null);
       setLoading(false);
       return;
     }
@@ -129,6 +179,7 @@ export function useMessages(conversationId: string | null) {
     const token = ++fetchTokenRef.current;
     setMessages([]);
     setHasMore(false);
+    setError(null);
     setLoading(true);
 
     try {
@@ -147,10 +198,12 @@ export function useMessages(conversationId: string | null) {
           effect,
           client_id,
           reply_to_message_id,
-          location_session_id
+          location_session_id,
+          sender_business_id
         `)
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
         .range(0, MESSAGE_PAGE_SIZE - 1);
 
       if (fetchTokenRef.current !== token) return;
@@ -174,31 +227,39 @@ export function useMessages(conversationId: string | null) {
 
       // Fetch profiles for senders
       const senderIds = [...new Set(rows.map(m => m.sender_id))];
-      const { data: profiles } = await supabase
+      const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('user_id, username, display_name, avatar_url')
         .in('user_id', senderIds);
       if (fetchTokenRef.current !== token) return;
+      if (profilesError) throw profilesError;
 
       const profileMap = new Map(
         (profiles || []).map(p => [p.user_id, { username: p.username, display_name: p.display_name, avatar_url: p.avatar_url }] as const)
       );
 
+      // For business conversations, add business identity to messages from business members
       const messagesWithProfiles = await attachForwardedMessages(
-        rows.map(m => toClientMessage(m, {
-          attachments: attachments.filter(a => a.message_id === m.id),
-          profiles: profileMap.get(m.sender_id),
-        }))
+        rows.map(m => {
+          const senderProfile = profileMap.get(m.sender_id);
+          const senderBusiness = resolveSenderBusiness(m, conversationBusiness);
+          return toClientMessage(m, {
+            attachments: attachments.filter(a => a.message_id === m.id),
+            profiles: senderProfile,
+            sender_business: senderBusiness,
+          });
+        })
       );
       if (fetchTokenRef.current !== token) return;
 
       setMessages(messagesWithProfiles);
     } catch (error) {
-      console.error('Error fetching messages:', error);
+      if (fetchTokenRef.current === token) setError(error instanceof Error ? error : new Error('Could not load messages'));
+      console.error('Messaging operation failed', { operation: 'load_history', conversationId });
     } finally {
       if (fetchTokenRef.current === token) setLoading(false);
     }
-  }, [conversationId, user]);
+  }, [conversationId, user, conversationBusiness]);
 
   // Fetch the source message for forwarded messages
   const attachForwardedMessages = useCallback(async (rows: Message[]): Promise<Message[]> => {
@@ -221,10 +282,11 @@ export function useMessages(conversationId: string | null) {
         pinned_at,
         forwarded_from_message_id,
         effect,
-        client_id,
-        reply_to_message_id,
-        location_session_id
-      `)
+          client_id,
+          reply_to_message_id,
+          location_session_id,
+          sender_business_id
+        `)
       .in('id', forwardedIds);
 
     const forwardedMap = new Map<string, Message>(
@@ -263,11 +325,15 @@ export function useMessages(conversationId: string | null) {
           effect,
           client_id,
           reply_to_message_id,
-          location_session_id
+          location_session_id,
+          sender_business_id
         `)
         .eq('conversation_id', conversationId)
-        .lt('created_at', oldest)
+        // Timestamp-only cursors lose rows when multiple messages share the
+        // same timestamp. Use (created_at, id) as a stable descending cursor.
+        .or(`created_at.lt.${oldest},and(created_at.eq.${oldest},id.lt.${messages[0].id})`)
         .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
         .range(0, MESSAGE_PAGE_SIZE - 1);
 
       if (fetchTokenRef.current !== token) return;
@@ -279,40 +345,48 @@ export function useMessages(conversationId: string | null) {
       const messageIds = rows.map(m => m.id);
       let attachments: MessageAttachment[] = [];
       if (messageIds.length > 0) {
-        const { data: attData } = await supabase
+        const { data: attData, error: attError } = await supabase
           .from('message_attachments')
           .select('*')
           .in('message_id', messageIds);
         if (fetchTokenRef.current !== token) return;
+        if (attError) throw attError;
         attachments = (attData || []) as MessageAttachment[];
       }
 
       const senderIds = [...new Set(rows.map(m => m.sender_id))];
-      const { data: profiles } = await supabase
+      const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('user_id, username, display_name, avatar_url')
         .in('user_id', senderIds);
       if (fetchTokenRef.current !== token) return;
+      if (profilesError) throw profilesError;
 
       const profileMap = new Map(
         (profiles || []).map(p => [p.user_id, { username: p.username, display_name: p.display_name, avatar_url: p.avatar_url }] as const)
       );
 
       const messagesWithProfiles = await attachForwardedMessages(
-        rows.map(m => toClientMessage(m, {
-          attachments: attachments.filter(a => a.message_id === m.id),
-          profiles: profileMap.get(m.sender_id),
-        }))
+        rows.map(m => {
+          const senderProfile = profileMap.get(m.sender_id);
+          const senderBusiness = resolveSenderBusiness(m, conversationBusiness);
+          return toClientMessage(m, {
+            attachments: attachments.filter(a => a.message_id === m.id),
+            profiles: senderProfile,
+            sender_business: senderBusiness,
+          });
+        })
       );
       if (fetchTokenRef.current !== token) return;
 
-      setMessages(prev => [...messagesWithProfiles, ...prev]);
+      setMessages(prev => mergeMessages(prev, messagesWithProfiles));
     } catch (error) {
-      console.error('Error loading older messages:', error);
+      setError(error instanceof Error ? error : new Error('Could not load earlier messages'));
+      console.error('Messaging operation failed', { operation: 'load_older', conversationId });
     } finally {
       if (fetchTokenRef.current === token) setLoadingMore(false);
     }
-  }, [conversationId, user, loadingMore, messages, attachForwardedMessages]);
+  }, [conversationId, user, loadingMore, messages, attachForwardedMessages, conversationBusiness]);
 
   // Subscribe to new messages
   useEffect(() => {
@@ -331,24 +405,23 @@ export function useMessages(conversationId: string | null) {
         async (payload) => {
           const newMessage = payload.new as Message;
           if (newMessage.sender_id === user.id) {
-            // Reconcile optimistic message via client_id
+            // Reconcile an optimistic send, but still append an authoritative
+            // row from another device or a delayed reconnect.
             setMessages(prev => {
-              if (newMessage.client_id) {
-                const optimisticIndex = prev.findIndex(m => m.client_id === newMessage.client_id && m.optimistic);
-                if (optimisticIndex !== -1) {
-                  const optimistic = prev[optimisticIndex];
-                  const next = [...prev];
-                  next[optimisticIndex] = {
-                    ...newMessage,
-                    is_pinned: !!newMessage.is_pinned,
-                    attachments: [],
-                    profiles: optimistic.profiles || newMessage.profiles,
-                    optimistic: false,
-                  };
-                  return next;
-                }
-              }
-              return prev;
+              const optimistic = newMessage.client_id
+                ? prev.find(m => m.client_id === newMessage.client_id && m.optimistic)
+                : undefined;
+              const authoritative: Message = {
+                ...newMessage,
+                is_pinned: !!newMessage.is_pinned,
+                attachments: optimistic?.attachments || [],
+                profiles: optimistic?.profiles || newMessage.profiles,
+                optimistic: false,
+                failed: false,
+                sender_business: resolveSenderBusiness(newMessage, conversationBusiness),
+              };
+              const withoutOptimistic = optimistic ? prev.filter(m => m.id !== optimistic.id) : prev;
+              return mergeMessages(withoutOptimistic, [authoritative]);
             });
             return;
           }
@@ -372,6 +445,9 @@ export function useMessages(conversationId: string | null) {
             .eq('user_id', newMessage.sender_id)
             .single();
 
+          // Identity comes from the stored sender_business_id on the row.
+          const senderBusiness = resolveSenderBusiness(newMessage, conversationBusiness);
+
           // Fetch attachments (may be empty if still being inserted)
           const { data: attachments } = await supabase
             .from('message_attachments')
@@ -386,11 +462,10 @@ export function useMessages(conversationId: string | null) {
               ? { username: profile.username, display_name: profile.display_name, avatar_url: profile.avatar_url }
               : undefined,
             forwarded_message: null,
+            sender_business: senderBusiness,
           }]);
 
-          setMessages(prev =>
-            prev.some(m => m.id === forwarded.id) ? prev : [...prev, forwarded]
-          );
+          setMessages(prev => mergeMessages(prev, [forwarded]));
         }
       )
       .on(
@@ -444,7 +519,7 @@ export function useMessages(conversationId: string | null) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [conversationId, user, attachForwardedMessages]);
+  }, [conversationId, user, attachForwardedMessages, conversationBusiness]);
 
   // Subscribe to typing indicators
   useEffect(() => {
@@ -505,11 +580,17 @@ export function useMessages(conversationId: string | null) {
     options: SendOptions = {}
   ) => {
     if (!conversationId || !user) return;
+    if (identity.type === 'business' && !activeBusiness) throw new Error('Choose a conversation in your active business inbox');
     if (!content.trim() && attachments.length === 0) return;
     if (!isEnabled('direct_messages_enabled')) throw new Error('Direct messages are currently disabled by the admin.');
 
     const clientId = crypto.randomUUID();
     const effectiveEffect = options.effect ?? detectEffect(content);
+
+    // For business conversations, use business identity for the optimistic message
+    const senderProfile = activeBusiness
+      ? { username: activeBusiness.username || '', display_name: activeBusiness.name, avatar_url: activeBusiness.avatar_url }
+      : { username: '', display_name: 'You', avatar_url: null };
 
     // Optimistic message for instant feedback
     const optimisticMessage: Message = {
@@ -536,8 +617,10 @@ export function useMessages(conversationId: string | null) {
         duration: a.duration ?? null,
         created_at: new Date().toISOString(),
       })),
-      profiles: { username: '', display_name: 'You', avatar_url: null },
+      profiles: senderProfile,
       optimistic: true,
+      sender_business: activeBusiness,
+      sender_business_id: activeBusiness?.id ?? null,
     };
 
     setMessages(prev => [...prev, optimisticMessage]);
@@ -553,11 +636,24 @@ export function useMessages(conversationId: string | null) {
           forwarded_from_message_id: options.forwardedFromMessageId ?? null,
           effect: effectiveEffect,
           client_id: clientId,
+          sender_business_id: activeBusiness?.id ?? null,
         })
         .select()
         .single();
 
       if (error) throw error;
+
+      // The insert response is authoritative. Realtime remains a reconciliation
+      // path, never the only way a sender sees their own message.
+      setMessages(prev => {
+        const optimistic = prev.find(m => m.client_id === clientId && m.optimistic);
+        const authoritative = toClientMessage(inserted as RawMessage, {
+          attachments: optimistic?.attachments,
+          profiles: optimistic?.profiles,
+          sender_business: activeBusiness,
+        });
+        return mergeMessages(prev.filter(m => m.id !== optimistic?.id), [authoritative]);
+      });
 
       if (attachments.length > 0) {
         const { error: attError } = await supabase
@@ -580,12 +676,12 @@ export function useMessages(conversationId: string | null) {
       // Clear typing indicator
       await setTyping(false);
     } catch (error) {
-      // Remove the optimistic placeholder on failure. Only remove it if it's still
-      // an optimistic placeholder — if realtime already reconciled it into the real
-      // server row (same client_id, optimistic=false), the message is persisted and
-      // must NOT be removed (otherwise it stays invisible to the sender forever).
-      setMessages(prev => prev.filter(m => !(m.client_id === clientId && m.optimistic)));
-      console.error('Error sending message:', error);
+      // Keep the draft message in the thread so a failure is visible and can be
+      // retried without forcing the composer to discard the user's text.
+      setMessages(prev => prev.map(m =>
+        m.client_id === clientId && m.optimistic ? { ...m, optimistic: false, failed: true } : m
+      ));
+      console.error('Messaging operation failed', { operation: 'send_message', conversationId });
       throw error;
     }
   };
@@ -602,6 +698,17 @@ export function useMessages(conversationId: string | null) {
     } catch (error) {
       console.error('Error updating typing status:', error);
     }
+  };
+
+  const retryMessage = async (message: Message) => {
+    if (!message.failed) return;
+    await sendMessage(
+      message.content,
+      (message.attachments || []).map(({ type, url, name, size, mime_type, duration }) => ({ type, url, name, size, mime_type, duration })),
+      message.reply_to_message_id ?? null,
+      { effect: message.effect, forwardedFromMessageId: message.forwarded_from_message_id }
+    );
+    setMessages(prev => prev.filter(current => current.id !== message.id));
   };
 
   const handleTyping = () => {
@@ -747,11 +854,14 @@ export function useMessages(conversationId: string | null) {
   return {
     messages,
     loading,
+    error,
+    fetchMessages,
     loadingMore,
     hasMore,
     loadOlder,
     typingUsers,
     sendMessage,
+    retryMessage,
     handleTyping,
     markAsRead,
     editMessage,

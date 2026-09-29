@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBusiness } from '@/contexts/BusinessContext';
+import { useActiveIdentity } from '@/contexts/ActiveIdentityContext';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -45,6 +46,7 @@ import {
   Store,
   ChevronRight,
   AlertTriangle,
+  ZoomIn,
 } from 'lucide-react';
 import {
   Dialog,
@@ -57,6 +59,19 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { MediaPreviewGrid } from '@/components/media/MediaPreviewGrid';
+import { MediaUploader } from '@/components/media/MediaUploader';
+import MediaViewer from '@/components/media/MediaViewer';
+import {
+  validateMediaFile,
+  createMediaItem,
+  revokeMediaPreview,
+  getMediaDimensions,
+  MAX_MEDIA_COUNT,
+  MAX_IMAGE_SIZE,
+  MAX_VIDEO_SIZE,
+} from '@/lib/media';
+import type { MediaItem } from '@/lib/media';
 
 type PostVisibility = 'public' | 'followers' | 'private';
 
@@ -69,19 +84,10 @@ interface PostContextMeta {
   references?: string | null;
 }
 
-interface MediaPreview {
-  id: string;
-  file: File | null;
-  preview: string;
-  type: 'image' | 'video';
-  source: 'upload' | 'gif' | 'camera';
-}
-
 interface PostComposerProps {
   onPostCreated?: () => void;
 }
 
-const MAX_MEDIA = 4;
 const MAX_CHARS = 5000;
 const DRAFT_KEY = 'post-draft-v1';
 
@@ -97,28 +103,25 @@ const visibilityOptions = [
 
 export default function PostComposer({ onPostCreated }: PostComposerProps) {
   const { profile } = useAuth();
-  const { activeBusiness, mode: businessMode, accountsLoading } = useBusiness();
+  const { accountsLoading } = useBusiness();
+  const { identity } = useActiveIdentity();
 
-  // A business session is only resolved once we actually hold the business it
-  // points at. While it is unresolved we must NOT fall back to the personal
-  // identity - that would publish a business post onto the private profile.
-  // Either we post as the business, or we refuse to post at all.
-  const wantsBusiness = businessMode === 'business';
-  const postingAsBusiness = wantsBusiness && !!activeBusiness;
+  const wantsBusiness = identity.type === 'business';
+  const postingAsBusiness = wantsBusiness && !!identity.business;
   const attributionBlocked = wantsBusiness && !postingAsBusiness;
+  const activeBusiness = identity.business;
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const dragRef = useRef<{ index: number } | null>(null);
+  const mediaFilesRef = useRef<MediaItem[]>([]);
 
   const [content, setContent] = useState('');
   const [visibility, setVisibility] = useState<PostVisibility>('public');
-  const [mediaFiles, setMediaFiles] = useState<MediaPreview[]>([]);
+  const [mediaFiles, setMediaFiles] = useState<MediaItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
-  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [justPosted, setJustPosted] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -126,11 +129,23 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
   const [contextOpen, setContextOpen] = useState(false);
   const [contextMeta, setContextMeta] = useState<PostContextMeta>({});
   const [contextDraft, setContextDraft] = useState<PostContextMeta>({});
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+  const [initialRect, setInitialRect] = useState<DOMRect | undefined>();
+
+  useEffect(() => {
+    mediaFilesRef.current = mediaFiles;
+  }, [mediaFiles]);
+
+  useEffect(() => () => {
+    mediaFilesRef.current.forEach(revokeMediaPreview);
+  }, []);
 
   const getInitials = (name: string) => {
     return name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
   };
-  // Restore draft
+
+  // Restore draft (text only, not media)
   useEffect(() => {
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
@@ -165,7 +180,7 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
     return () => window.removeEventListener('focus-composer', onFocusRequest);
   }, []);
 
-  // Auto-save draft
+  // Auto-save draft (text only)
   useEffect(() => {
     if (isSubmitting || justPosted) return;
     if (!content.trim() && mediaFiles.length === 0) return;
@@ -189,159 +204,125 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
     setDraftRestored(false);
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     const validFiles = files.filter((file) => {
-      const isImage = file.type.startsWith('image/');
-      const isVideo = file.type.startsWith('video/');
-      const maxSize = isVideo ? 25 * 1024 * 1024 : 10 * 1024 * 1024;
-      return (isImage || isVideo) && file.size <= maxSize;
+      const result = validateMediaFile(file);
+      if (!result.valid) {
+        toast({
+          variant: 'destructive',
+          title: 'Invalid file',
+          description: result.error,
+        });
+        return false;
+      }
+      return true;
     });
 
-    if (validFiles.length + mediaFiles.length > MAX_MEDIA) {
+    const available = MAX_MEDIA_COUNT - mediaFiles.length;
+    if (validFiles.length > available) {
       toast({
         variant: 'destructive',
-        title: 'Too many files',
-        description: `You can attach up to ${MAX_MEDIA} media items per post.`,
+        title: '22 media limit',
+        description: available > 0
+          ? `${available} item${available === 1 ? '' : 's'} added. The rest were not selected.`
+          : `Remove an item before adding another. Your existing ${MAX_MEDIA_COUNT} items are unchanged.`,
       });
-      return;
     }
 
-    const newPreviews = validFiles.map((file) => ({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      file,
-      preview: URL.createObjectURL(file),
-      type: (file.type.startsWith('video/') ? 'video' : 'image') as 'image' | 'video',
-      source: 'upload' as const,
-    }));
-
+    const acceptedFiles = validFiles.slice(0, Math.max(0, available));
+    const newPreviews = acceptedFiles.map((file, index) => ({ ...createMediaItem(file), order: mediaFiles.length + index }));
     setMediaFiles((prev) => [...prev, ...newPreviews]);
     if (fileInputRef.current) fileInputRef.current.value = '';
-  };
+  }, [mediaFiles.length, toast]);
 
-  const removeMedia = (id: string) => {
+  const removeMedia = useCallback((id: string) => {
     setMediaFiles((prev) => {
-      const next = prev.filter((m) => m.id !== id);
       const removed = prev.find((m) => m.id === id);
-      if (removed?.source === 'upload' || removed?.source === 'camera') URL.revokeObjectURL(removed.preview);
-      return next;
+      if (removed) revokeMediaPreview(removed);
+      return prev.filter((m) => m.id !== id).map((m, i) => ({ ...m, order: i }));
     });
-  };
+  }, []);
 
-  const handleCameraDone = (_file: File, result: MediaEditorResult) => {
+  const handleCameraDone = useCallback((_file: File, result: MediaEditorResult) => {
     setCameraOpen(false);
-    if (mediaFiles.length >= MAX_MEDIA) {
+    if (mediaFiles.length >= MAX_MEDIA_COUNT) {
       toast({
         variant: 'destructive',
         title: 'Media limit reached',
-        description: `You can attach up to ${MAX_MEDIA} media items per post.`,
+        description: `You can attach up to ${MAX_MEDIA_COUNT} media items per post.`,
       });
       return;
     }
-    setMediaFiles((prev) => [
-      ...prev,
-      {
-        id: `camera-${Date.now()}`,
-        file: result.file,
-        preview: URL.createObjectURL(result.file),
-        type: result.kind,
-        source: 'camera',
-      },
-    ]);
-  };
+    const newItem = createMediaItem(result.file, 'camera');
+    newItem.type = result.kind;
+    setMediaFiles((prev) => [...prev, { ...newItem, order: prev.length }]);
+  }, [mediaFiles.length, toast]);
 
-  const handleGifSelect = (gifUrl: string) => {
-    if (mediaFiles.length >= MAX_MEDIA) {
+  const handleGifSelect = useCallback((gifUrl: string) => {
+    if (mediaFiles.length >= MAX_MEDIA_COUNT) {
       toast({
         variant: 'destructive',
         title: 'Media limit reached',
-        description: `You can attach up to ${MAX_MEDIA} media items per post.`,
+        description: `You can attach up to ${MAX_MEDIA_COUNT} media items per post.`,
       });
       return;
     }
-    setMediaFiles((prev) => [
-      ...prev,
-      { id: `gif-${Date.now()}`, file: null, preview: gifUrl, type: 'image', source: 'gif' },
-    ]);
+    const newItem: MediaItem = {
+      id: `gif-${Date.now()}`,
+      file: null,
+      localPreviewUrl: gifUrl,
+      type: 'image',
+      source: 'gif',
+      uploadState: 'uploaded',
+      uploadProgress: 100,
+      remoteUrl: gifUrl,
+      width: null,
+      height: null,
+      mimeType: 'image/gif',
+      fileSize: null,
+      order: mediaFiles.length,
+      error: null,
+    };
+    setMediaFiles((prev) => [...prev, newItem]);
     setShowGifPicker(false);
-  };
+  }, [mediaFiles.length, toast]);
 
   // Drag-to-reorder media
-  const handlePointerDown = (e: React.PointerEvent, index: number) => {
-    dragRef.current = { index };
-    setDraggingIndex(index);
-    e.currentTarget.setPointerCapture(e.pointerId);
-  };
+  const handleReorder = useCallback((items: MediaItem[]) => {
+    setMediaFiles(items.map((m, i) => ({ ...m, order: i })));
+  }, []);
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-media-index]') as HTMLElement | null;
-    if (!el) return;
-    const target = Number(el.dataset.mediaIndex);
-    if (target === drag.index) return;
-    setMediaFiles((prev) => {
-      const next = [...prev];
-      const [moved] = next.splice(drag.index, 1);
-      next.splice(target, 0, moved);
-      return next;
-    });
-    dragRef.current = { index: target };
-    setDraggingIndex(target);
-  };
+  const openViewer = useCallback((index: number, rect?: DOMRect) => {
+    setViewerIndex(index);
+    setInitialRect(rect);
+    setViewerOpen(true);
+  }, []);
 
-  const handlePointerUp = () => {
-    dragRef.current = null;
-    setDraggingIndex(null);
-  };
+  const closeViewer = useCallback(() => {
+    setViewerOpen(false);
+    setInitialRect(undefined);
+  }, []);
 
-  const getDimensions = (file: File, type: 'image' | 'video'): Promise<{ width: number | null; height: number | null }> =>
-    new Promise((resolve) => {
-      if (type === 'image') {
-        const img = new Image();
-        img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
-        img.onerror = () => resolve({ width: null, height: null });
-        img.src = URL.createObjectURL(file);
-      } else {
-        const video = document.createElement('video');
-        video.preload = 'metadata';
-        video.onloadedmetadata = () => resolve({ width: video.videoWidth, height: video.videoHeight });
-        video.onerror = () => resolve({ width: null, height: null });
-        video.src = URL.createObjectURL(file);
-      }
-    });
-
-  const uploadMedia = async (media: MediaPreview, userId: string) => {
-    if (media.source === 'gif') {
-      return { url: media.preview, width: null, height: null };
-    }
-    if (!media.file) return null;
-
-    const fileExt = media.file.name.split('.').pop() || 'bin';
-    const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-    const { error } = await supabase.storage
-      .from('post-media')
-      .upload(fileName, media.file);
-
-    if (error) {
-      console.error('Upload error:', error);
-      return null;
-    }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('post-media')
-      .getPublicUrl(fileName);
-
-    const dims = await getDimensions(media.file, media.type);
-    return { url: publicUrl, width: dims.width, height: dims.height };
-  };
+  const { startUploads, retryUpload, isUploading } = MediaUploader({
+    mediaItems: mediaFiles,
+    setMediaItems: setMediaFiles,
+    userId: profile?.user_id || '',
+    bucket: 'post-media',
+    onUploadComplete: () => {},
+    onUploadError: (error) => {
+      toast({
+        variant: 'destructive',
+        title: 'Upload error',
+        description: error.message,
+      });
+    },
+  });
 
   const handleSubmit = async () => {
     if (!content.trim() && mediaFiles.length === 0) return;
     if (!profile) return;
 
-    // Hard stop rather than a silent downgrade to the private profile.
     if (attributionBlocked) {
       toast({
         variant: 'destructive',
@@ -356,12 +337,11 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
     setIsSubmitting(true);
 
     try {
+      const uploadedMedia = mediaFiles.length > 0 ? await startUploads() : [];
       const { data: post, error: postError } = await supabase
         .from('posts')
         .insert({
           user_id: profile.user_id,
-          // In business mode this is always the active business, never null.
-          // `postingAsBusiness` is guaranteed by the attributionBlocked guard above.
           business_id: postingAsBusiness ? activeBusiness!.id : null,
           content: content.trim(),
           visibility,
@@ -373,29 +353,27 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
 
       if (postError) throw postError;
 
-      if (mediaFiles.length > 0) {
-        const results = await Promise.all(mediaFiles.map((media) => uploadMedia(media, profile.user_id)));
-        const mediaInserts = results
-          .map((result, index) => {
-            if (!result) return null;
-            return supabase.from('post_media').insert({
-              post_id: post.id,
-              url: result.url,
-              type: mediaFiles[index].type,
-              position: index,
-              width: result.width,
-              height: result.height,
-            });
-          })
-          .filter((x): x is NonNullable<typeof x> => x !== null);
-
-        await Promise.all(mediaInserts);
+      if (uploadedMedia.length > 0) {
+        const { error: mediaError } = await supabase.from('post_media').insert(
+          uploadedMedia.map((result) => ({
+            post_id: post.id,
+            url: result.url,
+            type: result.type,
+            position: result.position,
+            width: result.width,
+            height: result.height,
+          })),
+        );
+        if (mediaError) {
+          await supabase.from('posts').delete().eq('id', post.id);
+          throw mediaError;
+        }
       }
 
       localStorage.removeItem(DRAFT_KEY);
       setContent('');
       setMediaFiles((prev) => {
-        prev.forEach((m) => { if (m.source === 'upload' || m.source === 'camera') URL.revokeObjectURL(m.preview); });
+        prev.forEach((m) => { if (m.source === 'upload' || m.source === 'camera') revokeMediaPreview(m); });
         return [];
       });
       setVisibility('public');
@@ -428,9 +406,16 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
   const selectedVisibility = visibilityOptions.find((v) => v.value === visibility)!;
   const charCount = content.length;
   const isOverLimit = charCount > MAX_CHARS;
-  const canPost = (content.trim() || mediaFiles.length > 0) && !isOverLimit && !isSubmitting;
+  const canPost = (content.trim() || mediaFiles.length > 0) && !isOverLimit && !isSubmitting && !isUploading;
 
   const showActions = isFocused || content.trim() || mediaFiles.length > 0;
+
+  const viewerImages = mediaFiles.map((m) => ({
+    src: m.localPreviewUrl,
+    alt: 'Upload preview',
+    width: m.width,
+    height: m.height,
+  }));
 
   return (
     <div className={cn(
@@ -472,8 +457,6 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
             </Link>
           ) : null}
 
-          {/* Business mode without a resolved business: say so instead of
-              quietly posting to the private profile. */}
           {attributionBlocked ? (
             <div className="mb-2 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
@@ -502,92 +485,19 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
             rows={1}
           />
 
-          {/* Media Previews */}
+          {/* Media Previews - using new MediaPreviewGrid */}
           {mediaFiles.length > 0 && (
-            <div className={cn(
-              "grid gap-1.5 mt-3",
-              mediaFiles.length === 1 && "grid-cols-1",
-              mediaFiles.length === 2 && "grid-cols-2",
-              mediaFiles.length >= 3 && "grid-cols-2"
-            )}>
-              {mediaFiles.map((media, index) => (
-                <div
-                  key={media.id}
-                  data-media-index={index}
-                  onPointerDown={(e) => handlePointerDown(e, index)}
-                  onPointerMove={handlePointerMove}
-                  onPointerUp={handlePointerUp}
-                  onPointerCancel={handlePointerUp}
-                  className={cn(
-                    "relative group rounded-2xl overflow-hidden bg-muted cursor-grab active:cursor-grabbing select-none",
-                    mediaFiles.length === 1 && "aspect-[16/9] max-h-[340px]",
-                    mediaFiles.length === 2 && "aspect-square",
-                    mediaFiles.length === 3 && index === 0 && "row-span-2 aspect-square",
-                    mediaFiles.length === 3 && index !== 0 && "aspect-square",
-                    mediaFiles.length === 4 && "aspect-square",
-                    draggingIndex === index && "opacity-70 scale-[0.98] ring-2 ring-primary"
-                  )}
-                  style={{ touchAction: draggingIndex === index ? 'none' : undefined }}
-                >
-                  {media.type === 'image' ? (
-                    <img
-                      src={media.preview}
-                      alt="Upload preview"
-                      className="w-full h-full object-cover"
-                      draggable={false}
-                    />
-                  ) : (
-                    <video
-                      src={media.preview}
-                      className="w-full h-full object-cover"
-                      muted
-                      playsInline
-                      preload="metadata"
-                    />
-                  )}
-
-                  {media.type === 'video' && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
-                      <span className="h-10 w-10 rounded-full bg-black/50 backdrop-blur flex items-center justify-center">
-                        <Play className="h-4 w-4 text-white fill-white" />
-                      </span>
-                    </div>
-                  )}
-
-                  {media.source === 'gif' && (
-                    <span className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded-md bg-black/60 text-[10px] font-semibold text-white uppercase tracking-wide pointer-events-none">
-                      GIF
-                    </span>
-                  )}
-
-                  <span className="absolute top-2 left-2 p-1 rounded-md bg-black/45 text-white/70 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    <GripVertical className="h-4 w-4" />
-                  </span>
-
-                  <button
-                    onClick={() => removeMedia(media.id)}
-                    className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-full hover:bg-destructive hover:scale-105 transition-all shadow-md"
-                    aria-label="Remove media"
-                  >
-                    <X className="h-3.5 w-3.5 text-white" />
-                  </button>
-                </div>
-              ))}
-
-              {/* Add more tile */}
-              {mediaFiles.length < MAX_MEDIA && (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="rounded-2xl border-2 border-dashed border-border hover:border-primary/60 hover:bg-primary/5 transition-colors flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary min-h-[88px]"
-                >
-                  <Plus className="h-5 w-5" />
-                  <span className="text-[11px] font-medium">
-                    {mediaFiles.length}/{MAX_MEDIA}
-                  </span>
-                </button>
-              )}
-            </div>
+            <MediaPreviewGrid
+              mediaItems={mediaFiles}
+              onRemove={removeMedia}
+              onReorder={handleReorder}
+              onOpenViewer={openViewer}
+              maxItems={MAX_MEDIA_COUNT}
+              disabled={isSubmitting || isUploading}
+              showAddButton={true}
+              onAddClick={() => fileInputRef.current?.click()}
+              onRetry={retryUpload}
+            />
           )}
 
           {/* Draft notice */}
@@ -615,11 +525,12 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
                   multiple
                   onChange={handleFileSelect}
                   className="hidden"
+                  disabled={isSubmitting || mediaFiles.length >= MAX_MEDIA_COUNT}
                 />
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={mediaFiles.length >= MAX_MEDIA || isSubmitting}
+                  disabled={mediaFiles.length >= MAX_MEDIA_COUNT || isSubmitting}
                   title="Add photo or video"
                   className={cn(TOOL_BUTTON)}
                 >
@@ -628,7 +539,7 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
                 <button
                   type="button"
                   onClick={() => setCameraOpen(true)}
-                  disabled={mediaFiles.length >= MAX_MEDIA || isSubmitting}
+                  disabled={mediaFiles.length >= MAX_MEDIA_COUNT || isSubmitting}
                   title="Take photo or record video"
                   className={cn(TOOL_BUTTON)}
                 >
@@ -966,6 +877,17 @@ export default function PostComposer({ onPostCreated }: PostComposerProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Media Viewer */}
+      {viewerOpen && viewerImages.length > 0 && (
+        <MediaViewer
+          images={viewerImages}
+          initialIndex={viewerIndex}
+          onClose={closeViewer}
+          initialRect={initialRect}
+          enableFullscreen={true}
+        />
+      )}
     </div>
   );
 }

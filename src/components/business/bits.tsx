@@ -17,6 +17,12 @@ export function MetricCard({
   hint?: string;
   icon?: ReactNode;
 }) {
+  // Numeric values are abbreviated (1.2K / 3.4M). Strings are assumed to be
+  // already-formatted by the caller (e.g. formatMoney -> "$1,234.50") and are
+  // rendered verbatim: passing them through Number() would yield NaN for
+  // currency strings and render a literal "NaN" in the card.
+  const display = typeof value === 'number' ? formatNumber(value) : value;
+
   return (
     <Card className="rounded-2xl">
       <CardContent className="p-4">
@@ -24,7 +30,7 @@ export function MetricCard({
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
           {icon && <span className="text-muted-foreground">{icon}</span>}
         </div>
-        <p className="mt-2 text-2xl font-bold tabular-nums leading-none">{formatNumber(Number(value))}</p>
+        <p className="mt-2 text-2xl font-bold tabular-nums leading-none">{display}</p>
         {hint && <p className="mt-1.5 text-xs text-muted-foreground">{hint}</p>}
       </CardContent>
     </Card>

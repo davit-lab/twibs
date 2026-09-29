@@ -15,6 +15,7 @@ import {
   type StoryTextOverlay,
 } from '@/lib/stories';
 import StoryOverlayRenderer from './StoryOverlayRenderer';
+import StoryMediaBackdrop from './StoryMediaBackdrop';
 
 type Tool = 'none' | 'text' | 'sticker' | 'draw' | 'filter';
 type Selected = StoryTextOverlay | StoryStickerOverlay;
@@ -239,9 +240,9 @@ export default function StoryEditor({ mediaUrl, mediaType, overlays, onChange, o
   const stageWidth = stageHeight * (9 / 16);
 
   return (
-    <div className="flex h-full w-full flex-col bg-black">
+    <div className="flex h-full w-full flex-col bg-[#080808]">
       {/* top bar */}
-      <header className="flex items-center justify-between px-3 py-2.5">
+      <header className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2.5">
         <button
           type="button"
           onClick={onClose}
@@ -259,7 +260,7 @@ export default function StoryEditor({ mediaUrl, mediaType, overlays, onChange, o
         <button
           type="button"
           onClick={onNext}
-          className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500"
+          className="rounded-full bg-white px-5 py-2 text-sm font-semibold text-black transition hover:bg-zinc-200 active:scale-[0.98]"
         >
           Next
         </button>
@@ -271,7 +272,7 @@ export default function StoryEditor({ mediaUrl, mediaType, overlays, onChange, o
           {stageHeight > 0 && (
             <div
               ref={canvasRef}
-              className="relative touch-none overflow-hidden rounded-2xl bg-zinc-950 ring-1 ring-white/10"
+              className="relative touch-none overflow-hidden rounded-[22px] bg-zinc-950 shadow-[0_24px_80px_rgba(0,0,0,0.7)] ring-1 ring-white/10"
               style={{ width: stageWidth, height: stageHeight }}
               onPointerDown={onCanvasPointerDown}
               onPointerMove={onCanvasPointerMove}
@@ -282,7 +283,7 @@ export default function StoryEditor({ mediaUrl, mediaType, overlays, onChange, o
                 <video
                   key={mediaUrl}
                   src={mediaUrl}
-                  className="absolute inset-0 h-full w-full object-cover"
+                  className="absolute inset-0 h-full w-full object-contain"
                   style={mediaStyle}
                   autoPlay
                   loop
@@ -290,7 +291,10 @@ export default function StoryEditor({ mediaUrl, mediaType, overlays, onChange, o
                   playsInline
                 />
               ) : (
-                <img src={mediaUrl} alt="Story media" className="absolute inset-0 h-full w-full object-cover" style={mediaStyle} />
+                <>
+                  <StoryMediaBackdrop src={mediaUrl} mediaType="image" style={mediaStyle} />
+                  <img src={mediaUrl} alt="Story media" className="absolute inset-0 h-full w-full object-contain" style={mediaStyle} />
+                </>
               )}
 
               {/* interactive text / stickers */}
@@ -303,7 +307,7 @@ export default function StoryEditor({ mediaUrl, mediaType, overlays, onChange, o
                     className={cn(
                       'absolute touch-none',
                       selected?.id === o.id
-                        ? 'outline outline-2 outline-violet-500'
+                        ? 'outline outline-2 outline-white'
                         : tool === 'draw' || tool === 'filter'
                           ? 'pointer-events-none'
                           : '',
@@ -381,7 +385,7 @@ export default function StoryEditor({ mediaUrl, mediaType, overlays, onChange, o
       )}
 
       {/* tool rail */}
-      <nav className="border-t border-zinc-900 px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom),10px)]">
+      <nav className="border-t border-white/[0.06] bg-black/80 px-2 pt-2 backdrop-blur-xl pb-[max(env(safe-area-inset-bottom),10px)]">
         <div className="flex items-center justify-around">
           {TOOLS.map(({ id, label, icon: Icon }) => (
             <ToolButton key={id} active={tool === id} label={label} icon={Icon} onClick={() => setTool(tool === id ? 'none' : id)} />
@@ -413,10 +417,10 @@ function ToolButton({
       onClick={onClick}
       className={cn(
         'flex w-16 flex-col items-center gap-1 rounded-xl py-1.5 text-[10px] transition',
-        active ? 'text-violet-400' : 'text-zinc-500 hover:text-zinc-200',
+        active ? 'text-white' : 'text-zinc-500 hover:text-zinc-200',
       )}
     >
-      <span className={cn('flex h-9 w-14 items-center justify-center rounded-lg', active ? 'bg-violet-500/15' : '')}>
+      <span className={cn('flex h-9 w-14 items-center justify-center rounded-full transition', active ? 'bg-white text-black' : 'bg-white/[0.04]')}>
         <Icon className="h-5 w-5" />
       </span>
       {label}

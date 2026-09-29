@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { BusinessProvider } from '@/contexts/BusinessContext';
+import { ActiveIdentityProvider } from '@/contexts/ActiveIdentityContext';
 import { SystemSettingsProvider, useAppSettings } from '@/contexts/SystemSettingsContext';
 import { CallProvider } from '@/components/calling/CallProvider';
 import PreferencesBootstrap from '@/components/PreferencesBootstrap';
@@ -16,6 +17,10 @@ const Auth = lazy(() => import('./pages/Auth'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Explore = lazy(() => import('./pages/Explore'));
+const Marketplace = lazy(() => import('./pages/Marketplace'));
+const ProductDetail = lazy(() => import('./pages/ProductDetail'));
+const Orders = lazy(() => import('./pages/Orders'));
+const Cart = lazy(() => import('./pages/Cart'));
 const Messages = lazy(() => import('./pages/Messages'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const Library = lazy(() => import('./pages/Library'));
@@ -165,10 +170,11 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <AuthProvider>
             <BusinessProvider>
-            <SystemSettingsProvider>
+              <ActiveIdentityProvider>
+                <SystemSettingsProvider>
               <CallProvider>
                 <PreferencesBootstrap />
                 <Suspense fallback={<PageLoader />}>
@@ -211,6 +217,17 @@ const App = () => (
                         }
                       />
                       <Route path="/explore" element={<Explore />} />
+                      <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+                      <Route path="/marketplace" element={<Marketplace />} />
+                      <Route path="/marketplace/product/:productId" element={<ProductDetail />} />
+                      <Route
+                        path="/cart"
+                        element={
+                          <ProtectedRoute>
+                            <Cart />
+                          </ProtectedRoute>
+                        }
+                      />
                       <Route path="/interests" element={<Interests />} />
                       <Route
                         path="/messages"
@@ -306,6 +323,7 @@ const App = () => (
                 </Suspense>
               </CallProvider>
             </SystemSettingsProvider>
+              </ActiveIdentityProvider>
             </BusinessProvider>
           </AuthProvider>
         </BrowserRouter>

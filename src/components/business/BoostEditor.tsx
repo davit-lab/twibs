@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -26,9 +26,11 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBusinessApi } from '@/hooks/useBusinessApi';
+import { useAudienceEstimate } from '@/hooks/useAdvertiserAccounts';
+import type { AudienceEstimate } from '@/lib/ads';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { formatMoney, OBJECTIVE_META, type CampaignObjective } from '@/lib/ads';
+import { formatMoney, formatNumber, OBJECTIVE_META, type CampaignObjective } from '@/lib/ads';
 import { PRIORITY_META, type DiscoveryPriority } from '@/lib/business';
 
 interface BoostEditorProps {
@@ -55,12 +57,13 @@ function getInitials(name: string) {
 export function BoostEditor({ businessId, preselectedPostId, initialPost }: BoostEditorProps) {
   const { profile } = useAuth();
   const api = useBusinessApi();
+  const { estimate: runEstimate } = useAudienceEstimate();
   const { toast } = useToast();
 
   const { data: posts, isLoading: postsLoading } = useQuery<BoostPost[]>({
     queryKey: ['business', businessId, 'posts'],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('posts')
         .select('id, content, created_at, star_count, comment_count')
         .eq('business_id', businessId)
@@ -83,21 +86,38 @@ export function BoostEditor({ businessId, preselectedPostId, initialPost }: Boos
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<{ reachMin: number | null; reachMax: number | null; impressions: number | null } | null>(null);
+  const [estimate, setEstimate] = useState<AudienceEstimate | null>(null);
+  const [estimating, setEstimating] = useState(false);
 
   const budgetCents = Math.max(0, Math.round(parseFloat(budgetDollars) * 100 || 0));
   const daysNum = Math.max(1, Math.min(90, parseInt(days) || 7));
   const canSubmit = !submitting && !!postId && budgetCents >= MIN_BUDGET_DOLLARS * 100 && !done;
 
-  const estimatedReachCents = useMemo(() => {
-    if (!budgetCents) return null;
-    const perDay = budgetCents / daysNum; // simple pacing-based estimate
-    const impressions = Math.floor(perDay * 18 * daysNum);
-    return {
-      impressions,
-      reachMin: Math.floor(impressions * 0.55),
-      reachMax: Math.floor(impressions * 0.85),
+
+  // Real audience estimate from platform data. Twibs never invents a reach
+  // number - when the backend says there is not enough data we say so.
+  useEffect(() => {
+    let cancelled = false;
+    setEstimating(true);
+    runEstimate({
+      automatic: true,
+      locations: [],
+      languages: [],
+      interests: [],
+    })
+      .then((res) => {
+        if (!cancelled) setEstimate(res);
+      })
+      .catch(() => {
+        if (!cancelled) setEstimate(null);
+      })
+      .finally(() => {
+        if (!cancelled) setEstimating(false);
+      });
+    return () => {
+      cancelled = true;
     };
-  }, [budgetCents, daysNum]);
+  }, [runEstimate]);
 
   const selectablePosts = useMemo(() => {
     if (!posts) return initialPost ? [initialPost] : [];
@@ -333,10 +353,24 @@ export function BoostEditor({ businessId, preselectedPostId, initialPost }: Boos
             Based on {formatMoney(budgetCents)} over {daysNum} days. Estimates only — never guaranteed.
           </p>
         </div>
-        {estimatedReachCents && (
-          <p className="text-lg font-bold tabular-nums">
-            {(estimatedReachCents.reachMin / 1000).toFixed(1)}K–{(estimatedReachCents.reachMax / 1000).toFixed(1)}K
-            <span className="ml-1 text-xs font-medium text-muted-foreground">people</span>
+        {estimating ? (
+          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Calculating…
+          </p>
+        ) : estimate?.sufficient_data ? (
+          <div className="text-right">
+            <p className="text-lg font-bold tabular-nums">
+              {formatNumber(estimate.reach_min)}–{formatNumber(estimate.reach_max)}
+              <span className="ml-1 text-xs font-medium text-muted-foreground">people</span>
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {formatNumber(estimate.matched_users)} match your audience
+            </p>
+          </div>
+        ) : (
+          <p className="max-w-[46%] text-right text-xs text-muted-foreground">
+            Not enough platform data yet for a reliable estimate.
           </p>
         )}
       </div>

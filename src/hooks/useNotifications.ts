@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useActiveIdentity } from '@/contexts/ActiveIdentityContext';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -33,6 +34,7 @@ export interface NotificationTarget {
 export interface Notification {
   id: string;
   user_id: string;
+  business_id?: string | null;
   type: NotificationType;
   title: string;
   body: string | null;
@@ -178,27 +180,39 @@ export async function enrichNotificationTargets(
 
 export function useNotifications() {
   const { user } = useAuth();
+  const { identity } = useActiveIdentity();
+  const businessId = identity.businessId;
+  const activeIdentityKey = `${user?.id}:${businessId}`;
+  const currentKey = useRef(activeIdentityKey); currentKey.current = activeIdentityKey;
   const { toast } = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
   const unreadCount = useMemo(
-    () => notifications.filter(n => !n.is_read).length,
-    [notifications]
+    () => notifications.filter(n => !n.is_read && n.user_id === user?.id && (n.business_id ?? null) === businessId).length,
+    [notifications, businessId, user?.id]
   );
 
   const fetchNotifications = useCallback(async () => {
-    if (!user) {
+    if (!user || (identity.type === 'business' && !businessId)) {
       setNotifications([]);
       setLoading(false);
       return;
     }
 
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('notifications')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', user.id);
+
+      if (businessId) {
+        query = query.eq('business_id', businessId);
+      } else {
+        query = query.is('business_id', null);
+      }
+
+      const { data, error } = await query
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -222,15 +236,16 @@ export function useNotifications() {
       })) as Notification[];
 
       const enriched = await enrichNotificationTargets(notificationsWithActors);
-      setNotifications(enriched);
+      if (currentKey.current === activeIdentityKey) setNotifications(enriched);
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, businessId, activeIdentityKey, identity.type]);
 
   useEffect(() => {
+    setNotifications([]);
     fetchNotifications();
   }, [fetchNotifications]);
 
@@ -250,6 +265,7 @@ export function useNotifications() {
         },
         async (payload) => {
           const newNotif = payload.new as Notification;
+          if ((newNotif.business_id ?? null) !== businessId) return;
 
           if (newNotif.actor_id) {
             const { data: profile } = await supabase
@@ -262,7 +278,7 @@ export function useNotifications() {
           }
 
           const enriched = await enrichNotificationTargets([newNotif]);
-          setNotifications(prev => [enriched[0] || newNotif, ...prev]);
+          if (currentKey.current === activeIdentityKey) setNotifications(prev => [enriched[0] || newNotif, ...prev]);
         }
       )
       .on(
@@ -297,7 +313,7 @@ export function useNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, businessId, activeIdentityKey]);
 
   const markAsRead = async (notificationId: string) => {
     if (!user) return;
@@ -328,7 +344,8 @@ export function useNotifications() {
         .from('notifications')
         .update({ is_read: true })
         .eq('user_id', user.id)
-        .eq('is_read', false);
+        .eq('is_read', false)
+        .in('id', notifications.filter(n => (n.business_id ?? null) === businessId).map(n => n.id));
 
       if (error) throw error;
 
@@ -367,7 +384,8 @@ export function useNotifications() {
       const { error } = await supabase
         .from('notifications')
         .delete()
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .in('id', notifications.filter(n => (n.business_id ?? null) === businessId).map(n => n.id));
 
       if (error) throw error;
 
@@ -379,7 +397,7 @@ export function useNotifications() {
   };
 
   return {
-    notifications,
+    notifications: identity.type === 'business' && !businessId ? [] : notifications.filter(n => n.user_id === user?.id && (n.business_id ?? null) === businessId),
     unreadCount,
     loading,
     markAsRead,

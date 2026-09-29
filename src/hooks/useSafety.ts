@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { useToast } from '@/hooks/use-toast';
 
 export type ReportTargetType =
@@ -79,6 +80,7 @@ interface SafetyActions {
 
 export function useSafetyActions(): SafetyActions {
   const { user } = useAuth();
+  const { activeBusiness, mode } = useBusiness();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -141,7 +143,11 @@ export function useSafetyActions(): SafetyActions {
       ),
     savePost: (postId: string) =>
       run(
-        () => (supabase as any).from('saves').insert({ post_id: postId, user_id: user?.id }),
+        () => (supabase as any).from('saves').insert({
+          post_id: postId,
+          user_id: user?.id,
+          business_id: mode === 'business' && activeBusiness ? activeBusiness.id : null,
+        }),
         { title: 'Saved', description: 'Post added to your saved items.' },
         { title: 'Failed to save post' }
       ),
@@ -158,7 +164,12 @@ export function useSafetyActions(): SafetyActions {
       ),
     repostPost: (postId: string) =>
       run(
-        () => (supabase as any).rpc('repost_post', { target_post_id: postId }),
+        async () => {
+          await supabase.rpc('repost_post', {
+            target_post_id: postId,
+            p_business_id: mode === 'business' && activeBusiness ? activeBusiness.id : null,
+          });
+        },
         { title: 'Reposted', description: 'Your followers can now see this post.' },
         { title: 'Failed to repost' }
       ),

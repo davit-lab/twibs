@@ -22,7 +22,7 @@ import GroupPostCard from '@/components/groups/GroupPostCard';
 import GroupMembersSheet from '@/components/groups/GroupMembersSheet';
 import GroupSettingsDialog from '@/components/groups/GroupSettingsDialog';
 import GroupRequestsSheet from '@/components/groups/GroupRequestsSheet';
-import MediaLightbox from '@/components/MediaLightbox';
+import MediaViewer from '@/components/media/MediaViewer';
 import { useGroup, useGroupPosts, useGroupJoinRequests, useGroupActions, uploadGroupMedia } from '@/hooks/useGroups';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -60,6 +60,7 @@ export default function GroupDetail() {
   const [requestsOpen, setRequestsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxInitialRect, setLightboxInitialRect] = useState<DOMRect | undefined>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
@@ -391,7 +392,11 @@ export default function GroupDetail() {
                         <video src={mediaPreview.preview} controls className="w-full max-h-64 object-cover" />
                       ) : (
                         <button
-                          onClick={() => setLightboxOpen(true)}
+                          onClick={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setLightboxInitialRect(rect);
+                            setLightboxOpen(true);
+                          }}
                           className="block w-full cursor-zoom-in"
                         >
                           <img src={mediaPreview.preview} alt="Preview" className="w-full max-h-64 object-cover" />
@@ -563,7 +568,16 @@ export default function GroupDetail() {
       />
       <GroupSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} group={group} />
       {lightboxOpen && mediaPreview?.type === 'image' && (
-        <MediaLightbox src={mediaPreview.preview} alt="Post preview" onClose={() => setLightboxOpen(false)} />
+        <MediaViewer
+          images={[{ src: mediaPreview.preview, alt: "Post preview" }]}
+          initialIndex={0}
+          onClose={() => {
+            setLightboxOpen(false);
+            setLightboxInitialRect(undefined);
+          }}
+          initialRect={lightboxInitialRect}
+          enableFullscreen={true}
+        />
       )}
     </MainLayout>
   );

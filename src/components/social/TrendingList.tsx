@@ -9,38 +9,38 @@ export default function TrendingList() {
   const { data: posts = [], isLoading } = useTrendingPosts(5);
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-card overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
-        <h3 className="font-bold text-sm flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-accent" />
+    <div className="overflow-hidden border-y border-border bg-background">
+      <div className="flex items-center justify-between border-b border-border px-1 py-3">
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <TrendingUp className="h-4 w-4 text-primary" />
           Popular now
         </h3>
       </div>
 
-      <div className="divide-y divide-border/40">
+      <div className="divide-y divide-border">
         {isLoading ? (
           Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="px-4 py-3 space-y-2">
+            <div key={i} className="space-y-2 px-1 py-4">
               <Skeleton className="h-3.5 w-full" />
               <Skeleton className="h-3 w-2/3" />
             </div>
           ))
         ) : posts.length === 0 ? (
-          <p className="text-sm text-muted-foreground px-4 py-6 text-center">
+          <p className="px-4 py-8 text-center text-sm text-muted-foreground">
             No trending posts yet — be the first!
           </p>
         ) : (
           posts.map((post, index) => (
-            <div key={post.id} className="px-4 py-3 flex gap-3">
-              <div className="w-6 flex-shrink-0">
-                <span className={index < 3 ? 'text-primary font-black' : 'text-muted-foreground font-bold'}>
+            <article key={post.id} className="flex gap-4 px-1 py-4 transition-colors hover:bg-muted/20 sm:px-3">
+              <div className="w-7 flex-shrink-0 pt-0.5">
+                <span className={index < 3 ? 'text-foreground font-semibold' : 'text-muted-foreground font-medium'}>
                   {index + 1}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
                 <Link
                   to={`/profile/${post.profiles.username}`}
-                  className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-primary transition-colors min-w-0"
+                  className="flex min-w-0 items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
                 >
                   <span className="truncate">{post.profiles.username}</span>
                   {post.profiles.is_verified && <BadgeCheck className="h-3.5 w-3.5 text-primary flex-shrink-0" />}
@@ -50,11 +50,11 @@ export default function TrendingList() {
                 </Link>
                 <Link
                   to={`/post/${post.id}`}
-                  className="mt-0.5 block text-sm leading-snug line-clamp-2 hover:text-primary transition-colors"
+                  className="mt-1 block line-clamp-2 text-[15px] leading-6 transition-colors hover:text-primary"
                 >
                   {post.content || <span className="italic text-muted-foreground">(media post)</span>}
                 </Link>
-                <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+                <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Star className="h-3 w-3" /> {post.star_count}
                   </span>
@@ -74,7 +74,7 @@ export default function TrendingList() {
                   <AvatarFallback className="text-xs">{post.profiles.display_name?.charAt(0) || 'U'}</AvatarFallback>
                 </Avatar>
               </Link>
-            </div>
+            </article>
           ))
         )}
       </div>

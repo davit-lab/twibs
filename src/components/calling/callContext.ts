@@ -19,6 +19,8 @@ export interface CallContextValue extends CallManager {
   minimize: () => void;
   restore: () => void;
   navigateToConversation: () => void;
+  audioPlaybackBlocked: boolean;
+  resumeRemoteAudio: () => Promise<boolean>;
 
   // ---- incoming calls ----
   incomingCall: CallSession | null;

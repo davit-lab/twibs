@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import {
@@ -21,6 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { GroupedStories, StoryViewerProfile } from '@/hooks/useStories';
 import { storyMediaFilterStyle } from '@/lib/stories';
 import StoryOverlayRenderer from '@/components/stories/StoryOverlayRenderer';
+import StoryMediaBackdrop from '@/components/stories/StoryMediaBackdrop';
 
 interface StoryViewerProps {
   open: boolean;
@@ -67,10 +68,12 @@ export default function StoryViewer({
   const [groupIndex, setGroupIndex] = useState(initialGroupIndex);
   const [storyIndex, setStoryIndex] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState(true);
   const [musicMuted, setMusicMuted] = useState(false);
   const [videoProgress, setVideoProgress] = useState(0);
   const [mediaLoading, setMediaLoading] = useState(true);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const [mediaRetry, setMediaRetry] = useState(0);
   const [dragY, setDragY] = useState(0);
   const [likeBurst, setLikeBurst] = useState<string | null>(null);
   const [viewersOpen, setViewersOpen] = useState(false);
@@ -80,6 +83,7 @@ export default function StoryViewer({
   const [sendingReply, setSendingReply] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const musicRef = useRef<HTMLAudioElement>(null);
   const pressStart = useRef<{ x: number; y: number; t: number; rect: DOMRect } | null>(null);
   const lastTap = useRef<{ id: string; t: number } | null>(null);
   const adMediaRef = useRef<HTMLDivElement | null>(null);
@@ -96,6 +100,7 @@ export default function StoryViewer({
   const currentReaction = currentStory?.reaction ?? null;
   const overlays = currentStory?.overlays ?? [];
   const mediaFilter = storyMediaFilterStyle(overlays);
+  const playbackPaused = paused || mediaLoading || !!mediaError || viewersOpen || deleteConfirmOpen;
 
   useAdImpression(adMediaRef, open ? currentAd : null, !!currentAd, 'stories');
 
@@ -130,6 +135,7 @@ export default function StoryViewer({
     setPaused(false);
     setVideoProgress(0);
     setMediaLoading(true);
+    setMediaError(null);
     setDragY(0);
     setLikeBurst(null);
   }, []);
@@ -158,6 +164,7 @@ export default function StoryViewer({
       setStoryIndex(nextIdx);
       setVideoProgress(0);
       setMediaLoading(true);
+      setMediaError(null);
       const story = group.stories[nextIdx];
       if (story && !story.is_viewed) markViewed(story.id);
     } else if (groupIndex < groups.length - 1) {
@@ -166,6 +173,7 @@ export default function StoryViewer({
       setStoryIndex(0);
       setVideoProgress(0);
       setMediaLoading(true);
+      setMediaError(null);
       const story = groups[nextGroupIdx]?.stories[0];
       if (story && !story.is_viewed) markViewed(story.id);
     } else {
@@ -181,12 +189,14 @@ export default function StoryViewer({
       setStoryIndex(storyIndex - 1);
       setVideoProgress(0);
       setMediaLoading(true);
+      setMediaError(null);
     } else if (groupIndex > 0) {
       const prevGroupIdx = groupIndex - 1;
       setGroupIndex(prevGroupIdx);
       setStoryIndex(groups[prevGroupIdx].stories.length - 1);
       setVideoProgress(0);
       setMediaLoading(true);
+      setMediaError(null);
     }
   }, [groups, groupIndex, storyIndex]);
 
@@ -201,9 +211,33 @@ export default function StoryViewer({
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (paused || deleteConfirmOpen) v.pause();
+    if (playbackPaused) v.pause();
     else v.play().catch(() => { /* autoplay blocked until interaction */ });
-  }, [paused, deleteConfirmOpen, currentStory?.id, open]);
+  }, [playbackPaused, currentStory?.id, open]);
+
+  useEffect(() => {
+    const audio = musicRef.current;
+    if (!audio) return;
+    if (playbackPaused) audio.pause();
+    else audio.play().catch(() => { /* waits for the next user gesture */ });
+  }, [playbackPaused, currentStory?.id, musicMuted]);
+
+  // Warm only the next story so navigation feels immediate without loading a
+  // whole tray of full-size media in the background.
+  useEffect(() => {
+    if (!open || !currentGroup) return;
+    const next = currentGroup.stories[storyIndex + 1] ?? groups[groupIndex + 1]?.stories[0];
+    if (!next) return;
+    if (next.media_type === 'video') {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.src = next.media_url;
+      return () => { video.removeAttribute('src'); video.load(); };
+    }
+    const image = new Image();
+    image.src = next.media_url;
+    return () => { image.src = ''; };
+  }, [currentGroup, groupIndex, groups, open, storyIndex]);
 
   // Auto-pause when the tab/window loses focus, resume when it returns
   useEffect(() => {
@@ -411,7 +445,7 @@ export default function StoryViewer({
       <div
         key={`${story.id}-${storyIndex}`}
         className="h-full rounded-full bg-white/90 story-progress-anim"
-        style={{ animationDuration: `${story.duration || 5}s`, animationPlayState: paused ? 'paused' : 'running' }}
+        style={{ animationDuration: `${story.duration || 5}s`, animationPlayState: playbackPaused ? 'paused' : 'running' }}
         onAnimationEnd={() => {
           if (groups[groupIndex]?.stories[storyIndex]?.media_type === 'image') handleNext();
         }}
@@ -433,16 +467,18 @@ export default function StoryViewer({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           hideCloseButton
-          className="w-full h-[100dvh] p-0 border-none overflow-hidden bg-black"
+          className="h-[100dvh] w-full max-w-none overflow-hidden border-none bg-[#090909] p-0"
         >
-          <div className="relative h-full w-full bg-black overflow-hidden">
+          <DialogTitle className="sr-only">Story viewer</DialogTitle>
+          <DialogDescription className="sr-only">View stories and move between photos and videos.</DialogDescription>
+          <div className="relative mx-auto h-full w-full max-w-[480px] overflow-hidden bg-black sm:my-4 sm:h-[calc(100%-2rem)] sm:rounded-[28px] sm:ring-1 sm:ring-white/10 sm:shadow-[0_32px_100px_rgba(0,0,0,0.75)]">
             {currentStory && currentGroup && (
               <>
                 {/* ─── Progress ─── */}
-                <div className="absolute inset-x-0 top-0 z-30 px-3 pt-[max(env(safe-area-inset-top,0px),12px)]">
-                  <div className="flex gap-1.5">
+                <div className="absolute inset-x-0 top-0 z-30 px-3 pt-[max(env(safe-area-inset-top,0px),12px)] sm:pt-3">
+                  <div className="flex gap-1">
                     {currentGroup.stories.map((story, i) => (
-                      <div key={story.id} className="flex-1 h-[3px] rounded-full bg-white/15 overflow-hidden">
+                      <div key={story.id} className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/20 shadow-sm">
                         {activeSegment(story, i)}
                       </div>
                     ))}
@@ -450,10 +486,10 @@ export default function StoryViewer({
                 </div>
 
                 {/* ─── Header ─── */}
-                <div className="absolute inset-x-0 top-[max(env(safe-area-inset-top,0px),20px)] z-30 flex items-center justify-between gap-2 px-3 pt-[10px]">
+                <div className="absolute inset-x-0 top-[max(env(safe-area-inset-top,0px),20px)] z-30 flex items-center justify-between gap-2 px-3 pt-[10px] sm:top-5">
                   <Link to={currentAd ? '#' : `/profile/${currentGroup.username}`} className="flex items-center gap-2.5 min-w-0">
                     <div className="flex-shrink-0 rounded-full">
-                      <Avatar className="w-9 h-9 border border-black/30">
+                      <Avatar className="h-10 w-10 border border-white/25 shadow-lg">
                         <AvatarImage src={currentGroup.avatar_url || undefined} />
                         <AvatarFallback className="bg-neutral-800 text-white text-sm">
                           {getInitials(currentGroup.display_name)}
@@ -540,7 +576,7 @@ export default function StoryViewer({
                   <div className="relative w-full h-full" style={windowStyle}>
                     {currentStory.media_type === 'video' ? (
                       <video
-                        key={currentStory.id}
+                        key={`${currentStory.id}-${mediaRetry}`}
                         ref={videoRef}
                         src={currentStory.media_url}
                         className="absolute inset-0 w-full h-full object-contain story-enter"
@@ -552,6 +588,10 @@ export default function StoryViewer({
                         onLoadedMetadata={e => { e.currentTarget.currentTime = 0; setMediaLoading(false); }}
                         onWaiting={beforeMediaUnload}
                         onCanPlay={() => setMediaLoading(false)}
+                        onError={() => {
+                          setMediaLoading(false);
+                          setMediaError("Couldn't load this Story.");
+                        }}
                         onEnded={handleNext}
                         onTimeUpdate={e => {
                           const v = e.currentTarget;
@@ -559,15 +599,22 @@ export default function StoryViewer({
                         }}
                       />
                     ) : (
-                      <img
-                        key={currentStory.id}
-                        src={currentStory.media_url}
-                        alt=""
-                        className="absolute inset-0 w-full h-full object-contain story-enter"
-                        style={mediaFilter}
-                        onLoad={() => setMediaLoading(false)}
-                        draggable={false}
-                      />
+                      <>
+                        <StoryMediaBackdrop src={currentStory.media_url} mediaType="image" style={mediaFilter} />
+                        <img
+                          key={`${currentStory.id}-${mediaRetry}`}
+                          src={currentStory.media_url}
+                          alt=""
+                          className="absolute inset-0 w-full h-full object-contain story-enter"
+                          style={mediaFilter}
+                          onLoad={() => setMediaLoading(false)}
+                          onError={() => {
+                            setMediaLoading(false);
+                            setMediaError("Couldn't load this Story.");
+                          }}
+                          draggable={false}
+                        />
+                      </>
                     )}
 
                     {/* Creative overlays */}
@@ -601,6 +648,37 @@ export default function StoryViewer({
                         <Loader2 className="h-7 w-7 animate-spin text-white/70" />
                       </div>
                     )}
+                    {mediaError && (
+                      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black px-6 text-center">
+                        <p className="text-sm text-white/70">{mediaError}</p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setMediaError(null);
+                              setMediaLoading(true);
+                              setMediaRetry((value) => value + 1);
+                            }}
+                            className="rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
+                          >
+                            Try again
+                          </button>
+                          <button
+                            type="button"
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleNext();
+                            }}
+                            className="rounded-full px-4 py-2 text-sm font-semibold text-white/70 hover:bg-white/10 hover:text-white"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -611,6 +689,7 @@ export default function StoryViewer({
                       <>
                         <audio
                           key={`music-${currentStory.id}`}
+                          ref={musicRef}
                           src={currentStory.music_url}
                           autoPlay
                           loop
@@ -741,6 +820,7 @@ export default function StoryViewer({
                           value={replyText}
                           onChange={e => setReplyText(e.target.value)}
                           onFocus={() => setPaused(true)}
+                          onBlur={() => setPaused(false)}
                           onKeyDown={e => {
                             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); }
                           }}

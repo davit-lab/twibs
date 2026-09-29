@@ -2,27 +2,42 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type {
   AdsOverview,
+  AdvertiserAccount,
   Campaign,
   CampaignAnalytics,
   CampaignObjective,
   CampaignTargeting,
   CampaignBudgetType,
+  FeedAd,
 } from '@/lib/ads';
 
-const rpc = (supabase as any).rpc.bind(supabase);
-
+// NOTE: call `supabase.rpc(...)` directly rather than through a loosely-typed
+// helper. PostgREST matches RPC parameters by exact name, so letting the
+// generated `Database` types check the argument object is what catches a wrong
+// `p_`-prefix before it silently ships (that mistake previously disabled the
+// entire feed delivery pipeline).
 const CAMPAIGN_SELECT = `
   *,
   advertiser_accounts (*),
   post:posts (id, content)
 `;
 
-function normalizeCampaign(raw: any): Campaign {
+/**
+ * Shape returned by CAMPAIGN_SELECT before the embedded advertiser relation is
+ * collapsed. PostgREST returns to-one embeds as either an object or an array
+ * depending on relationship inference, so both are accepted.
+ */
+type CampaignRow = Omit<Campaign, 'advertiser_accounts'> & {
+  advertiser_accounts: AdvertiserAccount | AdvertiserAccount[] | null;
+};
+
+function normalizeCampaign(raw: unknown): Campaign {
+  const row = raw as CampaignRow;
   return {
-    ...raw,
-    advertiser_accounts: Array.isArray(raw.advertiser_accounts)
-      ? raw.advertiser_accounts[0]
-      : raw.advertiser_accounts,
+    ...row,
+    advertiser_accounts: Array.isArray(row.advertiser_accounts)
+      ? row.advertiser_accounts[0]
+      : row.advertiser_accounts,
   };
 }
 
@@ -35,12 +50,12 @@ export function useCampaigns() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('campaigns')
         .select(CAMPAIGN_SELECT)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      setCampaigns(((data as any[]) || []).map(normalizeCampaign));
+      setCampaigns(((data ?? []) as unknown[]).map(normalizeCampaign));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load campaigns');
     } finally {
@@ -65,7 +80,7 @@ export function useCampaign(campaignId: string | undefined) {
     setLoading(true);
     setError(null);
     try {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('campaigns')
         .select(CAMPAIGN_SELECT)
         .eq('id', campaignId)
@@ -95,9 +110,9 @@ export function useAdsOverview() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error } = await rpc('get_ads_overview', {});
+      const { data, error } = await supabase.rpc('get_ads_overview');
       if (error) throw error;
-      setOverview((data as AdsOverview) || null);
+      setOverview((data as unknown as AdsOverview) || null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load ads overview');
     } finally {
@@ -122,9 +137,10 @@ export function useCampaignAnalytics(campaignId: string | undefined) {
     setLoading(true);
     setError(null);
     try {
-      const { data, error } = await rpc('get_campaign_analytics', { p_campaign_id: campaignId });
+      const { data, error } = await supabase
+        .rpc('get_campaign_analytics', { p_campaign_id: campaignId });
       if (error) throw error;
-      setAnalytics((data as CampaignAnalytics) || null);
+      setAnalytics((data as unknown as CampaignAnalytics) || null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load analytics');
     } finally {
@@ -160,7 +176,7 @@ export interface CreateCampaignInput {
 
 export function useCampaignActions() {
   const createCampaign = useCallback(async (input: CreateCampaignInput) => {
-    const { data, error } = await rpc('create_campaign', {
+    const { data, error } = await supabase.rpc('create_campaign', {
       p_advertiser_id: input.advertiser_id,
       p_name: input.name,
       p_objective: input.objective,
@@ -184,42 +200,42 @@ export function useCampaignActions() {
       },
     });
     if (error) throw error;
-    return data as Campaign;
+    return data as unknown as Campaign;
   }, []);
 
   const submitCampaign = useCallback(async (campaignId: string) => {
-    const { data, error } = await rpc('submit_campaign', { p_campaign_id: campaignId });
+    const { data, error } = await supabase.rpc('submit_campaign', { p_campaign_id: campaignId });
     if (error) throw error;
-    return data as Campaign;
+    return data as unknown as Campaign;
   }, []);
 
   const pauseCampaign = useCallback(async (campaignId: string) => {
-    const { data, error } = await rpc('pause_campaign', { p_campaign_id: campaignId });
+    const { data, error } = await supabase.rpc('pause_campaign', { p_campaign_id: campaignId });
     if (error) throw error;
-    return data as Campaign;
+    return data as unknown as Campaign;
   }, []);
 
   const resumeCampaign = useCallback(async (campaignId: string) => {
-    const { data, error } = await rpc('resume_campaign', { p_campaign_id: campaignId });
+    const { data, error } = await supabase.rpc('resume_campaign', { p_campaign_id: campaignId });
     if (error) throw error;
-    return data as Campaign;
+    return data as unknown as Campaign;
   }, []);
 
   const endCampaign = useCallback(async (campaignId: string) => {
-    const { data, error } = await rpc('end_campaign', { p_campaign_id: campaignId });
+    const { data, error } = await supabase.rpc('end_campaign', { p_campaign_id: campaignId });
     if (error) throw error;
-    return data as Campaign;
+    return data as unknown as Campaign;
   }, []);
 
   const cancelCampaign = useCallback(async (campaignId: string) => {
-    const { data, error } = await rpc('cancel_campaign', { p_campaign_id: campaignId });
+    const { data, error } = await supabase.rpc('cancel_campaign', { p_campaign_id: campaignId });
     if (error) throw error;
-    return data as Campaign;
+    return data as unknown as Campaign;
   }, []);
 
   const reportAd = useCallback(
     async (advertisementId: string, reason: string, details?: string) => {
-      const { data, error } = await rpc('report_ad', {
+      const { data, error } = await supabase.rpc('report_ad', {
         p_advertisement_id: advertisementId,
         p_reason: reason,
         p_details: details ?? null,
@@ -242,11 +258,14 @@ export function useCampaignActions() {
 }
 
 export async function fetchFeedAds(viewerId: string, limit = 2, frequencyCap = 5) {
-  const { data, error } = await rpc('get_feed_ads', {
-    viewer_id: viewerId,
-    limit,
-    frequency_cap: frequencyCap,
+  // PostgREST matches RPC parameters by exact name, so these MUST carry the
+  // `p_` prefix. Passing viewer_id/limit/frequency_cap makes the call fail and
+  // silently served no ads at all, which killed the whole delivery pipeline.
+  const { data, error } = await supabase.rpc('get_feed_ads', {
+    p_viewer_id: viewerId,
+    p_limit: limit,
+    p_frequency_cap: frequencyCap,
   });
   if (error) throw error;
-  return (data as any[]) || [];
+  return (data as unknown as FeedAd[]) || [];
 }

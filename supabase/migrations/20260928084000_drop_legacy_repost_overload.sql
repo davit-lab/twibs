@@ -1,0 +1,21 @@
+-- Remove the superseded one-argument repost_post overload
+-- ----------------------------------------------------------------------------
+-- 20260928082000_business_content_repost_support added the business-aware
+-- signature:
+--
+--   repost_post(target_post_id uuid, p_business_id uuid DEFAULT NULL)
+--
+-- but left the original in place:
+--
+--   repost_post(target_post_id uuid)
+--
+-- Because `p_business_id` has a DEFAULT, *both* candidates accept a call that
+-- supplies only `target_post_id`. PostgREST cannot disambiguate two functions
+-- with the same name that both match the supplied argument count and raises
+-- PGRST203 "ambiguous function" instead of choosing one. Leaving both in place
+-- risks breaking every client that calls the one-argument form.
+--
+-- Dropping the legacy overload resolves the ambiguity and preserves the
+-- one-argument call path: the remaining function still accepts a single
+-- argument because `p_business_id` defaults to NULL (personal repost).
+DROP FUNCTION IF EXISTS public.repost_post(uuid);

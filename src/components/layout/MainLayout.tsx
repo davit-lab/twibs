@@ -2,6 +2,7 @@ import { ReactNode, useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { useUserBan } from '@/hooks/useUserBan';
 import { usePresence } from '@/hooks/usePresence';
 import { usePremiumStatus } from '@/hooks/usePremiumStatus';
@@ -43,6 +44,8 @@ import {
   Target,
   Megaphone,
   ChevronRight,
+  ShoppingBag,
+  Store,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -54,6 +57,7 @@ interface MainLayoutProps {
 const navItems = [
   { icon: Home, label: 'Home', href: '/', id: 'home' },
   { icon: Compass, label: 'Explore', href: '/explore', id: 'explore' },
+  { icon: ShoppingBag, label: 'Marketplace', href: '/marketplace', id: 'marketplace' },
   { icon: Clapperboard, label: 'Reels', href: '/reels', id: 'reels' },
   { icon: MessageCircle, label: 'Messages', href: '/messages', id: 'messages' },
   { icon: Heart, label: 'Notifications', href: '/notifications', id: 'notifications' },
@@ -74,6 +78,8 @@ const mobileNavItems = [
 
 export default function MainLayout({ children, immersive = false }: MainLayoutProps) {
   const { user, profile, signOut, isAdmin, isModerator } = useAuth();
+  const { accounts } = useBusiness();
+  const hasBusinesses = accounts.length > 0;
   const { isBanned, banInfo } = useUserBan();
   usePresence();
   const location = useLocation();
@@ -123,6 +129,7 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
 // intentionally absent: the profile header card above and the embedded account
 // switcher already cover them, so they were duplicate links.
 const moreNavItems = [
+  { icon: ShoppingBag, label: 'Marketplace', href: '/marketplace', id: 'marketplace' },
   { icon: BookOpen, label: 'Library', href: '/library', id: 'library' },
   { icon: Users, label: 'Groups', href: '/groups', id: 'groups' },
 ];
@@ -218,11 +225,27 @@ const moreAccountItems = [
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-[240px]" align="start" side="top" sideOffset={10}>
                 <DropdownMenuItem asChild>
+                  <Link to="/marketplace" className="cursor-pointer">
+                    <ShoppingBag className="mr-3 h-4 w-4" />
+                    Marketplace
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
                   <Link to={`/profile/${profile?.username}`} className="cursor-pointer">
                     <User className="mr-3 h-4 w-4" />
                     Profile
                   </Link>
                 </DropdownMenuItem>
+                {/* Sellers list products from the business Store tab, which is
+                    otherwise only reachable from the business profile page. */}
+                {hasBusinesses && (
+                  <DropdownMenuItem asChild>
+                    <Link to="/b?tab=store" className="cursor-pointer">
+                      <Store className="mr-3 h-4 w-4" />
+                      Store
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem asChild>
                   <Link to="/settings" className="cursor-pointer">
                     <Settings className="mr-3 h-4 w-4" />

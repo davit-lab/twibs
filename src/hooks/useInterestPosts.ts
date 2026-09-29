@@ -2,8 +2,19 @@ import { useState } from 'react';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import { useToast } from '@/hooks/use-toast';
+
+export interface InterestPostMedia {
+  id: string;
+  url: string;
+  type: string;
+  width: number | null;
+  height: number | null;
+  alt_text: string | null;
+  position: number;
+}
 
 export interface InterestPost {
   id: string;
@@ -31,6 +42,7 @@ export interface InterestPost {
   };
   user_has_liked?: boolean;
   user_has_saved?: boolean;
+  media?: InterestPostMedia[];
 }
 
 export interface InterestPostComment {
@@ -159,7 +171,7 @@ export function useSavedInterestPosts(userId: string | undefined, limit = 10) {
 
       if (postsError) throw postsError;
 
-      const orderMap = new Map(postIds.map((id: string, i: number) => [id, i]));
+      const orderMap = new Map<string, number>(postIds.map((id: string, i: number) => [id, i]));
       const orderedPosts = (rawPosts || [])
         .slice()
         .sort((a: any, b: any) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
@@ -192,6 +204,27 @@ async function enrichInterestPosts(posts: any[], userId?: string): Promise<Inter
     result = posts.map((post: any) => ({
       ...post,
       profiles: profilesMap.get(post.user_id),
+    }));
+  }
+
+  // Fetch media from interest_post_media table
+  if (result.length > 0) {
+    const postIds = result.map((p: any) => p.id);
+    const { data: mediaData } = await supabase
+      .from('interest_post_media')
+      .select('id, post_id, url, type, width, height, alt_text, position')
+      .in('post_id', postIds)
+      .order('position', { ascending: true });
+
+    const mediaMap = new Map<string, InterestPostMedia[]>();
+    (mediaData || []).forEach((m: any) => {
+      if (!mediaMap.has(m.post_id)) mediaMap.set(m.post_id, []);
+      mediaMap.get(m.post_id)!.push(m);
+    });
+
+    result = result.map((post: any) => ({
+      ...post,
+      media: mediaMap.get(post.id) || [],
     }));
   }
 
@@ -243,6 +276,7 @@ export async function uploadInterestMedia(
 
 export function useInterestPostActions() {
   const { user } = useAuth();
+  const { activeBusiness, mode } = useBusiness();
   const { isEnabled } = useAppSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -270,6 +304,7 @@ export function useInterestPostActions() {
           content,
           media_url: mediaUrl || null,
           media_type: mediaType || null,
+          business_id: mode === 'business' && activeBusiness ? activeBusiness.id : null,
         })
         .select()
         .single();

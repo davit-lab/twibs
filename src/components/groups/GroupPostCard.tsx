@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGroupActions, GroupPost } from '@/hooks/useGroups';
 import { useToast } from '@/hooks/use-toast';
 import GroupPostComments from './GroupPostComments';
-import MediaLightbox from '@/components/MediaLightbox';
+import MediaViewer from '@/components/media/MediaViewer';
 import RichText from '@/components/rich/RichText';
 import ReportDialog from '@/components/social/ReportDialog';
 import { cn } from '@/lib/utils';
@@ -31,6 +31,7 @@ export default function GroupPostCard({ post, groupName }: GroupPostCardProps) {
   const [copied, setCopied] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxInitialRect, setLightboxInitialRect] = useState<DOMRect | undefined>();
   const [reportOpen, setReportOpen] = useState(false);
 
   const handleLike = async () => {
@@ -137,7 +138,11 @@ export default function GroupPostCard({ post, groupName }: GroupPostCardProps) {
             <video src={post.media_url} controls className="w-full max-h-96 object-cover" />
           ) : (
             <button
-              onClick={() => setLightboxOpen(true)}
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setLightboxInitialRect(rect);
+                setLightboxOpen(true);
+              }}
               className="block w-full cursor-zoom-in"
             >
               <img src={post.media_url} alt="" className="w-full max-h-[420px] object-cover" loading="lazy" />
@@ -212,11 +217,16 @@ export default function GroupPostCard({ post, groupName }: GroupPostCardProps) {
         onOpenChange={setCommentsOpen}
       />
 
-      {lightboxOpen && (
-        <MediaLightbox
-          src={post.media_url!}
-          alt={post.content.slice(0, 80)}
-          onClose={() => setLightboxOpen(false)}
+      {lightboxOpen && post.media_url && (
+        <MediaViewer
+          images={[{ src: post.media_url, alt: post.content.slice(0, 80) }]}
+          initialIndex={0}
+          onClose={() => {
+            setLightboxOpen(false);
+            setLightboxInitialRect(undefined);
+          }}
+          initialRect={lightboxInitialRect}
+          enableFullscreen={true}
         />
       )}
 

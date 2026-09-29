@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useBusinessOverview } from '@/hooks/useBusinessData';
+import { useAnalyticsRange } from '@/hooks/useAnalyticsRange';
+import { RangeSelector } from '@/components/business/RangeSelector';
 import { MetricCard, LoadingGrid, EmptyState } from '@/components/business/bits';
 import { Button } from '@/components/ui/button';
 import { formatMoney } from '@/lib/ads';
@@ -18,7 +20,8 @@ import {
 } from 'lucide-react';
 
 export function OverviewTab({ businessId }: { businessId: string }) {
-  const { data: overview, isLoading, isError } = useBusinessOverview(businessId);
+  const [range, selectRange] = useAnalyticsRange();
+  const { data: overview, isLoading, isError, isFetching } = useBusinessOverview(businessId, range);
 
   if (isLoading) return <LoadingGrid items={4} />;
   if (isError || !overview)
@@ -29,20 +32,49 @@ export function OverviewTab({ businessId }: { businessId: string }) {
       />
     );
 
+  // Rates are null when the window has no impressions; render them as "—" so a
+  // genuine 0.0% is never confused with "nothing was measured yet".
+  const rate = (v: number | null | undefined) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`);
+
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <MetricCard label="Followers" value={overview.followers_count} icon={<Users className="h-4 w-4" />} hint={`+${overview.followers_gained_7d} in 7 days`} />
-        <MetricCard label="Active promotions" value={overview.active_promotions} icon={<Megaphone className="h-4 w-4" />} />
-        <MetricCard label="Total campaigns" value={overview.total_campaigns} icon={<ListVideo className="h-4 w-4" />} />
-        <MetricCard label="Total spend" value={formatMoney(overview.total_spend_cents)} icon={<Wallet className="h-4 w-4" />} />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <RangeSelector value={range} onChange={(next) => selectRange(next.key, next)} />
+        {isFetching && <span className="text-xs text-muted-foreground">Updating…</span>}
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <MetricCard label="Reach" value={overview.reach} icon={<Users className="h-4 w-4" />} />
+        <MetricCard
+          label="Followers"
+          value={overview.followers_count}
+          icon={<Users className="h-4 w-4" />}
+          hint={`+${overview.followers_gained_7d} in 7 days`}
+        />
+        <MetricCard label="Active promotions" value={overview.active_promotions} icon={<Megaphone className="h-4 w-4" />} />
+        <MetricCard label="Total campaigns" value={overview.total_campaigns} icon={<ListVideo className="h-4 w-4" />} />
+        <MetricCard
+          label="Spend"
+          value={formatMoney(overview.total_spend_cents)}
+          icon={<Wallet className="h-4 w-4" />}
+          hint={overview.is_lifetime ? 'All time' : 'In this period'}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <MetricCard label="Reach" value={overview.reach} icon={<Users className="h-4 w-4" />} hint="Unique viewers" />
         <MetricCard label="Impressions" value={overview.impressions} icon={<Eye className="h-4 w-4" />} />
-        <MetricCard label="Engagement" value={overview.engagement} icon={<Heart className="h-4 w-4" />} />
-        <MetricCard label="Clicks" value={overview.clicks} icon={<MousePointerClick className="h-4 w-4" />} />
+        <MetricCard
+          label="Engagement"
+          value={overview.engagement}
+          icon={<Heart className="h-4 w-4" />}
+          hint={range.key === 'today' ? undefined : `${rate(overview.engagement_rate)} of impressions`}
+        />
+        <MetricCard
+          label="Clicks"
+          value={overview.clicks}
+          icon={<MousePointerClick className="h-4 w-4" />}
+          hint={`${rate(overview.ctr)} CTR`}
+        />
       </div>
 
       <div className="rounded-2xl border border-border">

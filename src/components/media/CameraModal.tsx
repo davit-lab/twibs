@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useCamera } from '@/hooks/useCamera';
-import { pickMediaRecorderMimeType } from '@/lib/media-filters';
+import { getFilter, pickMediaRecorderMimeType } from '@/lib/media-filters';
 import FilterEditor, { MediaEditorResult, MediaEditorMedia } from '@/components/media/FilterEditor';
 import { cn } from '@/lib/utils';
 import { blockCallOverlay, unblockCallOverlay } from '@/lib/callOverlayLayers';
@@ -32,7 +32,13 @@ function CropView({ file, type, onBack, onConfirm }: { file: File | null; type: 
   const dragStart = useRef({ x: 0, y: 0, offX: 0, offY: 0 });
   const [mediaNatural, setMediaNatural] = useState<{ w: number; h: number } | null>(null);
   const [containerSize, setContainerSize] = useState<{ w: number; h: number } | null>(null);
-  const url = file ? URL.createObjectURL(file) : null;
+  const [processing, setProcessing] = useState(false);
+  const [cropError, setCropError] = useState<string | null>(null);
+  const url = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+
+  useEffect(() => () => {
+    if (url) URL.revokeObjectURL(url);
+  }, [url]);
 
   const handleMediaLoad = useCallback(() => {
     const natural = type === 'image'
@@ -90,9 +96,9 @@ function CropView({ file, type, onBack, onConfirm }: { file: File | null; type: 
       const img = imgRef.current;
       if (!img) return null;
       ctx.drawImage(img, Math.max(0, sx), Math.max(0, sy), Math.min(sw, natW), Math.min(sh, natH), 0, 0, 1080, 1920);
-      return new Promise<File>((resolve) => {
+      return new Promise<File | null>((resolve) => {
         canvas.toBlob((blob) => {
-          if (blob) resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }));
+          resolve(blob ? new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }) : null);
         }, 'image/jpeg', 0.92);
       });
     }
@@ -119,8 +125,23 @@ function CropView({ file, type, onBack, onConfirm }: { file: File | null; type: 
   }, [mediaNatural, containerSize, offsetX, offsetY, file, type]);
 
   const handleConfirm = async () => {
-    const result = await computeCrop();
-    if (result) { setOffsetX(0); setOffsetY(0); onConfirm(result); }
+    if (processing) return;
+    setProcessing(true);
+    setCropError(null);
+    try {
+      const result = await computeCrop();
+      if (!result) {
+        setCropError('The photo is not ready yet. Wait a moment and try again.');
+        return;
+      }
+      setOffsetX(0);
+      setOffsetY(0);
+      onConfirm(result);
+    } catch {
+      setCropError('Could not prepare this photo. Please retake it.');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   if (!url) return null;
@@ -164,9 +185,13 @@ function CropView({ file, type, onBack, onConfirm }: { file: File | null; type: 
       {/* Bottom */}
       <div className="absolute bottom-0 inset-x-0 z-30 pb-8 pt-10 bg-gradient-to-t from-black/80 to-transparent">
         <div className="flex items-center justify-center gap-4 px-6">
-          <Button onClick={handleConfirm} className="flex-1 rounded-full h-12 bg-primary text-primary-foreground font-semibold text-sm">Crop &amp; Continue</Button>
+          <Button disabled={processing || !mediaNatural} onClick={handleConfirm} className="flex-1 rounded-full h-12 bg-primary text-primary-foreground font-semibold text-sm">
+            {processing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Preparing…</> : 'Crop & Continue'}
+          </Button>
         </div>
-        <p className="text-center text-white/50 text-xs mt-3">Drag to reposition, then crop</p>
+        <p className={cn('text-center text-xs mt-3', cropError ? 'text-red-400' : 'text-white/50')}>
+          {cropError || 'Drag to reposition, then crop'}
+        </p>
       </div>
     </div>
   );
@@ -187,6 +212,7 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
   const [pendingDuration, setPendingDuration] = useState<number | undefined>(undefined);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraPreviewRef = useRef<HTMLVideoElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startTimeRef = useRef(0);
@@ -240,21 +266,13 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
     onClose();
   };
 
-  const enterCrop = (file: File) => {
+  const enterCrop = useCallback((file: File) => {
     setPendingFile(file);
     setPendingType(file.type.startsWith('video/') ? 'video' : 'image');
     setStep('crop');
-  };
+  }, []);
 
-  // Videos skip the crop step entirely: re-encoding a video in a canvas here
-  // produced ~100ms clips. Real video trim happens in the story editor, and a
-  // 9:16 visual crop is applied live via object-cover.
-  const enterResult = (file: File) => {
-    if (file.type.startsWith('video/')) enterEdit(file);
-    else enterCrop(file);
-  };
-
-  const enterEdit = (file: File) => {
+  const enterEdit = useCallback((file: File) => {
     const url = URL.createObjectURL(file);
     setMedia({
       file,
@@ -262,7 +280,25 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
       type: file.type.startsWith('video/') ? 'video' : 'image',
     });
     setStep('edit');
-  };
+  }, []);
+
+  // Videos skip the crop step entirely: re-encoding a video in a canvas here
+  // produced ~100ms clips. Real video trim happens in the story editor, and a
+  // 9:16 visual crop is applied live via object-cover.
+  const enterResult = useCallback((file: File, duration?: number) => {
+    if (mode === 'story') {
+      onDone(file, {
+        file,
+        kind: file.type.startsWith('video/') ? 'video' : 'image',
+        filter: getFilter('original'),
+        intensity: 1,
+        duration,
+      });
+      return;
+    }
+    if (file.type.startsWith('video/')) enterEdit(file);
+    else enterCrop(file);
+  }, [enterCrop, enterEdit, mode, onDone]);
 
   const flashEffect = () => {
     setFlash(true);
@@ -270,8 +306,11 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
   };
 
   const capturePhoto = useCallback(() => {
-    const video = document.querySelector<HTMLVideoElement>('[data-camera-preview]');
-    if (!video || !video.videoWidth) return;
+    const video = cameraPreviewRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) {
+      toast({ variant: 'destructive', title: 'Camera is not ready', description: 'Wait a moment, then take the photo again.' });
+      return;
+    }
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -281,13 +320,16 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
     flashEffect();
     canvas.toBlob(
       (blob) => {
-        if (!blob) return;
-        enterCrop(new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+        if (!blob) {
+          toast({ variant: 'destructive', title: 'Photo failed', description: 'The camera could not create this photo. Please try again.' });
+          return;
+        }
+        enterResult(new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' }));
       },
       'image/jpeg',
       0.92,
     );
-  }, []);
+  }, [enterResult, toast]);
 
   const stopRecording = useCallback(() => {
     const recorder = recorderRef.current;
@@ -327,7 +369,7 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
       if (blob.size > 0) {
         const file = new File([blob], `video-${Date.now()}.${ext}`, { type: mimeType });
         setPendingDuration(duration);
-        enterEdit(file);
+        enterResult(file, duration);
       }
     };
     recorder.start(100);
@@ -343,7 +385,7 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
         setElapsed(secs);
       }
     }, 100);
-  }, [stream, toast, stopRecording]);
+  }, [enterResult, stream, toast, stopRecording]);
 
   const handleShutter = () => {
     if (captureMode === 'photo') {
@@ -395,12 +437,16 @@ export default function CameraModal({ open, onClose, mode, startMode = 'photo', 
         className="w-full h-[100dvh] sm:h-[92vh] sm:max-h-[880px] max-w-[480px] p-0 border-none overflow-hidden sm:rounded-[2rem] bg-black"
       >
         <DialogTitle className="sr-only">{step === 'camera' ? 'Camera' : 'Edit media'}</DialogTitle>
+        <DialogDescription className="sr-only">Capture a photo or video and preview it before continuing.</DialogDescription>
         {step === 'camera' ? (
           <div className="relative w-full h-full bg-black">
             {stream && (
               <video
                 data-camera-preview
-                ref={attachStream}
+                ref={(node) => {
+                  cameraPreviewRef.current = node;
+                  attachStream(node);
+                }}
                 className={cn(
                   'absolute inset-0 w-full h-full object-cover',
                   facing === 'user' && '-scale-x-100'

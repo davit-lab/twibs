@@ -31,7 +31,7 @@ serve(async (req) => {
     // PRODUCTION: Always verify webhook signature
     if (webhookSecret && signature) {
       try {
-        event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+        event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
       } catch (err) {
         console.error("Webhook signature verification failed:", err);
         return new Response(
@@ -39,10 +39,6 @@ serve(async (req) => {
           { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
         );
       }
-    } else if (!webhookSecret) {
-      // DEVELOPMENT ONLY: Allow without verification when no secret is configured
-      console.warn("⚠️ STRIPE_WEBHOOK_SECRET not set - verification skipped (DEV ONLY)");
-      event = JSON.parse(body);
     } else {
       return new Response(
         JSON.stringify({ error: "Missing signature" }),
@@ -51,6 +47,38 @@ serve(async (req) => {
     }
 
     console.log("Processing webhook event:", event.type);
+
+    // Marketplace writes are verified, checked, idempotent and never driven by redirect URLs.
+    if (event.type.startsWith('checkout.session.')) {
+      const session = event.data.object as Stripe.Checkout.Session;
+      if (session.metadata?.type === 'marketplace') {
+        const { data: order, error } = await supabaseAdmin.from('orders').select('*').eq('id', session.metadata.order_id).single();
+        if (error || !order) throw new Error('Marketplace order not found');
+        if (order.stripe_checkout_session_id && order.stripe_checkout_session_id !== session.id) throw new Error('Session mismatch');
+        if (session.amount_total !== order.total_cents || session.currency !== order.currency) throw new Error('Payment amount mismatch');
+        let patch: Record<string, unknown> | null = null;
+        if ((event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') && session.payment_status === 'paid') {
+          patch = { status: 'paid', payment_status: 'paid', paid_at: new Date().toISOString(), stripe_checkout_session_id: session.id, stripe_payment_intent_id: session.payment_intent };
+        } else if (event.type === 'checkout.session.expired' || event.type === 'checkout.session.async_payment_failed') {
+          patch = { status: 'cancelled', payment_status: 'failed' };
+        }
+        if (patch) {
+          const saved = await supabaseAdmin.from('orders').update(patch).eq('id', order.id).eq('status', 'pending');
+          if (saved.error) throw saved.error;
+        }
+        return new Response(JSON.stringify({ received: true }), { headers: corsHeaders });
+      }
+    }
+    if (event.type === 'account.updated') {
+      const account = event.data.object as Stripe.Account;
+      const saved = await supabaseAdmin.from('business_stripe_accounts').update({ charges_enabled: account.charges_enabled, payouts_enabled: account.payouts_enabled, onboarding_complete: account.details_submitted, currently_due: account.requirements?.currently_due || [], disabled_reason: account.requirements?.disabled_reason || null }).eq('stripe_account_id', account.id);
+      if (saved.error) throw saved.error;
+    }
+    if (event.type === 'charge.refunded') {
+      const charge = event.data.object as Stripe.Charge;
+      const saved = await supabaseAdmin.from('orders').update({ payment_status: charge.refunded ? 'refunded' : 'partially_refunded', ...(charge.refunded ? { status: 'refunded' } : {}) }).eq('stripe_payment_intent_id', charge.payment_intent);
+      if (saved.error) throw saved.error;
+    }
 
     switch (event.type) {
       case "checkout.session.completed": {

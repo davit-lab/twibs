@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronUp, Mic, MicOff, PhoneOff } from 'lucide-react';
+import { ChevronUp, Mic, MicOff, MonitorOff, PhoneOff } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { useCall } from './callContext';
 
 export function CallMiniPlayer() {
   const call = useCall();
-  const { peerProfile, remoteStream, isMuted, phase } = call;
+  const { peerProfile, remoteStream, isMuted, phase, isScreenSharing, remoteIsScreenSharing } = call;
   const [elapsed, setElapsed] = useState(0);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const dragState = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
@@ -38,10 +38,10 @@ export function CallMiniPlayer() {
     if (!ds || ds.pointerId !== e.pointerId) return;
     const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
     setPos({
-      x: clamp(e.clientX - ds.offsetX, 8, window.innerWidth - 330),
+      x: clamp(e.clientX - ds.offsetX, 8, window.innerWidth - (isScreenSharing ? 380 : 330)),
       y: clamp(e.clientY - ds.offsetY, 12, window.innerHeight - 120),
     });
-  }, []);
+  }, [isScreenSharing]);
 
   const handlePointerUp = useCallback(() => {
     dragState.current = null;
@@ -54,10 +54,17 @@ export function CallMiniPlayer() {
   const initials =
     peerProfile?.display_name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
 
-  const hasVideo = !!remoteStream && remoteStream.getVideoTracks().length > 0;
+  const hasVideo = !!remoteStream && remoteStream.getVideoTracks().some(
+    (track) => track.readyState === 'live' && !track.muted
+  );
 
   const ends = (
     <>
+      {isScreenSharing ? (
+        <button type="button" aria-label="Stop sharing screen" onClick={() => void call.stopScreenShare()} className="flex h-9 w-9 items-center justify-center rounded-full bg-red-600 text-white transition-colors">
+          <MonitorOff className="h-4 w-4" />
+        </button>
+      ) : null}
       <button
         type="button"
         aria-label="Restore call"
@@ -99,7 +106,8 @@ export function CallMiniPlayer() {
             ref={videoRef}
             autoPlay
             playsInline
-            className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-black object-cover"
+            muted
+            className={cn('h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-black', remoteIsScreenSharing ? 'object-contain' : 'object-cover')}
           />
         ) : (
           <Avatar className="h-12 w-12 shrink-0">
@@ -111,7 +119,7 @@ export function CallMiniPlayer() {
           <p className="truncate text-sm font-medium">{peerProfile?.display_name ?? 'Call'}</p>
           <p className="flex items-center gap-1.5 text-xs text-[hsl(var(--muted-foreground))]">
             <span className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--primary))]" />
-            {phase === 'connected' ? duration : phase === 'ringing' ? 'Ringing…' : phase === 'reconnecting' ? 'Reconnecting…' : 'Connecting…'}
+            {isScreenSharing ? `Sharing screen • ${duration}` : remoteIsScreenSharing ? `Viewing screen • ${duration}` : phase === 'connected' ? duration : phase === 'ringing' ? 'Ringing…' : phase === 'reconnecting' ? 'Reconnecting…' : 'Connecting…'}
           </p>
         </div>
         {ends}
@@ -126,7 +134,7 @@ export function CallMiniPlayer() {
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
-      className="fixed z-[55] flex w-[320px] touch-none select-none items-center gap-3 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-2.5 shadow-2xl"
+      className={cn('fixed z-[55] flex touch-none select-none items-center gap-3 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-2.5 shadow-2xl', isScreenSharing ? 'w-[370px]' : 'w-[320px]')}
       style={
         pos
           ? { left: pos.x, top: pos.y }
@@ -139,7 +147,8 @@ export function CallMiniPlayer() {
             ref={videoRef}
             autoPlay
             playsInline
-            className="h-14 w-14 overflow-hidden rounded-xl bg-black object-cover"
+            muted
+            className={cn('h-14 w-14 overflow-hidden rounded-xl bg-black', remoteIsScreenSharing ? 'object-contain' : 'object-cover')}
           />
         ) : (
           <Avatar className="h-14 w-14">
@@ -157,7 +166,7 @@ export function CallMiniPlayer() {
               phase === 'reconnecting' ? 'bg-[hsl(48_96%_53%)]' : 'bg-[hsl(var(--primary))]'
             )}
           />
-          {phase === 'connected' ? duration : phase === 'reconnecting' ? 'Reconnecting…' : phase === 'ringing' ? 'Ringing…' : 'Connecting…'}
+          {isScreenSharing ? `Sharing screen • ${duration}` : remoteIsScreenSharing ? `Viewing screen • ${duration}` : phase === 'connected' ? duration : phase === 'reconnecting' ? 'Reconnecting…' : phase === 'ringing' ? 'Ringing…' : 'Connecting…'}
         </p>
       </div>
       <div className="flex items-center gap-1">{ends}</div>

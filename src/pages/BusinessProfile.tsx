@@ -1,3 +1,4 @@
+import { PublicBusinessStore, BusinessReels } from '@/components/business/PublicBusinessStore';
 import { useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -9,15 +10,18 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SystemNotice } from '@/components/ui/system-notice';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBusiness } from '@/contexts/BusinessContext';
 import { useBusinessApi } from '@/hooks/useBusinessApi';
 import { useToast } from '@/hooks/use-toast';
+import { friendlyErrorMessage } from '@/lib/errors';
 import {
   Store,
   BadgeCheck,
   MapPin,
   Globe,
+  User,
   UserPlus,
   UserCheck,
   Settings,
@@ -26,17 +30,19 @@ import {
   Loader2,
   ArrowLeft,
   Check,
+  MessageSquare,
 } from 'lucide-react';
 import { ACCOUNT_TYPE_META, ROLE_CAN, type BusinessAccount } from '@/lib/business';
 
 export default function BusinessProfile() {
+  const [profileTab, setProfileTab] = useState(new URLSearchParams(window.location.search).get('tab') || 'overview');
   const { username = '' } = useParams<{ username: string }>();
   const { user } = useAuth();
   const api = useBusinessApi();
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { mode, activeBusiness, switchToBusiness } = useBusiness();
+  const { mode, activeBusiness, switchToBusiness, switchToPersonal } = useBusiness();
 
   const [following, setFollowing] = useState<boolean | null>(null);
   const [followBusy, setFollowBusy] = useState(false);
@@ -73,7 +79,7 @@ export default function BusinessProfile() {
       toast({
         variant: 'destructive',
         title: 'Could not update follow',
-        description: err instanceof Error ? err.message : 'Something went wrong.',
+        description: friendlyErrorMessage(err, 'Could not update follow right now.'),
       });
     } finally {
       setFollowBusy(false);
@@ -83,10 +89,6 @@ export default function BusinessProfile() {
   const handleSwitchToBusiness = () => {
     if (!account) return;
     switchToBusiness(account.id);
-    toast({
-      title: `Now posting as ${account.name}`,
-      description: 'Switch back to your personal account any time from the account switcher.',
-    });
   };
 
   if (isLoading)
@@ -186,7 +188,7 @@ export default function BusinessProfile() {
                     <div className="flex flex-wrap items-center gap-2">
                       <h1 className="flex items-center gap-1.5 text-xl font-bold md:text-2xl">
                         <span className="break-words">{account.name}</span>
-                        <BadgeCheck className="h-5 w-5 shrink-0 fill-primary text-background" />
+
                       </h1>
                       {typeLabel ? (
                         <Badge variant="secondary" className="gap-1 rounded-lg">
@@ -230,25 +232,37 @@ export default function BusinessProfile() {
                       </Button>
                     </>
                   ) : user ? (
-                    <Button
-                      onClick={toggleFollow}
-                      disabled={followBusy}
-                      className="h-9 gap-1.5 rounded-xl font-semibold"
-                    >
-                      {followBusy ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : isFollowing ? (
-                        <>
-                          <Check className="h-4 w-4" />
-                          Following
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus className="h-4 w-4" />
-                          Follow
-                        </>
-                      )}
-                    </Button>
+                    <>
+                      <Button
+                        asChild
+                        className="h-9 gap-1.5 rounded-xl font-semibold"
+                      >
+                        {/* Messages the business itself, not a staff member. */}
+                        <Link to={`/messages?business=${account.id}`}>
+                          <MessageSquare className="h-4 w-4" />
+                          Message
+                        </Link>
+                      </Button>
+                      <Button
+                        onClick={toggleFollow}
+                        disabled={followBusy}
+                        className="h-9 gap-1.5 rounded-xl font-semibold"
+                      >
+                        {followBusy ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : isFollowing ? (
+                          <>
+                            <Check className="h-4 w-4" />
+                            Following
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="h-4 w-4" />
+                            Follow
+                          </>
+                        )}
+                      </Button>
+                    </>
                   ) : (
                     <Button asChild className="h-9 gap-1.5 rounded-xl font-semibold">
                       <Link to="/auth">
@@ -257,6 +271,7 @@ export default function BusinessProfile() {
                       </Link>
                     </Button>
                   )}
+                  <Button variant="outline" className="h-9" onClick={() => setProfileTab('store')}>Shop</Button>
                 </div>
               </div>
 
@@ -294,18 +309,37 @@ export default function BusinessProfile() {
                 </div>
               </div>
             </div>
-          </div>
+            </div>
 
-          {/* Content tabs */}
-          <div className="mt-4 px-4">
+            {/* System notice: posting identity */}
+            {isThisActiveBusiness && (
+              <SystemNotice
+                variant="account"
+                icon={<Store className="h-4 w-4" />}
+                title={account.name}
+                description={`Posting as ${typeLabel}`}
+                action={{
+                  label: 'Switch to personal',
+                  onClick: switchToPersonal,
+                  icon: <User className="h-3.5 w-3.5" />,
+                }}
+                className="mt-4"
+              />
+            )}
+
+            {/* Content tabs */}
+           <div className="mt-4 px-4">
             <div className="rounded-2xl border border-border bg-card">
-              <Tabs defaultValue="posts" className="w-full">
+              <Tabs value={profileTab} onValueChange={setProfileTab} className="w-full">
                 <div className="border-b border-border px-4">
-                  <TabsList className="grid h-9 w-full max-w-[320px] grid-cols-2 rounded-lg bg-muted/50 p-0.5">
+                  <TabsList className="grid h-9 w-full max-w-[560px] grid-cols-5 rounded-lg bg-muted/50 p-0.5">
+                    <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
                     <TabsTrigger value="posts" className="flex items-center gap-1.5 rounded-md text-xs font-semibold">
                       <Store className="h-3.5 w-3.5" />
                       Posts
                     </TabsTrigger>
+                    <TabsTrigger value="reels" className="text-xs">Reels</TabsTrigger>
+                    <TabsTrigger value="store" className="text-xs">Store</TabsTrigger>
                     <TabsTrigger value="about" className="flex items-center gap-1.5 rounded-md text-xs font-semibold">
                       <UserCheck className="h-3.5 w-3.5" />
                       About
@@ -313,6 +347,9 @@ export default function BusinessProfile() {
                   </TabsList>
                 </div>
 
+                <TabsContent value="overview" className="p-4"><p className="mb-5 whitespace-pre-wrap text-sm text-muted-foreground">{account.description}</p><h2 className="mb-4 text-lg font-semibold">From {account.name}</h2><PublicBusinessStore businessId={account.id} /></TabsContent>
+                <TabsContent value="store" className="p-4"><PublicBusinessStore businessId={account.id} /></TabsContent>
+                <TabsContent value="reels" className="p-4"><BusinessReels businessId={account.id} /></TabsContent>
                 <TabsContent value="posts" className="mt-0 p-4">
                   {/* Reuses the real social Feed, so business posts render with
                       full interactions and business attribution. */}

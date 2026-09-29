@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useRef,
   ReactNode,
 } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -42,7 +43,11 @@ const storageKey = (userId: string) => `twibs-active-identity-${userId}`;
 function readStoredIdentity(userId: string): ActiveMode | string {
   try {
     const raw = localStorage.getItem(storageKey(userId));
-    if (raw === 'personal' || (raw && raw.length > 0)) return raw;
+    if (raw?.startsWith('{')) {
+      const stored = JSON.parse(raw);
+      return stored.type === 'business' && stored.businessId ? stored.businessId : 'personal';
+    }
+    if (raw) return raw;
   } catch {
     // ignore
   }
@@ -52,6 +57,8 @@ function readStoredIdentity(userId: string): ActiveMode | string {
 export function BusinessProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const api = useBusinessApi();
+  const currentUserId = useRef(user?.id); currentUserId.current = user?.id;
+  const [accountsUserId, setAccountsUserId] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<BusinessAccount[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(false);
   const [accountsError, setAccountsError] = useState<string | null>(null);
@@ -75,12 +82,13 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
     setAccountsError(null);
     try {
       const list = await api.listBusinessAccounts();
+      if (currentUserId.current !== user.id) return;
+      setAccountsUserId(user.id);
       setAccounts(list);
     } catch (err: unknown) {
-      setAccountsError(friendlyErrorMessage(err, 'Failed to load business accounts'));
+      if (currentUserId.current === user.id) setAccountsError(friendlyErrorMessage(err, 'Failed to load business accounts'));
     } finally {
-      setAccountsLoading(false);
-      setAccountsSettled(true);
+      if (currentUserId.current === user.id) { setAccountsLoading(false); setAccountsSettled(true); }
     }
   }, [user, api]);
 
@@ -123,7 +131,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
 
   const switchToBusiness = useCallback(
     (businessId: string) => {
-      if (!user) return;
+      if (!user || !accounts.some(account => account.id === businessId)) return;
       try {
         localStorage.setItem(storageKey(user.id), businessId);
       } catch {
@@ -132,28 +140,24 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
       setActiveBusinessId(businessId);
       setMode('business');
     },
-    [user]
+    [user, accounts]
   );
 
   // Resolve the active business. If the stored id no longer matches a
   // business the user belongs to, fall back to (a) the first available
   // account or (b) personal mode.
-  const activeBusiness = mode === 'business' ? accounts.find((a) => a.id === activeBusinessId) ?? accounts[0] ?? null : null;
+  const activeBusiness = mode === 'business' && accountsUserId === user?.id ? accounts.find((a) => a.id === activeBusinessId) ?? null : null;
 
   useEffect(() => {
     if (mode !== 'business') return;
     // Never reconcile while the account list is still in flight: `accounts` is
     // empty until it resolves, and treating that as "no such business" is what
     // used to throw the user back to personal on every refresh.
-    if (!accountsSettled || accountsLoading) return;
+    if (!accountsSettled || accountsLoading || accountsError) return;
     if (activeBusinessId && !accounts.some((a) => a.id === activeBusinessId)) {
-      if (accounts.length > 0) {
-        switchToBusiness(accounts[0].id);
-      } else {
-        switchToPersonal();
-      }
+      switchToPersonal();
     }
-  }, [mode, accounts, accountsSettled, accountsLoading, activeBusinessId, switchToBusiness, switchToPersonal]);
+  }, [mode, accounts, accountsSettled, accountsLoading, accountsError, activeBusinessId, switchToBusiness, switchToPersonal]);
 
   const role = activeBusiness?.role ?? null;
   const isOwner = role === 'owner';
@@ -167,7 +171,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   return (
     <BusinessContext.Provider
       value={{
-        accounts,
+        accounts: accountsUserId === user?.id ? accounts : [],
         accountsLoading,
         accountsError,
         mode,

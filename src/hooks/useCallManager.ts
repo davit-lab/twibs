@@ -9,7 +9,6 @@ import {
   QUALITY_SAMPLE_MS,
   QUALITY_EXCELLENT_RTT,
   QUALITY_GOOD_RTT,
-  END_SCREEN_AUTO_CLOSE_MS,
   START_CALL_RETRY_DELAY_MS,
   RECONNECT_RETRY_MS,
 } from '@/lib/callConstants';
@@ -35,6 +34,23 @@ const ICE_SERVERS: RTCConfiguration = {
     { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
   ],
   iceCandidatePoolSize: 10,
+};
+
+type CallDiagnosticEvent =
+  | 'LOCAL_TRACK_ADDED'
+  | 'REMOTE_TRACK_RECEIVED'
+  | 'CONNECTION_STATE'
+  | 'ICE_STATE'
+  | 'SCREEN_TRACK_ACQUIRED'
+  | 'SCREEN_TRACK_REPLACED'
+  | 'REMOTE_SCREEN_TRACK'
+  | 'SCREEN_TRACK_ENDED'
+  | 'REMOTE_HANGUP'
+  | 'CLEANUP_COMPLETE';
+
+const callDiagnostic = (event: CallDiagnosticEvent, details: Record<string, unknown> = {}) => {
+  if (!import.meta.env.DEV) return;
+  console.debug('[TwibsCall]', { event, ...details });
 };
 
 const getErrorMessage = (error: unknown): string => {
@@ -116,6 +132,7 @@ export interface CallManager {
   isMuted: boolean;
   isVideoOff: boolean;
   isScreenSharing: boolean;
+  remoteIsScreenSharing: boolean;
   mediaError: CallMediaError | null;
   error: string | null;
   devices: Devices;
@@ -147,6 +164,29 @@ export interface CallManager {
 
 const initialQuality: CallQuality = { level: 'good', rttMs: null };
 
+/**
+ * Persisting trickle ICE is useful, but must not be the only route to a
+ * working call. Waiting briefly lets the initial SDP carry host/STUN/TURN
+ * candidates too, which survives a transient realtime or RPC failure.
+ */
+const waitForIceGathering = (pc: RTCPeerConnection, timeoutMs = 1800): Promise<void> =>
+  new Promise((resolve) => {
+    if (pc.iceGatheringState === 'complete') {
+      resolve();
+      return;
+    }
+    const timeout = window.setTimeout(done, timeoutMs);
+    function done() {
+      window.clearTimeout(timeout);
+      pc.removeEventListener('icegatheringstatechange', onStateChange);
+      resolve();
+    }
+    function onStateChange() {
+      if (pc.iceGatheringState === 'complete') done();
+    }
+    pc.addEventListener('icegatheringstatechange', onStateChange);
+  });
+
 export function useCallManager(): CallManager {
   const { user } = useAuth();
 
@@ -163,6 +203,7 @@ export function useCallManager(): CallManager {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [remoteIsScreenSharing, setRemoteIsScreenSharing] = useState(false);
   const [mediaError, setMediaError] = useState<CallMediaError | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [devices, setDevices] = useState<Devices>({ audioInputs: [], videoInputs: [], audioOutputs: [] });
@@ -170,6 +211,10 @@ export function useCallManager(): CallManager {
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  // Build one stable remote stream from individual ontrack events. Some
+  // browsers omit event.streams, and relying on streams[0] loses audio when
+  // video/audio tracks arrive independently.
+  const remoteStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const reactChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -180,6 +225,8 @@ export function useCallManager(): CallManager {
   const myRoleRef = useRef<'caller' | 'receiver'>('caller');
   const appliedAnswerRef = useRef<string | null>(null);
   const screenSharingRef = useRef(false);
+  const mutedRef = useRef(false);
+  const videoOffRef = useRef(false);
   const isScreenSharingPendingRef = useRef(false);
   const isCleaningUpRef = useRef(false);
   const mountedRef = useRef(true);
@@ -187,7 +234,6 @@ export function useCallManager(): CallManager {
   const reconnectTimerRef = useRef<number | null>(null);
   const connectTimeoutRef = useRef<number | null>(null);
   const qualityTimerRef = useRef<number | null>(null);
-  const endScreenCleanupRef = useRef<number | null>(null);
   const phaseRef = useRef<CallPhase>('idle');
   const endReasonRef = useRef<CallEndReason | null>(null);
   const connectionStateRef = useRef<RTCPeerConnectionState | null>(null);
@@ -199,6 +245,8 @@ export function useCallManager(): CallManager {
    * receiver must answer it — this triggers the renegotiation answer.
    */
   const lastRemoteOfferRef = useRef<string | null>(null);
+  /** The last offer created by this peer, used to ignore our own realtime echo. */
+  const localOfferRef = useRef<string | null>(null);
   /** Guards against concurrent renegotiations (createOffer races). */
   const renegotiatingRef = useRef(false);
   /**
@@ -207,6 +255,9 @@ export function useCallManager(): CallManager {
    * replaced back with a camera track.
    */
   const screenShareAddedSenderRef = useRef<RTCRtpSender | null>(null);
+  // Serialize persisted screen-state updates so a quick native stop cannot be
+  // overtaken by the preceding "started sharing" request on a slow network.
+  const screenSignalChainRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -228,7 +279,7 @@ export function useCallManager(): CallManager {
     }
   }, []);
 
-  const stopTimers = () => {
+  const stopTimers = useCallback(() => {
     if (ringTimeoutRef.current !== null) {
       window.clearTimeout(ringTimeoutRef.current);
       ringTimeoutRef.current = null;
@@ -242,11 +293,7 @@ export function useCallManager(): CallManager {
       window.clearInterval(qualityTimerRef.current);
       qualityTimerRef.current = null;
     }
-    if (endScreenCleanupRef.current !== null) {
-      window.clearTimeout(endScreenCleanupRef.current);
-      endScreenCleanupRef.current = null;
-    }
-  };
+  }, [clearConnectTimeout]);
 
   const teardownConnection = useCallback((stopMedia: boolean) => {
     if (isCleaningUpRef.current) return;
@@ -269,6 +316,17 @@ export function useCallManager(): CallManager {
         screenStreamRef.current.getTracks().forEach((t) => t.stop());
         screenStreamRef.current = null;
       }
+      remoteStreamRef.current = null;
+      if (mountedRef.current) {
+        setLocalStream(null);
+        setRemoteStream(null);
+        setScreenStream(null);
+        setIsScreenSharing(false);
+        setRemoteIsScreenSharing(false);
+        setConnectionState(null);
+        setIceState(null);
+      }
+      connectionStateRef.current = null;
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
@@ -284,36 +342,22 @@ export function useCallManager(): CallManager {
       isScreenSharingPendingRef.current = false;
       screenShareAddedSenderRef.current = null;
       lastRemoteOfferRef.current = null;
+      localOfferRef.current = null;
+      renegotiatingRef.current = false;
+      mutedRef.current = false;
+      videoOffRef.current = false;
+      if (mountedRef.current) {
+        setIsMuted(false);
+        setIsVideoOff(false);
+      }
       stopTimers();
       callAudio.stopAll();
       sessionIdForAudioRef.current = null;
+      callDiagnostic('CLEANUP_COMPLETE', { stopMedia });
     } finally {
       isCleaningUpRef.current = false;
     }
-  }, []);
-
-  /**
-   * Schedule a delayed teardown that is only applied if the *same* session is
-   * still current when it fires. This prevents a lingering end-screen cleanup
-   * from killing a call that the user started/answered immediately afterwards
-   * (e.g. end-current-then-accept from the call-waiting card).
-   */
-  const scheduleConnectionTeardown = useCallback(
-    (stopMedia: boolean, delayMs: number) => {
-      if (endScreenCleanupRef.current !== null) {
-        window.clearTimeout(endScreenCleanupRef.current);
-        endScreenCleanupRef.current = null;
-      }
-      const sessionIdAtSchedule = sessionRef.current?.id ?? null;
-      endScreenCleanupRef.current = window.setTimeout(() => {
-        endScreenCleanupRef.current = null;
-        if (sessionRef.current?.id === sessionIdAtSchedule) {
-          teardownConnection(stopMedia);
-        }
-      }, delayMs);
-    },
-    [teardownConnection]
-  );
+  }, [stopTimers]);
 
   /**
    * Best-effort, fire-and-forget persistence of the call row's terminal
@@ -325,7 +369,7 @@ export function useCallManager(): CallManager {
         try {
           const { error } = await supabase
             .from('call_sessions')
-            .update({ status, ended_at: new Date().toISOString(), ended_reason: reason })
+            .update({ status, ended_at: new Date().toISOString(), ended_reason: reason, screen_sharing_by: null })
             .eq('id', sessionId);
           if (error) {
             console.warn('[CallManager] Failed to persist call status:', error.message);
@@ -378,10 +422,12 @@ export function useCallManager(): CallManager {
         persistCallStatus(s.id, status, reason);
       }
 
-      // Keep streams briefly mounted so the end screen can keep a final frame.
-      scheduleConnectionTeardown(false, END_SCREEN_AUTO_CLOSE_MS);
+      // Stop every capture track immediately. Keeping a final video frame is
+      // never worth leaving a microphone, camera or shared display live after
+      // either participant hangs up.
+      teardownConnection(true);
     },
-    [scheduleConnectionTeardown, clearConnectTimeout, persistCallStatus]
+    [teardownConnection, clearConnectTimeout, persistCallStatus]
   );
 
   /**
@@ -445,8 +491,19 @@ export function useCallManager(): CallManager {
     }
     for (const track of stream.getTracks()) {
       const match = existing.getTracks().find((t) => t.kind === track.kind);
-      if (match) existing.removeTrack(match);
+      if (match) {
+        existing.removeTrack(match);
+        match.stop();
+      }
       existing.addTrack(track);
+      callDiagnostic('LOCAL_TRACK_ADDED', {
+        callId: sessionRef.current?.id ?? null,
+        peer: peerProfileRef.current?.user_id ?? null,
+        kind: track.kind,
+        enabled: track.enabled,
+        muted: track.muted,
+        readyState: track.readyState,
+      });
     }
   }, []);
 
@@ -579,10 +636,17 @@ export function useCallManager(): CallManager {
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      await supabase
+      const serializedOffer = JSON.stringify(pc.localDescription);
+      localOfferRef.current = serializedOffer;
+      // The row contains the answer to the previous negotiation. Clear it in
+      // the same write as the new offer so this peer can never consume a stale
+      // answer before the remote has answered the new offer.
+      appliedAnswerRef.current = null;
+      const { error: signalError } = await supabase
         .from('call_sessions')
-        .update({ sdp_offer: JSON.stringify(offer) })
+        .update({ sdp_offer: serializedOffer, sdp_answer: null })
         .eq('id', s.id);
+      if (signalError) throw signalError;
       return true;
     } catch (err) {
       console.error('[CallManager] Failed to renegotiate call:', err);
@@ -642,9 +706,45 @@ export function useCallManager(): CallManager {
         onReactionCb(emoji);
         reactionListenersRef.current.forEach((cb) => cb(emoji));
       })
+      .on('broadcast', { event: 'screen-share' }, (payload) => {
+        const message = (payload as { payload?: { sharing?: boolean; userId?: string } })?.payload;
+        if (!message || message.userId === user?.id) return;
+        if (mountedRef.current) setRemoteIsScreenSharing(message.sharing === true);
+      })
       .subscribe();
     reactChannelRef.current = channel;
-  }, []);
+  }, [user?.id]);
+
+  const signalScreenSharing = useCallback(async (sharing: boolean) => {
+    const s = sessionRef.current;
+    if (!s || !user) return false;
+    // Broadcast gives the active peer immediate UI feedback. The RPC persists
+    // the same state so a delayed/reconnected subscriber catches up reliably.
+    void reactChannelRef.current?.send({
+      type: 'broadcast',
+      event: 'screen-share',
+      payload: { sharing, userId: user.id },
+    }).catch(() => {});
+    const request = screenSignalChainRef.current.then(async () => {
+      try {
+        const { error: signalError } = await supabase.rpc('set_call_screen_sharing', {
+          p_session_id: s.id,
+          p_sharing: sharing,
+        });
+        if (signalError && import.meta.env.DEV) {
+          console.warn('[CallManager] Screen-share state signal failed:', signalError.message);
+        }
+        return !signalError;
+      } catch (signalError) {
+        if (import.meta.env.DEV) {
+          console.warn('[CallManager] Screen-share state signal failed:', getErrorMessage(signalError));
+        }
+        return false;
+      }
+    });
+    screenSignalChainRef.current = request.then(() => undefined);
+    return request;
+  }, [user]);
 
   const sendReaction = useCallback((emoji: string) => {
     const s = sessionRef.current;
@@ -674,15 +774,58 @@ export function useCallManager(): CallManager {
       };
 
       pc.ontrack = (event) => {
-        if (event.streams[0] && mountedRef.current) {
-          setRemoteStream(event.streams[0]);
+        callDiagnostic('REMOTE_TRACK_RECEIVED', {
+          callId: sessionId,
+          peer: isCaller ? 'receiver' : 'caller',
+          kind: event.track.kind,
+          enabled: event.track.enabled,
+          muted: event.track.muted,
+          readyState: event.track.readyState,
+        });
+        let remote = remoteStreamRef.current;
+        if (!remote) {
+          remote = new MediaStream();
+          remoteStreamRef.current = remote;
         }
+        if (!remote.getTracks().some(track => track.id === event.track.id)) {
+          remote.addTrack(event.track);
+        }
+        const publishRemoteStream = () => {
+          const current = remoteStreamRef.current;
+          if (current && mountedRef.current) {
+            // Publish a new MediaStream wrapper because React will otherwise
+            // bail out when a later track is added to the same mutable stream.
+            setRemoteStream(new MediaStream(current.getTracks()));
+          }
+        };
+        event.track.onmute = publishRemoteStream;
+        event.track.onunmute = publishRemoteStream;
+        event.track.onended = () => {
+          const current = remoteStreamRef.current;
+          if (!current) return;
+          const track = current.getTracks().find(item => item.id === event.track.id);
+          if (track) current.removeTrack(track);
+          publishRemoteStream();
+        };
+        publishRemoteStream();
       };
 
       pc.onconnectionstatechange = () => {
         if (!mountedRef.current) return;
         connectionStateRef.current = pc.connectionState;
         setConnectionState(pc.connectionState);
+        callDiagnostic('CONNECTION_STATE', {
+          callId: sessionId,
+          peer: isCaller ? 'receiver' : 'caller',
+          state: pc.connectionState,
+          senders: pc.getSenders().map((sender) => sender.track?.kind ?? 'empty'),
+          receivers: pc.getReceivers().map((receiver) => receiver.track?.kind ?? 'empty'),
+          transceivers: pc.getTransceivers().map((transceiver) => ({
+            mid: transceiver.mid,
+            direction: transceiver.direction,
+            currentDirection: transceiver.currentDirection,
+          })),
+        });
 
         if (pc.connectionState === 'connected') {
           clearConnectTimeout();
@@ -737,6 +880,11 @@ export function useCallManager(): CallManager {
       pc.oniceconnectionstatechange = () => {
         if (!mountedRef.current) return;
         setIceState(pc.iceConnectionState);
+        callDiagnostic('ICE_STATE', {
+          callId: sessionId,
+          peer: isCaller ? 'receiver' : 'caller',
+          state: pc.iceConnectionState,
+        });
         if (pc.iceConnectionState === 'failed' && phaseRef.current !== 'ended') {
           stopQualitySampler();
           finishCall('failed', { dbStatus: 'ended' });
@@ -750,6 +898,95 @@ export function useCallManager(): CallManager {
 
   const subscribeToSession = useCallback(
     (sessionId: string, isCaller: boolean) => {
+      const handleSessionUpdate = async (updated: CallSession) => {
+        if (!mountedRef.current || !peerConnectionRef.current) return;
+        if (phaseRef.current === 'ended') return;
+
+        // Remote terminal transitions always win.
+        const terminal = updated.status !== 'ringing' && updated.status !== 'accepted';
+        if (terminal) {
+          callDiagnostic('REMOTE_HANGUP', {
+            callId: sessionId,
+            peer: isCaller ? 'receiver' : 'caller',
+            status: updated.status,
+          });
+          finishCall(statusToEndReason(updated.status), { skipDb: true });
+          return;
+        }
+
+        const remoteSharing =
+          !!updated.screen_sharing_by && updated.screen_sharing_by !== user?.id;
+        setRemoteIsScreenSharing(remoteSharing);
+        if (remoteSharing) {
+          callDiagnostic('REMOTE_SCREEN_TRACK', {
+            callId: sessionId,
+            peer: isCaller ? 'receiver' : 'caller',
+            remoteVideoTracks: remoteStreamRef.current?.getVideoTracks().length ?? 0,
+          });
+        }
+
+        if (isCaller && updated.status === 'accepted') {
+          callAudio.stopOutgoingRingback(sessionId);
+        }
+
+        const pc = peerConnectionRef.current;
+        // Either side may create a renegotiation offer. Apply an answer when
+        // this peer currently owns the local offer.
+        if (
+          updated.sdp_answer &&
+          updated.sdp_answer !== appliedAnswerRef.current &&
+          pc.signalingState === 'have-local-offer'
+        ) {
+          try {
+            callAudio.stopOutgoingRingback(sessionId);
+            appliedAnswerRef.current = updated.sdp_answer;
+            phaseRefUpdate('connecting');
+            startConnectTimeout();
+            await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(updated.sdp_answer)));
+            await processPendingIceCandidates();
+            await syncRemoteCandidates(sessionId, isCaller);
+          } catch {
+            finishCall('failed', { dbStatus: 'ended' });
+            return;
+          }
+        }
+
+        // A new offer can originate from either participant. The receiver is
+        // the polite peer for simultaneous-offer collision handling.
+        if (
+          updated.sdp_offer &&
+          updated.sdp_offer !== lastRemoteOfferRef.current &&
+          updated.sdp_offer !== localOfferRef.current
+        ) {
+          try {
+            const offerCollision = pc.signalingState !== 'stable';
+            if (offerCollision && isCaller) return;
+            if (offerCollision) await pc.setLocalDescription({ type: 'rollback' });
+            lastRemoteOfferRef.current = updated.sdp_offer;
+            await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(updated.sdp_offer)));
+            await processPendingIceCandidates();
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            const { error: answerError } = await supabase
+              .from('call_sessions')
+              .update({ sdp_answer: JSON.stringify(pc.localDescription) })
+              .eq('id', sessionId);
+            if (answerError) throw answerError;
+            await syncRemoteCandidates(sessionId, isCaller);
+          } catch (err) {
+            console.error('[CallManager] Failed to negotiate media upgrade:', err);
+            finishCall('failed', { dbStatus: 'ended' });
+            return;
+          }
+        }
+
+        const candidatesField = isCaller ? 'receiver_ice_candidates' : 'caller_ice_candidates';
+        const candidates = (updated as unknown as Record<string, RTCIceCandidateInit[]>)[candidatesField] || [];
+        if (candidates.length > 0 && pc.remoteDescription) {
+          await addIceCandidates(candidates);
+        }
+      };
+
       const channel = supabase
         .channel(`call-signaling-${sessionId}`)
         .on(
@@ -761,78 +998,27 @@ export function useCallManager(): CallManager {
             filter: `id=eq.${sessionId}`,
           },
           async (payload) => {
-            const updated = payload.new as CallSession;
-            if (!mountedRef.current || !peerConnectionRef.current) return;
-            if (phaseRef.current === 'ended') return;
-
-            // Remote terminal transitions always win.
-            const terminal = updated.status !== 'ringing' && updated.status !== 'accepted';
-            if (terminal) {
-              finishCall(statusToEndReason(updated.status), { skipDb: true });
-              return;
-            }
-
-            if (isCaller && updated.status === 'accepted') {
-              callAudio.stopOutgoingRingback(sessionId);
-            }
-
-            const pc = peerConnectionRef.current;
-            if (isCaller && updated.sdp_answer && updated.sdp_answer !== appliedAnswerRef.current && !renegotiatingRef.current) {
-              if (pc.signalingState === 'have-local-offer') {
-                callAudio.stopOutgoingRingback(sessionId);
-                appliedAnswerRef.current = updated.sdp_answer;
-                phaseRefUpdate('connecting');
-                startConnectTimeout();
-                try {
-                  const answer = JSON.parse(updated.sdp_answer);
-                  await pc.setRemoteDescription(new RTCSessionDescription(answer));
-                  await processPendingIceCandidates();
-                  await syncRemoteCandidates(sessionId, true);
-                } catch (err) {
-                  if (mountedRef.current) {
-                    finishCall('failed', { dbStatus: 'ended' });
-                  }
-                }
-              }
-              return;
-            }
-
-            // Receiver renegotiation: a NEW offer (voice→video upgrade or screen
-            // share on a voice call) arrived mid-call. Answer it; ICE candidates
-            // for the new m-line may be bundled with the same update.
-            if (!isCaller && updated.sdp_offer && updated.sdp_offer !== lastRemoteOfferRef.current) {
-              try {
-                lastRemoteOfferRef.current = updated.sdp_offer;
-                await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(updated.sdp_offer)));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                await supabase
-                  .from('call_sessions')
-                  .update({ sdp_answer: JSON.stringify(answer) })
-                  .eq('id', sessionId);
-              } catch (err) {
-                console.error('[CallManager] Failed to negotiate media upgrade:', err);
-                if (mountedRef.current) {
-                  finishCall('failed', { dbStatus: 'ended' });
-                }
-              }
-            }
-
-            if (isCaller && !pc.remoteDescription) return;
-
-            const candidatesField = isCaller ? 'receiver_ice_candidates' : 'caller_ice_candidates';
-            const candidates = (updated as unknown as Record<string, RTCIceCandidateInit[]>)[candidatesField] || [];
-            if (candidates.length > 0 && pc.remoteDescription) {
-              await addIceCandidates(candidates);
-            }
+            await handleSessionUpdate(payload.new as CallSession);
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          if (status !== 'SUBSCRIBED') return;
+          // Realtime can subscribe just after the remote answer/hangup update.
+          // Read the authoritative row once so that edge is never missed.
+          void supabase
+            .from('call_sessions')
+            .select('*')
+            .eq('id', sessionId)
+            .single()
+            .then(({ data }) => {
+              if (data) void handleSessionUpdate(data as unknown as CallSession);
+            });
+        });
 
       channelRef.current = channel;
       syncRemoteCandidates(sessionId, isCaller);
     },
-    [finishCall, addIceCandidates, processPendingIceCandidates, syncRemoteCandidates, startConnectTimeout]
+    [finishCall, addIceCandidates, processPendingIceCandidates, syncRemoteCandidates, startConnectTimeout, user?.id]
   );
 
   // ----------------------------------------------------------------- outgoing --
@@ -859,6 +1045,10 @@ export function useCallManager(): CallManager {
         const st = settingsRef.current;
         const stream = await acquireMedia(type, st);
         integrateStream(stream);
+        mutedRef.current = false;
+        videoOffRef.current = type === 'audio';
+        setIsMuted(false);
+        setIsVideoOff(type === 'audio');
 
         const { data, error: insertError } = await supabase
           .from('call_sessions')
@@ -892,19 +1082,24 @@ export function useCallManager(): CallManager {
         const ls = localStreamRef.current;
         if (ls) ls.getTracks().forEach((track) => pc.addTrack(track, ls));
 
+        // Subscribe before publishing the offer. This closes the race where a
+        // very fast answer arrives between the database write and subscription.
+        subscribeToSession(callSession.id, true);
+        subscribeReactions(callSession.id, () => {});
+
         const offer = await pc.createOffer({
           offerToReceiveAudio: true,
           offerToReceiveVideo: type === 'video',
         });
         await pc.setLocalDescription(offer);
+        await waitForIceGathering(pc);
+        localOfferRef.current = JSON.stringify(pc.localDescription);
 
-        await supabase
+        const { error: offerError } = await supabase
           .from('call_sessions')
-          .update({ sdp_offer: JSON.stringify(offer) })
+          .update({ sdp_offer: localOfferRef.current })
           .eq('id', callSession.id);
-
-        subscribeToSession(callSession.id, true);
-        subscribeReactions(callSession.id, () => {});
+        if (offerError) throw offerError;
 
         callAudio.startOutgoingRingback(callSession.id);
         callAudio.ensureUnlocked();
@@ -985,6 +1180,24 @@ export function useCallManager(): CallManager {
         const st = settingsRef.current;
         const stream = await acquireMedia(latestSession.call_type as CallType, st);
         integrateStream(stream);
+        mutedRef.current = false;
+        videoOffRef.current = latestSession.call_type === 'audio';
+        setIsMuted(false);
+        setIsVideoOff(latestSession.call_type === 'audio');
+
+        // The caller may hang up while the browser permission prompt is open.
+        // Re-read the row before creating/accepting the connection so a late
+        // permission grant cannot resurrect a cancelled call.
+        const { data: currentSession, error: currentSessionError } = await supabase
+          .from('call_sessions')
+          .select('status')
+          .eq('id', s.id)
+          .single();
+        if (currentSessionError) throw currentSessionError;
+        if (currentSession.status !== 'ringing') {
+          await finishCall(statusToEndReason(currentSession.status), { skipDb: true });
+          return;
+        }
 
         const pc = createPeerConnection(s.id, false);
         peerConnectionRef.current = pc;
@@ -1001,6 +1214,7 @@ export function useCallManager(): CallManager {
 
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
+        await waitForIceGathering(pc);
 
         // SDP exchange complete: move to 'connecting' (and arm the connect
         // timeout) BEFORE the awaited DB write below, so an ICE 'connected'
@@ -1009,14 +1223,27 @@ export function useCallManager(): CallManager {
         startConnectTimeout();
 
         const now = new Date().toISOString();
-        await supabase
+        const { data: acceptedSession, error: answerSignalError } = await supabase
           .from('call_sessions')
           .update({
-            sdp_answer: JSON.stringify(answer),
+            sdp_answer: JSON.stringify(pc.localDescription),
             status: 'accepted',
             started_at: now,
           })
-          .eq('id', s.id);
+          .eq('id', s.id)
+          .eq('status', 'ringing')
+          .select('id')
+          .maybeSingle();
+        if (answerSignalError) throw answerSignalError;
+        if (!acceptedSession) {
+          const { data: endedSession } = await supabase
+            .from('call_sessions')
+            .select('status')
+            .eq('id', s.id)
+            .single();
+          await finishCall(statusToEndReason(endedSession?.status ?? 'ended'), { skipDb: true });
+          return;
+        }
 
         if (mountedRef.current) {
           setSession({ ...latestSession, status: 'accepted', started_at: now });
@@ -1109,10 +1336,6 @@ export function useCallManager(): CallManager {
   }, [cancelCall, endCall]);
 
   const dismissEndScreen = useCallback(() => {
-    if (endScreenCleanupRef.current !== null) {
-      window.clearTimeout(endScreenCleanupRef.current);
-      endScreenCleanupRef.current = null;
-    }
     teardownConnection(true);
     sessionRef.current = null;
     peerProfileRef.current = null;
@@ -1145,11 +1368,12 @@ export function useCallManager(): CallManager {
 
   const toggleMute = useCallback(() => {
     const track = localStreamRef.current?.getAudioTracks()[0];
-    if (!track) return isMuted;
+    if (!track) return mutedRef.current;
     track.enabled = !track.enabled;
-    setIsMuted(!track.enabled);
-    return !track.enabled;
-  }, [isMuted]);
+    mutedRef.current = !track.enabled;
+    setIsMuted(mutedRef.current);
+    return mutedRef.current;
+  }, []);
 
   const toggleVideo = useCallback(async () => {
     const pc = peerConnectionRef.current;
@@ -1160,6 +1384,7 @@ export function useCallManager(): CallManager {
     if (!isVideoOff) {
       const track = ls?.getVideoTracks()[0];
       if (track) track.enabled = false;
+      videoOffRef.current = true;
       if (mountedRef.current) setIsVideoOff(true);
       return true;
     }
@@ -1187,16 +1412,24 @@ export function useCallManager(): CallManager {
       }
       track = localStreamRef.current?.getVideoTracks()[0];
       if (pc && track) {
-        pc.addTrack(track, localStreamRef.current!);
+        const addedSender = pc.addTrack(track, localStreamRef.current!);
         const ok = await renegotiate();
         if (!ok) {
-          if (mountedRef.current) setIsVideoOff(false);
-          return isVideoOff;
+          pc.removeTrack(addedSender);
+          localStreamRef.current?.removeTrack(track);
+          track.stop();
+          videoOffRef.current = true;
+          if (mountedRef.current) {
+            setIsVideoOff(true);
+            setError('Could not turn on video. Please try again.');
+          }
+          return true;
         }
       }
     }
     if (!track) return isVideoOff;
     track.enabled = true;
+    videoOffRef.current = false;
     if (mountedRef.current) setIsVideoOff(false);
     return false;
   }, [isVideoOff, integrateStream, renegotiate]);
@@ -1209,15 +1442,28 @@ export function useCallManager(): CallManager {
     try {
       const pc = peerConnectionRef.current;
       if (!pc || phaseRef.current !== 'connected') return false;
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        if (mountedRef.current) setError('Screen sharing is not supported by this browser.');
+        return false;
+      }
 
       let screenStreamLocal: MediaStream;
       try {
         screenStreamLocal = await navigator.mediaDevices.getDisplayMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: {
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 15, max: 30 },
+          },
           audio: false,
         });
       } catch (err) {
-        if (mountedRef.current) setError(err instanceof Error ? err.message : 'Screen share unavailable');
+        const name = (err as { name?: string })?.name;
+        if (mountedRef.current) {
+          setError(name === 'AbortError' || name === 'NotAllowedError'
+            ? 'Screen sharing was cancelled or not allowed.'
+            : err instanceof Error ? err.message : 'Screen share unavailable');
+        }
         return false;
       }
 
@@ -1229,15 +1475,22 @@ export function useCallManager(): CallManager {
         if (mountedRef.current) setError('No shareable content was selected.');
         return false;
       }
+      callDiagnostic('SCREEN_TRACK_ACQUIRED', {
+        readyState: screenTrack.readyState,
+        width: screenTrack.getSettings().width,
+        height: screenTrack.getSettings().height,
+      });
 
       const videoSender = pc.getSenders().find((s) => s.track?.kind === 'video');
       if (videoSender) {
         await videoSender.replaceTrack(screenTrack);
+        callDiagnostic('SCREEN_TRACK_REPLACED', { mode: 'replace-camera' });
         screenShareAddedSenderRef.current = null;
       } else {
         // Voice-only call: add a video sender for the screen and renegotiate
         // so the remote gets a brand-new video m-line.
         const added = pc.addTrack(screenTrack, screenStreamLocal);
+        callDiagnostic('SCREEN_TRACK_REPLACED', { mode: 'new-video-sender' });
         screenShareAddedSenderRef.current = added;
         const ok = await renegotiate();
         if (!ok) {
@@ -1258,16 +1511,22 @@ export function useCallManager(): CallManager {
       }
 
       screenTrack.onended = () => {
+        callDiagnostic('SCREEN_TRACK_ENDED', { source: 'browser-or-track' });
         if (screenSharingRef.current) {
           void stopScreenShareRef.current();
         }
       };
 
+      // The media operation is complete; do not hold the UI lock while the
+      // persisted state travels to Supabase. The serialized queue preserves
+      // start/stop ordering if the browser-native Stop action fires now.
+      void signalScreenSharing(true);
+
       return true;
     } finally {
       isScreenSharingPendingRef.current = false;
     }
-  }, [renegotiate]);
+  }, [renegotiate, signalScreenSharing]);
 
   const stopScreenShare = useCallback(async () => {
     if (isScreenSharingPendingRef.current) return false;
@@ -1312,11 +1571,12 @@ export function useCallManager(): CallManager {
         setScreenStream(null);
         setIsScreenSharing(false);
       }
+      void signalScreenSharing(false);
       return true;
     } finally {
       isScreenSharingPendingRef.current = false;
     }
-  }, [renegotiate]);
+  }, [renegotiate, signalScreenSharing]);
 
   const stopScreenShareRef = useRef<() => Promise<boolean>>(async () => false);
   if (stopScreenShareRef.current !== stopScreenShare) {
@@ -1339,6 +1599,7 @@ export function useCallManager(): CallManager {
         },
       });
       const track = stream.getVideoTracks()[0];
+      track.enabled = !videoOffRef.current;
       const pc = peerConnectionRef.current;
       const ls = localStreamRef.current;
       const old = ls?.getVideoTracks()[0];
@@ -1346,7 +1607,11 @@ export function useCallManager(): CallManager {
         if (old) ls.removeTrack(old);
         ls.addTrack(track);
       }
-      if (pc) await replaceSenderTrack(pc, 'video', track).catch(() => {});
+      // While presenting, the sender must keep the display track. Updating the
+      // local camera here prepares the camera that will be restored on stop.
+      if (pc && !screenSharingRef.current) {
+        await replaceSenderTrack(pc, 'video', track).catch(() => {});
+      }
       old?.stop();
       setSettings({ ...prevSettings, videoInputDeviceId: null });
       settingsRef.current = { ...prevSettings, videoInputDeviceId: null };
@@ -1377,6 +1642,7 @@ export function useCallManager(): CallManager {
           video: false,
         });
         const track = stream.getAudioTracks()[0];
+        track.enabled = !mutedRef.current;
         const pc = peerConnectionRef.current;
         const ls = localStreamRef.current;
         const old = ls?.getAudioTracks()[0];
@@ -1411,6 +1677,7 @@ export function useCallManager(): CallManager {
             : { width: { ideal: st.hdVideo ? 1920 : 1280 }, height: { ideal: st.hdVideo ? 1080 : 720 }, facingMode: 'user' },
         });
         const track = stream.getVideoTracks()[0];
+        track.enabled = !videoOffRef.current;
         const pc = peerConnectionRef.current;
         const ls = localStreamRef.current;
         const old = ls?.getVideoTracks()[0];
@@ -1418,7 +1685,11 @@ export function useCallManager(): CallManager {
           if (old) ls.removeTrack(old);
           ls.addTrack(track);
         }
-        if (pc) await replaceSenderTrack(pc, 'video', track).catch(() => {});
+        // Preserve the display sender during screen sharing. The newly chosen
+        // camera remains in localStream and becomes the restored track later.
+        if (pc && !screenSharingRef.current) {
+          await replaceSenderTrack(pc, 'video', track).catch(() => {});
+        }
         old?.stop();
         return true;
       } catch (err) {
@@ -1526,6 +1797,7 @@ export function useCallManager(): CallManager {
     isMuted,
     isVideoOff,
     isScreenSharing,
+    remoteIsScreenSharing,
     mediaError,
     error,
     devices,

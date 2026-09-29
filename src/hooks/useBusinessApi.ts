@@ -18,10 +18,15 @@ import type {
   BusinessSettings,
   DiscoveryPriority,
 } from '@/lib/business';
-import type { CampaignObjective } from '@/lib/ads';
+import type { AnalyticsRange } from '@/lib/business';
+import type { Campaign, CampaignObjective } from '@/lib/ads';
 import { friendlyErrorMessage } from '@/lib/errors';
 
-const rpc = (supabase as any).rpc.bind(supabase);
+// Call `supabase.rpc(...)` directly (the client is already typed with the
+// generated `Database`), so argument names are checked at compile time. A loose
+// bind here previously allowed a wrong `p_`-prefixed argument through, which
+// PostgREST silently rejected at runtime.
+const rpc = supabase.rpc.bind(supabase);
 
 const clampAmount = (cents: number) => Math.max(0, Math.round(cents));
 
@@ -140,19 +145,29 @@ export function useBusinessApi() {
   );
 
   const getBusinessOverview = useCallback(
-    async (businessId: string): Promise<BusinessOverview> => {
-      const { data, error } = await rpc('get_business_overview', { p_business_id: businessId });
+    async (businessId: string, range?: AnalyticsRange): Promise<BusinessOverview> => {
+      const { data, error } = await rpc('get_business_overview', {
+        p_business_id: businessId,
+        p_from: range?.from ?? null,
+        p_to: range?.to ?? null,
+      });
       if (error) throw toBusinessError(error);
-      return (data as BusinessOverview) || {};
+      if (!data) throw new Error('The business service returned no overview data.');
+      return data as unknown as BusinessOverview;
     },
     []
   );
 
   const getBusinessInsights = useCallback(
-    async (businessId: string): Promise<BusinessInsights> => {
-      const { data, error } = await rpc('get_business_insights', { p_business_id: businessId });
+    async (businessId: string, range?: AnalyticsRange): Promise<BusinessInsights> => {
+      const { data, error } = await rpc('get_business_insights', {
+        p_business_id: businessId,
+        p_from: range?.from ?? null,
+        p_to: range?.to ?? null,
+      });
       if (error) throw toBusinessError(error);
-      return (data as BusinessInsights) || {};
+      if (!data) throw new Error('The business service returned no insights data.');
+      return data as unknown as BusinessInsights;
     },
     []
   );
@@ -161,7 +176,10 @@ export function useBusinessApi() {
     async (businessId: string): Promise<BusinessAudience> => {
       const { data, error } = await rpc('get_business_audience', { p_business_id: businessId });
       if (error) throw toBusinessError(error);
-      return (data as BusinessAudience) || {};
+      // NOTE: the `|| {}` fallback only fires if the RPC returns null with no
+      // error. It is NOT a substitute for the UI's real empty states - callers
+      // must still handle absent fields rather than assuming zeros.
+      return (data as unknown as BusinessAudience) || ({} as BusinessAudience);
     },
     []
   );
@@ -170,7 +188,10 @@ export function useBusinessApi() {
     async (businessId: string): Promise<BusinessBilling> => {
       const { data, error } = await rpc('get_business_billing', { p_business_id: businessId });
       if (error) throw toBusinessError(error);
-      return (data as BusinessBilling) || {};
+      // NOTE: the `|| {}` fallback only fires if the RPC returns null with no
+      // error. It is NOT a substitute for the UI's real empty states - callers
+      // must still handle absent fields rather than assuming zeros.
+      return (data as unknown as BusinessBilling) || ({} as BusinessBilling);
     },
     []
   );
@@ -209,23 +230,21 @@ export function useBusinessApi() {
   // -------------------------------------------------------------------------
 
   const getBusinessMembers = useCallback(async (businessId: string): Promise<BusinessMember[]> => {
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('business_members')
       .select('*')
       .eq('business_id', businessId)
       .order('created_at', { ascending: false });
     if (error) throw toBusinessError(error);
-    const members = (data as BusinessMember[]) || [];
+    const members = (data as unknown as BusinessMember[]) || [];
     const userIds = members.map((m) => m.user_id);
     if (userIds.length === 0) return members;
-    const { data: profiles, error: profileError } = await (supabase as any)
+    const { data: profiles, error: profileError } = await supabase
       .from('profiles')
       .select('user_id, username, display_name, avatar_url')
       .in('user_id', userIds);
     if (profileError) throw toBusinessError(profileError);
-    const profileMap = new Map(
-      ((profiles as any[]) || []).map((p) => [p.user_id, p])
-    );
+    const profileMap = new Map((profiles || []).map((p) => [p.user_id, p]));
     return members.map((m) => ({
       ...m,
       username: profileMap.get(m.user_id)?.username ?? '',
@@ -311,7 +330,7 @@ export function useBusinessApi() {
         p_audience_expansion: input.audience_expansion ?? true,
       });
       if (error) throw toBusinessError(error);
-      return data as { id: string };
+      return data as unknown as Campaign;
     },
     []
   );
@@ -327,7 +346,11 @@ export function useBusinessApi() {
       distribution_priority?: DiscoveryPriority;
       audience_expansion?: boolean;
       targeting?: Record<string, unknown>;
-    }): Promise<{ id: string }> => {
+      // The RPC returns the created campaign row, including the backend-computed
+      // estimated_reach_min/max and estimated_impressions. Callers rely on those
+      // to show what the server actually estimated, so the type must not be
+      // narrowed to just the id.
+    }): Promise<Campaign> => {
       const { data, error } = await rpc('create_boost_campaign', {
         p_advertiser_id: input.advertiser_id,
         p_post_id: input.post_id,
@@ -340,7 +363,7 @@ export function useBusinessApi() {
         p_targeting: input.targeting ?? null,
       });
       if (error) throw toBusinessError(error);
-      return data as { id: string };
+      return data as unknown as Campaign;
     },
     []
   );
@@ -383,7 +406,7 @@ export function useBusinessApi() {
 
   const followBusiness = useCallback(
     async (businessId: string, userId: string): Promise<void> => {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from('business_followers')
         .insert({ business_id: businessId, user_id: userId });
       if (error) throw toBusinessError(error);
@@ -393,7 +416,7 @@ export function useBusinessApi() {
 
   const unfollowBusiness = useCallback(
     async (businessId: string, userId: string): Promise<void> => {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from('business_followers')
         .delete()
         .eq('business_id', businessId)
@@ -405,7 +428,7 @@ export function useBusinessApi() {
 
   const getBusinessSettings = useCallback(
     async (businessId: string): Promise<BusinessSettings | null> => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('business_settings')
         .select('*')
         .eq('business_id', businessId)

@@ -1,3 +1,4 @@
+import { useActiveIdentity } from '@/contexts/ActiveIdentityContext';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMessages, Message } from '@/hooks/useMessages';
 import { useMessageReads } from '@/hooks/useMessageReads';
@@ -62,6 +63,7 @@ import {
   Forward,
   CalendarClock,
   ArrowDown,
+  Store,
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -117,7 +119,8 @@ export default function MessageThread({
   draftNonce,
 }: MessageThreadProps) {
   const { user } = useAuth();
-  const { messages, loading, loadingMore, hasMore, loadOlder, typingUsers, sendMessage, handleTyping, markAsRead, editMessage, deleteMessage, togglePin, searchMessages } = useMessages(conversationId);
+  const { identity } = useActiveIdentity();
+  const { messages, loading, error: messagesError, fetchMessages, loadingMore, hasMore, loadOlder, typingUsers, sendMessage, retryMessage, handleTyping, markAsRead, editMessage, deleteMessage, togglePin, searchMessages } = useMessages(conversationId, conversation);
   const { readsByMessage, fetchReadsForMessage } = useMessageReads(conversationId);
   const { toggleReaction, getReactionsForMessage } = useMessageReactions(conversationId);
   const liveLocation = useLiveLocation(conversationId);
@@ -131,8 +134,19 @@ export default function MessageThread({
 
   const isGroup = conversation ? conversation.type !== 'dm' : false;
   const isCommunity = conversation?.type === 'community';
-  const displayName = isGroup ? (conversation?.name || 'Group') : (otherUser?.display_name || 'Unknown');
-  const avatarUrl = isGroup ? (conversation?.avatar_url || undefined) : (otherUser?.avatar_url || undefined);
+  const isBusiness = conversation?.type === 'business';
+
+  // Check if current user is operating as a business in this conversation
+  const isOperatingAsBusiness = isBusiness && identity.type === 'business' && identity.businessId === conversation?.business?.id;
+
+  // Prefer the server-derived party: for a business thread that is the business
+  // itself, and it stays correct if the business is renamed or changes its logo
+  // after the conversation was created.
+  const party = conversation?.party;
+  const displayName = party?.name
+    || (isGroup ? (conversation?.name || 'Group') : (otherUser?.display_name || 'Unknown'));
+  const avatarUrl = party?.avatar_url
+    || (isGroup ? (conversation?.avatar_url || undefined) : (otherUser?.avatar_url || undefined));
   const otherParticipant = conversation?.participants.find((p) => p.user_id === otherUserId);
   const otherProfile = isGroup
     ? null
@@ -243,6 +257,13 @@ export default function MessageThread({
 
   useEffect(() => {
     const checkCallPermission = async () => {
+      // A business is not a person, so there is nobody to call. Groups and
+      // communities behave the same way.
+      if (isBusiness) {
+        setCanCall(false);
+        setCallBlockReason('Calls are not available for businesses');
+        return;
+      }
       if (!user || !otherUserId || isGroup) {
         setCanCall(false);
         setCallBlockReason(isGroup ? 'Not available in groups' : null);
@@ -286,7 +307,7 @@ export default function MessageThread({
     };
 
     checkCallPermission();
-  }, [user, otherUserId, isUserBlocked, isGroup]);
+  }, [user, otherUserId, isUserBlocked, isGroup, isBusiness]);
 
   const handleToggleBlock = async () => {
     if (!otherUserId) return;
@@ -722,11 +743,31 @@ export default function MessageThread({
     );
   }
 
+  if (messagesError) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-muted-foreground">
+        <p className="text-sm">Messages could not be loaded. Please try again.</p>
+        <Button variant="outline" size="sm" onClick={() => void fetchMessages()}>Retry</Button>
+      </div>
+    );
+  }
+
   const messageGroups = groupMessagesByDate(messages);
   const messageMap = new Map(messages.map(m => [m.id, m]));
 
+  // A message sent as a business has to present the business, not the employee
+  // who happened to press send. The identity is read from the message row
+  // (sender_business), never inferred from the conversation, so a personal
+  // message inside the same thread still shows the person.
+  const senderIdentity = (m: Message): { name: string; avatar_url?: string } =>
+    m.sender_business
+      ? { name: m.sender_business.name, avatar_url: m.sender_business.avatar_url || undefined }
+      : { name: m.profiles?.display_name || 'User', avatar_url: m.profiles?.avatar_url || undefined };
+
   const replyAuthorName = (m: Message) =>
-    m.sender_id === user?.id ? 'You' : (m.profiles?.display_name || 'User');
+    m.sender_id === user?.id && !m.sender_business
+      ? 'You'
+      : senderIdentity(m).name;
 
   const replyContentPreview = (m: Message) => {
     if (m.attachments?.some(a => a.type === 'image')) return '📷 Photo';
@@ -1007,10 +1048,10 @@ export default function MessageThread({
 
               <div className="space-y-1">
                 {group.messages.map((message, idx) => {
-                  const isOwn = message.sender_id === user?.id;
+                  const isOwn = identity.businessId ? message.sender_business_id === identity.businessId : message.sender_id === user?.id && !message.sender_business_id;
                   const showAvatar = !isOwn && (idx === 0 || group.messages[idx - 1].sender_id !== message.sender_id);
                   const messageReactions = getReactionsForMessage(message.id);
-                  const senderProfile = isGroup ? message.profiles : undefined;
+                  const senderIdentityData = isGroup ? senderIdentity(message) : undefined;
                   const replyTarget = message.reply_to_message_id ? messageMap.get(message.reply_to_message_id) : undefined;
                   const isLocationMessage = !!message.location_session_id;
                   const locationSession = message.location_session_id
@@ -1023,9 +1064,9 @@ export default function MessageThread({
                         <div className="w-8 flex-shrink-0">
                           {showAvatar && (
                             <Avatar className="h-8 w-8 rounded-full">
-                              <AvatarImage src={isGroup ? (senderProfile?.avatar_url || undefined) : (otherUser?.avatar_url || undefined)} />
+                              <AvatarImage src={isGroup ? (senderIdentityData?.avatar_url || undefined) : (otherUser?.avatar_url || undefined)} />
                               <AvatarFallback className="rounded-full bg-gradient-to-br from-primary to-primary/60 text-white text-xs font-bold">
-                                {getInitials(isGroup ? (senderProfile?.display_name || 'U') : displayName)}
+                                {getInitials(isGroup ? (senderIdentityData?.name || 'U') : displayName)}
                               </AvatarFallback>
                             </Avatar>
                           )}
@@ -1034,7 +1075,7 @@ export default function MessageThread({
                       <div className="relative max-w-[70%]">
                         {!isOwn && showAvatar && isGroup && (
                           <p className="text-xs font-medium text-primary/90 mb-1 ml-1">
-                            {senderProfile?.display_name || 'User'}
+                            {senderIdentityData?.name || 'User'}
                           </p>
                         )}
                         {selectedMessageId === message.id && (
@@ -1262,6 +1303,15 @@ export default function MessageThread({
                                   onImageClick={setLightboxUrl}
                                 />
                               )}
+                              {/* Business identity indicator for own messages in business conversations */}
+                              {isOwn && isOperatingAsBusiness && message.sender_business && (
+                                <div className="mt-1.5 flex items-center gap-1">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 text-[10px] font-medium">
+                                    <Store className="h-2.5 w-2.5" />
+                                    Sent as {message.sender_business.name}
+                                  </span>
+                                </div>
+                              )}
                             </>
                           )}
                           <div className={cn('flex items-center gap-1 mt-1', isOwn ? 'justify-end' : 'justify-start')}>
@@ -1285,7 +1335,11 @@ export default function MessageThread({
                             )}
                           </div>
                         </div>
-                        
+                        {message.failed && isOwn && (
+                          <button type="button" className="mt-1 text-xs text-destructive hover:underline" onClick={() => void retryMessage(message)}>
+                            Not sent. Retry
+                          </button>
+                        )}
                         <MessageReactions
                           reactions={messageReactions}
                           isOwn={isOwn}

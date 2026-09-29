@@ -1,8 +1,9 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserInterests, InterestCategory } from '@/hooks/useInterests';
-import { useCreateInterestPost } from '@/hooks/useCreateInterestPost';
+import { useInterestPostActions } from '@/hooks/useInterestPosts';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import {
   ImagePlus,
@@ -12,16 +13,19 @@ import {
   ChevronDown,
   Check,
   Settings2,
+  ZoomIn,
 } from 'lucide-react';
 import defaultAvatar from '@/assets/default-avatar.png';
-
-const MAX_MEDIA_SIZE = 50 * 1024 * 1024; // 50MB
-
-interface MediaPick {
-  file: File;
-  url: string;
-  type: 'image' | 'video';
-}
+import { MediaPreviewGrid } from '@/components/media/MediaPreviewGrid';
+import { MediaUploader } from '@/components/media/MediaUploader';
+import MediaViewer from '@/components/media/MediaViewer';
+import {
+  validateMediaFile,
+  createMediaItem,
+  revokeMediaPreview,
+  MAX_MEDIA_COUNT,
+} from '@/lib/media';
+import type { MediaItem } from '@/lib/media';
 
 interface InterestPostComposerProps {
   onPosted?: () => void;
@@ -34,23 +38,35 @@ export default function InterestPostComposer({
 }: InterestPostComposerProps) {
   const { profile } = useAuth();
   const { data: userInterests } = useUserInterests();
-  const publish = useCreateInterestPost();
+  const { createPost } = useInterestPostActions();
 
-  const categories: InterestCategory[] =
-    userInterests?.map((ui) => ui.interest_categories).filter((c): c is InterestCategory => !!c) ||
-    [];
+  const categories: InterestCategory[] = useMemo(
+    () => userInterests?.map((ui) => ui.interest_categories).filter((c): c is InterestCategory => !!c) || [],
+    [userInterests],
+  );
 
   const [content, setContent] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>(categories[0]?.id || '');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [media, setMedia] = useState<MediaPick | null>(null);
+  const [media, setMedia] = useState<MediaItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+  const [initialRect, setInitialRect] = useState<DOMRect | undefined>();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRef = useRef<MediaItem[]>([]);
+
+  useEffect(() => {
+    mediaRef.current = media;
+  }, [media]);
+
+  useEffect(() => () => {
+    mediaRef.current.forEach(revokeMediaPreview);
+  }, []);
 
   // Keep the selected interest valid when subscriptions change
   useEffect(() => {
@@ -63,32 +79,55 @@ export default function InterestPostComposer({
     }
   }, [categories, selectedCategory]);
 
-  const selectMedia = (file: File, type: 'image' | 'video') => {
-    setError(null);
-    if (!file.type.startsWith(`${type}/`)) {
-      setError(`Please choose a ${type} file.`);
-      return;
-    }
-    if (file.size > MAX_MEDIA_SIZE) {
-      setError('File is too large (max 50MB).');
-      return;
-    }
-    if (media?.url) URL.revokeObjectURL(media.url);
-    setMedia({ file, url: URL.createObjectURL(file), type });
-    setExpanded(true);
-  };
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const validFiles = files.filter((file) => {
+      const result = validateMediaFile(file);
+      if (!result.valid) {
+        setError(result.error || 'Invalid file');
+        return false;
+      }
+      return true;
+    });
 
-  const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (file) selectMedia(file, 'image');
-  };
+    const available = MAX_MEDIA_COUNT - media.length;
+    if (validFiles.length > available) {
+      setError(available > 0
+        ? `${available} item${available === 1 ? '' : 's'} added. The rest were not selected.`
+        : `Remove an item before adding another. Your existing ${MAX_MEDIA_COUNT} items are unchanged.`);
+    }
 
-  const handleVideo = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (file) selectMedia(file, 'video');
-  };
+    const newPreviews = validFiles.slice(0, Math.max(0, available)).map((file, index) => ({
+      ...createMediaItem(file),
+      order: media.length + index,
+    }));
+    setMedia((prev) => [...prev, ...newPreviews]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (validFiles.length <= available) setError(null);
+  }, [media.length]);
+
+  const removeMedia = useCallback((id: string) => {
+    setMedia((prev) => {
+      const removed = prev.find((m) => m.id === id);
+      if (removed) revokeMediaPreview(removed);
+      return prev.filter((m) => m.id !== id).map((m, i) => ({ ...m, order: i }));
+    });
+  }, []);
+
+  const handleReorder = useCallback((items: MediaItem[]) => {
+    setMedia(items.map((m, i) => ({ ...m, order: i })));
+  }, []);
+
+  const openViewer = useCallback((index: number, rect?: DOMRect) => {
+    setViewerIndex(index);
+    setInitialRect(rect);
+    setViewerOpen(true);
+  }, []);
+
+  const closeViewer = useCallback(() => {
+    setViewerOpen(false);
+    setInitialRect(undefined);
+  }, []);
 
   const autoResize = () => {
     const el = textareaRef.current;
@@ -110,7 +149,16 @@ export default function InterestPostComposer({
     setMenuOpen((v) => !v);
   };
 
-  const canPost = content.trim().length > 0 && !!selectedCategory && !isSubmitting;
+  const { startUploads, retryUpload, isUploading } = MediaUploader({
+    mediaItems: media,
+    setMediaItems: setMedia,
+    userId: profile?.user_id || '',
+    bucket: 'interest-media',
+    onUploadComplete: () => {},
+    onUploadError: (err) => setError(err.message),
+  });
+
+  const canPost = (content.trim().length > 0 || media.length > 0) && !!selectedCategory && !isSubmitting && !isUploading;
 
   const handleSubmit = async () => {
     if (!canPost) return;
@@ -118,28 +166,62 @@ export default function InterestPostComposer({
       onManageInterests?.();
       return;
     }
+
     setIsSubmitting(true);
     setError(null);
-    const result = await publish({
-      content: content.trim(),
-      categoryId: selectedCategory,
-      file: media?.file || null,
-    });
-    if (!result.ok) {
-      setError(result.error || "Couldn't publish this post. Try again.");
+
+    try {
+      const uploadedMedia = media.length > 0 ? await startUploads() : [];
+
+      // Create post with first media (for backward compatibility) and store rest in new table
+      const postResult = await createPost.mutateAsync({
+        content: content.trim(),
+        categoryId: selectedCategory,
+        mediaUrl: uploadedMedia[0]?.url || null,
+        mediaType: uploadedMedia[0]?.type || null,
+      });
+
+      // Insert all media into interest_post_media table
+      if (postResult && uploadedMedia.length > 0) {
+        const { error: mediaError } = await supabase.from('interest_post_media').insert(
+          uploadedMedia.map((m) => ({
+            post_id: postResult.id,
+            url: m.url,
+            type: m.type,
+            width: m.width,
+            height: m.height,
+            position: m.position,
+          })),
+        );
+        if (mediaError) {
+          await supabase.from('interest_posts').delete().eq('id', postResult.id);
+          throw mediaError;
+        }
+      }
+
+      if (media.length > 0) {
+        media.forEach((m) => { if (m.source === 'upload' || m.source === 'camera') revokeMediaPreview(m); });
+      }
+      setMedia([]);
+      setContent('');
+      setExpanded(false);
       setIsSubmitting(false);
-      return;
+      onPosted?.();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Couldn't publish this post. Try again.");
+      setIsSubmitting(false);
     }
-    if (media?.url) URL.revokeObjectURL(media.url);
-    setMedia(null);
-    setContent('');
-    setExpanded(false);
-    setIsSubmitting(false);
-    onPosted?.();
   };
 
-  const showInterestRow = expanded || content.trim() || !!media;
+  const showInterestRow = expanded || content.trim() || media.length > 0;
   const selectedName = categories.find((c) => c.id === selectedCategory)?.name;
+
+  const viewerImages = media.map((m) => ({
+    src: m.localPreviewUrl,
+    alt: 'Attachment preview',
+    width: m.width,
+    height: m.height,
+  }));
 
   return (
     <div className="px-4 pb-3 pt-1.5">
@@ -175,33 +257,19 @@ export default function InterestPostComposer({
               </p>
             )}
 
-            {media && (
-              <div className="relative mt-2">
-                {media.type === 'video' ? (
-                  <video
-                    src={media.url}
-                    controls
-                    className="max-h-[280px] w-full rounded-xl border border-border/60 bg-surface-2 object-contain"
-                  />
-                ) : (
-                  <img
-                    src={media.url}
-                    alt="Attachment preview"
-                    className="max-h-[280px] w-full rounded-xl border border-border/60 bg-surface-2 object-contain"
-                  />
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (media?.url) URL.revokeObjectURL(media.url);
-                    setMedia(null);
-                  }}
-                  aria-label="Remove attachment"
-                  className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full bg-black/70 text-white transition-colors hover:bg-black/90"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
+            {/* Media Previews - using new MediaPreviewGrid */}
+            {media.length > 0 && (
+              <MediaPreviewGrid
+                mediaItems={media}
+                onRemove={removeMedia}
+                onReorder={handleReorder}
+                onOpenViewer={openViewer}
+                maxItems={MAX_MEDIA_COUNT}
+                disabled={isSubmitting || isUploading}
+                showAddButton={true}
+                onAddClick={() => fileInputRef.current?.click()}
+                onRetry={retryUpload}
+              />
             )}
 
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/50 pt-2.5">
@@ -276,39 +344,39 @@ export default function InterestPostComposer({
               <div className="flex-1" />
 
               <input
-                ref={imageInputRef}
+                ref={fileInputRef}
                 type="file"
-                accept="image/*"
-                onChange={handleImage}
+                accept="image/*,video/*"
+                multiple
+                onChange={handleFileSelect}
                 className="hidden"
                 tabIndex={-1}
+                disabled={isSubmitting || media.length >= MAX_MEDIA_COUNT}
               />
-              <input
-                ref={videoInputRef}
-                type="file"
-                accept="video/*"
-                onChange={handleVideo}
-                className="hidden"
-                tabIndex={-1}
-              />
-              <button
-                type="button"
-                aria-label="Add image"
-                onClick={() => imageInputRef.current?.click()}
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
-              >
-                <ImagePlus className="h-4 w-4" />
-                <span className="hidden sm:inline">Image</span>
-              </button>
-              <button
-                type="button"
-                aria-label="Add video"
-                onClick={() => videoInputRef.current?.click()}
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
-              >
-                <Video className="h-4 w-4" />
-                <span className="hidden sm:inline">Video</span>
-              </button>
+
+              {media.length < MAX_MEDIA_COUNT && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Add image"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
+                  >
+                    <ImagePlus className="h-4 w-4" />
+                    <span className="hidden sm:inline">Image</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Add video"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
+                  >
+                    <Video className="h-4 w-4" />
+                    <span className="hidden sm:inline">Video</span>
+                  </button>
+                </>
+              )}
+
               <button
                 type="button"
                 aria-label="Publish post"
@@ -329,6 +397,17 @@ export default function InterestPostComposer({
           </div>
         </div>
       </div>
+
+      {/* Media Viewer */}
+      {viewerOpen && viewerImages.length > 0 && (
+        <MediaViewer
+          images={viewerImages}
+          initialIndex={viewerIndex}
+          onClose={closeViewer}
+          initialRect={initialRect}
+          enableFullscreen={true}
+        />
+      )}
     </div>
   );
 }

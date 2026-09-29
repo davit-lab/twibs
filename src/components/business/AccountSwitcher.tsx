@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBusiness } from '@/contexts/BusinessContext';
+import { useActiveIdentity } from '@/contexts/ActiveIdentityContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,8 +72,8 @@ export interface AccountSwitcherItemsProps {
  */
 export function AccountSwitcherItems({ tone = 'default', className }: AccountSwitcherItemsProps) {
   const { profile } = useAuth();
-  const { accounts, accountsLoading, mode, activeBusiness, switchToPersonal, switchToBusiness } =
-    useBusiness();
+  const { accounts, accountsLoading, mode, activeBusiness } = useBusiness();
+  const { switchToPersonal, switchToBusiness } = useActiveIdentity();
   const navigate = useNavigate();
 
   const t = TONES[tone];
@@ -177,11 +178,12 @@ interface AccountSwitcherProps {
 export function AccountSwitcher({ className, side = 'top', compact = false, lines = false }: AccountSwitcherProps) {
   const { profile } = useAuth();
   const { mode, activeBusiness, accounts, accountsLoading } = useBusiness();
+  const { identity } = useActiveIdentity();
 
-  const thisModeActive = mode === 'business';
+  const thisModeActive = identity.type === 'business';
   const activeName =
-    mode === 'business' ? activeBusiness?.name || 'Business' : profile?.display_name || 'You';
-  const activeHandle = mode === 'business' ? activeBusiness?.username : profile?.username;
+    identity.type === 'business' ? identity.business?.name || 'Business' : profile?.display_name || 'You';
+  const activeHandle = identity.type === 'business' ? identity.business?.username : profile?.username;
 
   // Nothing to switch to yet, so the icon-only trigger would open a menu with
   // no identities in it. Hidden until the first business exists.

@@ -20,7 +20,54 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
   const [minimized, setMinimized] = useState(false);
   const [reactions, setReactions] = useState<FloatingReaction[]>([]);
+  const [audioPlaybackBlocked, setAudioPlaybackBlocked] = useState(false);
   const reactionIdRef = useRef(0);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const resumeRemoteAudio = useCallback(async () => {
+    const element = remoteAudioRef.current;
+    if (!element) return false;
+    try {
+      await element.play();
+      if (import.meta.env.DEV) console.debug('[TwibsCall]', { event: 'AUDIO_PLAYBACK_STARTED' });
+      setAudioPlaybackBlocked(false);
+      return true;
+    } catch {
+      setAudioPlaybackBlocked(true);
+      return false;
+    }
+  }, []);
+
+  // Audio playback belongs to the persistent provider, so minimizing or
+  // navigating never unmounts the only remote audio element.
+  useEffect(() => {
+    const element = remoteAudioRef.current;
+    if (!element) return;
+    if (!engine.remoteStream) {
+      element.pause();
+      element.srcObject = null;
+      setAudioPlaybackBlocked(false);
+      return;
+    }
+    if (element.srcObject !== engine.remoteStream) {
+      element.srcObject = engine.remoteStream;
+      if (import.meta.env.DEV) {
+        console.debug('[TwibsCall]', {
+          event: 'AUDIO_ELEMENT_ATTACHED',
+          remoteAudioTracks: engine.remoteStream.getAudioTracks().length,
+        });
+      }
+    }
+    if (engine.remoteStream.getAudioTracks().length > 0) {
+      void resumeRemoteAudio();
+    }
+  }, [engine.remoteStream, resumeRemoteAudio]);
+
+  useEffect(() => {
+    const element = remoteAudioRef.current;
+    if (!element || typeof element.setSinkId !== 'function') return;
+    void element.setSinkId(engine.settings.audioOutputDeviceId || '').catch(() => {});
+  }, [engine.settings.audioOutputDeviceId]);
 
   // Who I am currently calling myself (for simultaneous-dial conflict
   // resolution in the incoming-queue logic).
@@ -37,11 +84,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
       [engine.isCallInProgress, outgoingReceiverId]
     ),
   });
+  const setActiveCall = incomingCalls.setActiveCall;
+  const onReaction = engine.onReaction;
+  const activeSessionId = engine.session?.id;
 
   // Keep the legacy active-flag in sync with the engine.
   useEffect(() => {
-    incomingCalls.setActiveCall(engine.isCallInProgress);
-  }, [engine.isCallInProgress, incomingCalls.setActiveCall]);
+    setActiveCall(engine.isCallInProgress);
+  }, [engine.isCallInProgress, setActiveCall]);
 
   // Force the end screen whenever a call finishes.
   useEffect(() => {
@@ -60,9 +110,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
   // Render inbound reactions from the remote peer.
   useEffect(() => {
-    if (!engine.session) return;
-    return engine.onReaction((emoji) => fireReaction(emoji, false));
-  }, [engine.session?.id, engine.onReaction, fireReaction]);
+    if (!activeSessionId) return;
+    return onReaction((emoji) => fireReaction(emoji, false));
+  }, [activeSessionId, onReaction, fireReaction]);
 
   const sendLocalReaction = useCallback(
     (emoji: string) => {
@@ -122,6 +172,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
       minimize,
       restore,
       navigateToConversation,
+      audioPlaybackBlocked,
+      resumeRemoteAudio,
       incomingCall: incomingCalls.incomingCall,
       incomingCaller: incomingCalls.callerProfile,
       callQueue: incomingCalls.callQueue,
@@ -136,6 +188,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
       minimize,
       restore,
       navigateToConversation,
+      audioPlaybackBlocked,
+      resumeRemoteAudio,
       incomingCalls,
     ]
   );
@@ -149,6 +203,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   return (
     <CallContext.Provider value={value}>
       {children}
+      <audio ref={remoteAudioRef} autoPlay playsInline onCanPlay={() => void resumeRemoteAudio()} className="hidden" />
       {showMini ? <CallMiniPlayer /> : null}
       {showWaiting ? <CallWaitingCard /> : null}
       {showIncoming ? (

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { useAppSettings } from '@/contexts/SystemSettingsContext';
 import { useToast } from '@/hooks/use-toast';
 import { InfiniteData, useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -384,16 +385,28 @@ export async function persistReelLike(
   shouldLike: boolean,
 ): Promise<ReelLikeResult> {
   if (shouldLike) {
-    const { error } = await supabase
+    // Check if like already exists (partial unique index on (reel_id, user_id) WHERE business_id IS NULL)
+    const { data: existing } = await supabase
       .from('reel_likes')
-      .upsert({ reel_id: reelId, user_id: userId }, { onConflict: 'reel_id,user_id', ignoreDuplicates: true });
-    if (error) throw error;
+      .select('id')
+      .eq('reel_id', reelId)
+      .eq('user_id', userId)
+      .is('business_id', null)
+      .maybeSingle();
+
+    if (!existing) {
+      const { error } = await supabase
+        .from('reel_likes')
+        .insert({ reel_id: reelId, user_id: userId });
+      if (error) throw error;
+    }
   } else {
     const { error } = await supabase
       .from('reel_likes')
       .delete()
       .eq('reel_id', reelId)
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .is('business_id', null);
     if (error) throw error;
   }
 
@@ -426,6 +439,7 @@ function updateCachedReel(
 
 export function useReels(feedType: ReelsFeedType = 'foryou', targetUserId?: string | null) {
   const { user } = useAuth();
+  const { activeBusiness, mode } = useBusiness();
   const { isEnabled } = useAppSettings();
   const { toast } = useToast();
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -562,6 +576,7 @@ export function useReels(feedType: ReelsFeedType = 'foryou', targetUserId?: stri
         is_published: options.isPublished ?? true,
         audio_name: options.audioName ?? null,
         audio_url: options.audioUrl ?? null,
+        business_id: mode === 'business' && activeBusiness ? activeBusiness.id : null,
       })
       .select()
       .single();
@@ -703,6 +718,7 @@ export function useReelSaves() {
 
 export function useReelComments(reelId: string) {
   const { user } = useAuth();
+  const { activeBusiness, mode } = useBusiness();
   const { isEnabled } = useAppSettings();
   const [comments, setComments] = useState<ReelComment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -783,7 +799,13 @@ export function useReelComments(reelId: string) {
     if (!isEnabled('comments_enabled')) throw new Error('Comments are currently disabled by the admin.');
     const { data, error } = await supabase
       .from('reel_comments')
-      .insert({ reel_id: reelId, user_id: user.id, content, parent_id: parentId || null })
+      .insert({
+        reel_id: reelId,
+        user_id: user.id,
+        content,
+        parent_id: parentId || null,
+        business_id: mode === 'business' && activeBusiness ? activeBusiness.id : null,
+      })
       .select()
       .single();
     if (error) throw error;
