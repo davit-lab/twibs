@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/components/ui/input-otp';
 import { useToast } from '@/hooks/use-toast';
 import {
-  ArrowLeft, Check, Eye, EyeOff, Loader2, Mail, Phone, User
+  ArrowLeft, CalendarDays, Check, Eye, EyeOff, Loader2, Mail, Phone, User
 } from 'lucide-react';
 import { validateEmail } from '@/lib/emailValidation';
 import { isValidPhoneNumber } from 'libphonenumber-js';
@@ -40,6 +40,14 @@ type AuthMode = 'login' | 'signup' | 'otp-request' | 'otp-verify' | 'phone-reque
 
 const HERO_IMAGE =
   'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1600&q=80';
+
+const MIN_BIRTH_DATE = '1900-01-01';
+
+function latestAllowedBirthDate() {
+  const today = new Date();
+  today.setFullYear(today.getFullYear() - 13);
+  return today.toISOString().slice(0, 10);
+}
 
 const field =
   'h-12 bg-surface border border-border rounded-[10px] px-4 text-[15px] placeholder:text-muted-foreground/70 transition-colors duration-150 focus:border-primary focus-visible:ring-1 focus-visible:ring-primary/25 focus-visible:ring-offset-0';
@@ -214,13 +222,14 @@ export default function Auth() {
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string; displayName?: string; avatar?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string; displayName?: string; birthDate?: string; avatar?: string }>({});
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [birthDate, setBirthDate] = useState('');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [touchedFields, setTouchedFields] = useState<{ email?: boolean; password?: boolean; displayName?: boolean }>({});
+  const [touchedFields, setTouchedFields] = useState<{ email?: boolean; password?: boolean; displayName?: boolean; birthDate?: boolean }>({});
   const nameInputRef = useRef<HTMLInputElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
@@ -266,6 +275,11 @@ export default function Auth() {
     }
     if (isSignUp && displayName && displayName.length < 2) {
       newErrors.displayName = 'Display name must be at least 2 characters';
+    }
+    if (isSignUp && !birthDate) {
+      newErrors.birthDate = 'Please enter your birthday';
+    } else if (isSignUp && (birthDate < MIN_BIRTH_DATE || birthDate > latestAllowedBirthDate())) {
+      newErrors.birthDate = 'You need to be at least 13 years old to join';
     }
     if (isSignUp && !avatarFile) {
       newErrors.avatar = 'A profile photo is required';
@@ -323,7 +337,7 @@ export default function Auth() {
       return;
     }
     setLoading(true);
-    const { error, user } = await signUp(email, password, displayName || undefined);
+    const { error, user } = await signUp(email, password, displayName || undefined, birthDate);
     if (error) {
       setLoading(false);
       if (error.message.includes('already registered')) {
@@ -419,9 +433,17 @@ export default function Auth() {
       setErrors({ email: 'Please enter a valid phone number for ' + selectedCountry.name });
       return;
     }
+    if (activeTab === 'signup' && (!birthDate || birthDate < MIN_BIRTH_DATE || birthDate > latestAllowedBirthDate())) {
+      setTouchedFields((previous) => ({ ...previous, birthDate: true }));
+      setErrors({ birthDate: !birthDate ? 'Please enter your birthday' : 'You need to be at least 13 years old to join' });
+      return;
+    }
     setErrors({});
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({ phone: fullPhoneNumber });
+    const { error } = await supabase.auth.signInWithOtp({
+      phone: fullPhoneNumber,
+      options: activeTab === 'signup' ? { data: { date_of_birth: birthDate } } : undefined,
+    });
     setLoading(false);
     if (error) {
       toast({ variant: 'destructive', title: 'Failed to send code', description: error.message });
@@ -552,9 +574,9 @@ export default function Auth() {
       <BackButton label="Back to log in" onClick={() => setAuthMode('login')} />
 
       <FlowHeading
-        title={authMode === 'phone-request' ? 'Log in with phone' : 'Check your phone'}
+        title={authMode === 'phone-request' ? activeTab === 'signup' ? 'Sign up with phone' : 'Log in with phone' : 'Check your phone'}
         subtitle={authMode === 'phone-request'
-          ? "We'll send a 6-digit code via SMS."
+          ? activeTab === 'signup' ? "We'll send a 6-digit code to finish creating your account." : "We'll send a 6-digit code via SMS."
           : `Enter the 6-digit code we sent to ${phoneNumber}.`}
       />
 
@@ -580,6 +602,26 @@ export default function Auth() {
               />
             </div>
           </Field>
+          {activeTab === 'signup' && (
+            <Field label="Birthday" htmlFor="phone-signup-birthday" required error={errors.birthDate && touchedFields.birthDate ? errors.birthDate : null}>
+              <div className="relative">
+                <CalendarDays className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="phone-signup-birthday"
+                  type="date"
+                  min={MIN_BIRTH_DATE}
+                  max={latestAllowedBirthDate()}
+                  value={birthDate}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                  onBlur={() => setTouchedFields(p => ({ ...p, birthDate: true }))}
+                  className={cn(field, 'pl-11 [color-scheme:dark]', errors.birthDate && 'border-destructive')}
+                  disabled={loading}
+                  aria-invalid={!!errors.birthDate}
+                />
+              </div>
+              <p className="pt-0.5 text-xs text-muted-foreground">This stays private. You must be at least 13 to join.</p>
+            </Field>
+          )}
           <Button type="submit" className={primaryBtn} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Phone className="h-4 w-4" />}
             {loading ? 'Sending…' : 'Send code'}
@@ -670,11 +712,11 @@ export default function Auth() {
 
   const renderAuthForm = () => (
     <div key={activeTab} className="page-transition">
-      <h1 className="text-3xl font-semibold leading-tight tracking-tight text-foreground sm:text-[2.125rem]">
+      <h1 className="text-[1.7rem] font-semibold leading-tight tracking-[-0.035em] text-foreground sm:text-3xl">
         {activeTab === 'login' ? 'Welcome back' : 'Create your account'}
       </h1>
-      <p className="mt-2 text-[15px] text-muted-foreground">
-        {activeTab === 'login' ? 'Log in to Twibsers' : 'Join Twibsers and start sharing.'}
+      <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+        {activeTab === 'login' ? 'Pick up where you left off.' : 'Set up your profile and join the conversation.'}
       </p>
 
       {activeTab === 'login' ? (
@@ -773,9 +815,9 @@ export default function Auth() {
         </>
       ) : (
         <>
-          <form onSubmit={handleSignUp} className="mt-7 space-y-4">
+          <form onSubmit={handleSignUp} className="mt-6 space-y-4">
             {/* Profile photo */}
-            <div className="flex items-center gap-4 py-1">
+            <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-3">
               <button
                 type="button"
                 onClick={() => avatarInputRef.current?.click()}
@@ -785,26 +827,26 @@ export default function Auth() {
                 className="relative shrink-0"
               >
                 <div className={cn(
-                  'flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-surface-2 ring-1 transition-colors duration-150',
+                  'flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-surface-2 ring-1 transition-colors duration-150',
                   errors.avatar ? 'ring-destructive/70' : avatarPreview ? 'ring-primary/60' : 'ring-border'
                 )}>
                   {avatarPreview ? (
                     <img src={avatarPreview} alt="Profile preview" className="h-full w-full object-cover" />
                   ) : (
-                    <User className="h-8 w-8 text-muted-foreground/70" />
+                    <User className="h-7 w-7 text-muted-foreground/70" />
                   )}
                 </div>
               </button>
 
               <div className="flex min-w-0 flex-col gap-1.5">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                  Profile photo <span className="text-destructive">*</span>
+                <span className="text-sm font-semibold text-foreground">
+                  Add a profile photo <span className="text-destructive">*</span>
                 </span>
                 <button
                   type="button"
                   onClick={() => avatarInputRef.current?.click()}
                   disabled={loading}
-                  className="self-start text-sm font-semibold text-primary transition-colors hover:underline"
+                  className="self-start text-sm font-medium text-primary transition-colors hover:underline"
                 >
                   {avatarPreview ? 'Change photo' : 'Add profile photo'}
                 </button>
@@ -817,7 +859,7 @@ export default function Auth() {
                     Remove photo
                   </button>
                 ) : (
-                  <p className="text-xs text-muted-foreground">Your photo is required to join. Up to 5MB.</p>
+                  <p className="text-xs text-muted-foreground">Required to help people recognise you. Up to 5MB.</p>
                 )}
                 {errors.avatar && <p className="text-xs text-destructive">{errors.avatar}</p>}
               </div>
@@ -845,6 +887,26 @@ export default function Auth() {
                 className={field}
                 disabled={loading}
               />
+            </Field>
+
+            <Field label="Birthday" htmlFor="signup-birthday" required error={errors.birthDate && touchedFields.birthDate ? errors.birthDate : null}>
+              <div className="relative">
+                <CalendarDays className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="signup-birthday"
+                  type="date"
+                  min={MIN_BIRTH_DATE}
+                  max={latestAllowedBirthDate()}
+                  value={birthDate}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                  onBlur={() => setTouchedFields(p => ({ ...p, birthDate: true }))}
+                  className={cn(field, 'pl-11 [color-scheme:dark]', errors.birthDate && 'border-destructive')}
+                  disabled={loading}
+                  aria-describedby="birthday-hint"
+                  aria-invalid={!!errors.birthDate}
+                />
+              </div>
+              <p id="birthday-hint" className="pt-0.5 text-xs text-muted-foreground">This stays private. You must be at least 13 to join.</p>
             </Field>
 
             <Field label="Email" htmlFor="signup-email" error={errors.email && touchedFields.email ? errors.email : null}>
@@ -910,77 +972,88 @@ export default function Auth() {
   );
 
   return (
-    <div className="min-h-dvh bg-background lg:flex">
-      {/* Desktop editorial visual panel */}
-      <aside className="relative hidden overflow-hidden bg-[#0d0d12] lg:block lg:w-[56%]">
+    <div className="min-h-dvh bg-[#090a0d] lg:grid lg:grid-cols-[minmax(0,1.08fr)_minmax(460px,0.92fr)]">
+      {/* Desktop community panel */}
+      <aside className="relative hidden min-h-dvh overflow-hidden bg-[#111218] lg:block">
         <img
           src={HERO_IMAGE}
           alt=""
           aria-hidden
-          className="absolute inset-0 h-full w-full object-cover object-[center_35%] opacity-95 saturate-[0.92]"
+          className="absolute inset-0 h-full w-full object-cover object-[center_35%] opacity-70 saturate-[0.72]"
         />
-        <div className="absolute inset-0 bg-black/30" />
-        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/70 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-t from-black/95 via-black/45 to-transparent" />
+        <div className="absolute inset-0 bg-[#0b0c10]/45" />
+        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-[#0b0c10]/85 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-[62%] bg-gradient-to-t from-[#0b0c10] via-[#0b0c10]/72 to-transparent" />
 
-        <div className="relative z-10 flex h-full flex-col justify-between p-8 sm:p-10 xl:p-12">
+        <div className="relative z-10 flex h-full flex-col justify-between p-10 xl:p-14">
           <BrandLogo className="h-9" />
 
-          <div>
-            <div className="mb-5 flex gap-1.5" aria-hidden>
-              <span className="h-[3px] w-9 rounded-full bg-white/90" />
-              <span className="h-[3px] w-9 rounded-full bg-white/25" />
-              <span className="h-[3px] w-9 rounded-full bg-white/25" />
-            </div>
-            <h1 className="max-w-md text-[2rem] font-semibold leading-[1.08] tracking-tight text-white xl:text-[2.35rem]">
-              Your world,<br />
-              <span className="text-white/55">in one place.</span>
+          <div className="max-w-md">
+            <span className="inline-flex rounded-full border border-white/15 bg-black/20 px-3 py-1 text-[11px] font-medium tracking-wide text-white/70 backdrop-blur-sm">
+              A place for your people
+            </span>
+            <h1 className="mt-5 text-[2.55rem] font-semibold leading-[1.04] tracking-[-0.045em] text-white xl:text-[3.15rem]">
+              Share life<br />
+              <span className="text-white/60">as it happens.</span>
             </h1>
-            <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-white/70">
-              Share the moments, people and conversations that matter.
+            <p className="mt-5 max-w-sm text-[15px] leading-relaxed text-white/68">
+              Keep up with friends, discover new voices, and make each moment yours.
             </p>
 
-            <div className="mt-7 flex items-center gap-3">
-              <span className="h-px w-10 bg-primary" aria-hidden />
-              <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-white/45">
-                © {new Date().getFullYear()} Twibsers
-              </span>
+            <div className="mt-8 flex items-center gap-3 text-sm text-white/75">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/10 font-semibold">T</span>
+              <span>Twibs is better with your people.</span>
             </div>
+            <p className="mt-12 text-[11px] font-medium uppercase tracking-[0.18em] text-white/38">
+              © {new Date().getFullYear()} Twibsers
+            </p>
           </div>
         </div>
       </aside>
 
       {/* Auth column */}
-      <main className="flex min-h-dvh flex-1 flex-col lg:min-h-0">
-        {/* Mobile photo header */}
-        <div className="relative h-36 overflow-hidden bg-black sm:h-44 lg:hidden">
-          <img
-            src={HERO_IMAGE}
-            alt=""
-            aria-hidden
-            className="absolute inset-0 h-full w-full scale-105 object-cover object-[center_25%]"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-black/30 to-black/30" />
-          <div className="absolute inset-x-0 bottom-0 px-5 pb-4">
-            <p className="text-[15px] font-semibold text-white">
-              Your world,<span className="font-normal text-white/55"> in one place.</span>
-            </p>
-            <p className="mt-0.5 text-xs text-white/60">Share the moments, people and conversations that matter.</p>
-          </div>
+      <main className="flex min-h-dvh flex-col bg-background">
+        <div className="flex h-[72px] items-center justify-between border-b border-border/70 px-5 sm:px-8 lg:hidden">
+          <BrandLogo className="h-8" />
+          <span className="text-xs font-medium text-muted-foreground">Your people, in one place.</span>
         </div>
 
-        <div className="flex flex-1 flex-col items-center justify-center px-4 py-10 sm:px-6 lg:px-10 lg:py-16">
-          <div className="w-full max-w-[420px]">
-            {/* Mobile brand mark */}
-            <div className="mb-8 flex justify-center lg:hidden">
+        <div className="flex flex-1 items-center justify-center px-4 py-8 sm:px-7 sm:py-12 lg:px-10">
+          <div className="w-full max-w-[440px]">
+            <div className="mb-6 hidden lg:block">
               <BrandLogo className="h-9" />
             </div>
 
-            {(authMode === 'otp-request' || authMode === 'otp-verify') && renderOtpFlow()}
-            {(authMode === 'phone-request' || authMode === 'phone-verify') && renderPhoneFlow()}
-            {authMode === 'forgot-password' && renderForgotPasswordFlow()}
-            {authMode === 'reset-password' && renderResetPasswordFlow()}
-            {authMode === 'login' && renderAuthForm()}
+            <section className="rounded-[24px] border border-border bg-card px-5 py-6 shadow-[0_18px_48px_rgba(0,0,0,0.18)] sm:px-8 sm:py-8">
+              {authMode === 'login' && (
+                <div className="mb-7 grid grid-cols-2 rounded-xl bg-muted p-1" role="tablist" aria-label="Authentication mode">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'login'}
+                    onClick={() => switchTab('login')}
+                    className={cn('h-9 rounded-lg text-sm font-semibold transition-colors', activeTab === 'login' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+                  >
+                    Log in
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'signup'}
+                    onClick={() => switchTab('signup')}
+                    className={cn('h-9 rounded-lg text-sm font-semibold transition-colors', activeTab === 'signup' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+                  >
+                    Sign up
+                  </button>
+                </div>
+              )}
+
+              {(authMode === 'otp-request' || authMode === 'otp-verify') && renderOtpFlow()}
+              {(authMode === 'phone-request' || authMode === 'phone-verify') && renderPhoneFlow()}
+              {authMode === 'forgot-password' && renderForgotPasswordFlow()}
+              {authMode === 'reset-password' && renderResetPasswordFlow()}
+              {authMode === 'login' && renderAuthForm()}
+            </section>
 
             <p className="mt-6 text-center text-[11px] leading-relaxed text-muted-foreground/70 sm:text-xs">
               By continuing you agree to our{' '}
