@@ -817,7 +817,7 @@ export default function Auth() {
         <>
           <form onSubmit={handleSignUp} className="mt-6 space-y-4">
             {/* Profile photo */}
-            <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-3">
+            <div className="flex items-center gap-3 border-b border-border pb-4">
               <button
                 type="button"
                 onClick={() => avatarInputRef.current?.click()}
@@ -972,67 +972,46 @@ export default function Auth() {
   );
 
   return (
-    <div className="min-h-dvh bg-[#090a0d] lg:grid lg:grid-cols-[minmax(0,1.08fr)_minmax(460px,0.92fr)]">
-      {/* Desktop community panel */}
-      <aside className="relative hidden min-h-dvh overflow-hidden bg-[#111218] lg:block">
+    <div className="min-h-dvh bg-[#0b0b0d] lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(480px,0.82fr)]">
+      {/* The image gives desktop a sense of place; the sign-up side stays deliberately plain. */}
+      <aside className="relative hidden min-h-dvh overflow-hidden bg-[#121215] lg:block">
         <img
           src={HERO_IMAGE}
           alt=""
           aria-hidden
-          className="absolute inset-0 h-full w-full object-cover object-[center_35%] opacity-70 saturate-[0.72]"
+          className="absolute inset-0 h-full w-full object-cover object-[center_35%] opacity-75 saturate-[0.7]"
         />
-        <div className="absolute inset-0 bg-[#0b0c10]/45" />
-        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-[#0b0c10]/85 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 h-[62%] bg-gradient-to-t from-[#0b0c10] via-[#0b0c10]/72 to-transparent" />
+        <div className="absolute inset-0 bg-black/35" />
+        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/70 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-black/70 to-transparent" />
 
-        <div className="relative z-10 flex h-full flex-col justify-between p-10 xl:p-14">
+        <div className="relative z-10 flex h-full flex-col justify-between p-10 xl:p-12">
           <BrandLogo className="h-9" />
-
-          <div className="max-w-md">
-            <span className="inline-flex rounded-full border border-white/15 bg-black/20 px-3 py-1 text-[11px] font-medium tracking-wide text-white/70 backdrop-blur-sm">
-              A place for your people
-            </span>
-            <h1 className="mt-5 text-[2.55rem] font-semibold leading-[1.04] tracking-[-0.045em] text-white xl:text-[3.15rem]">
-              Share life<br />
-              <span className="text-white/60">as it happens.</span>
-            </h1>
-            <p className="mt-5 max-w-sm text-[15px] leading-relaxed text-white/68">
-              Keep up with friends, discover new voices, and make each moment yours.
-            </p>
-
-            <div className="mt-8 flex items-center gap-3 text-sm text-white/75">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/10 font-semibold">T</span>
-              <span>Twibs is better with your people.</span>
-            </div>
-            <p className="mt-12 text-[11px] font-medium uppercase tracking-[0.18em] text-white/38">
-              © {new Date().getFullYear()} Twibsers
-            </p>
-          </div>
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/55">© {new Date().getFullYear()} Twibsers</p>
         </div>
       </aside>
 
       {/* Auth column */}
       <main className="flex min-h-dvh flex-col bg-background">
-        <div className="flex h-[72px] items-center justify-between border-b border-border/70 px-5 sm:px-8 lg:hidden">
+        <div className="flex h-16 items-center border-b border-border/70 px-5 sm:px-8 lg:hidden">
           <BrandLogo className="h-8" />
-          <span className="text-xs font-medium text-muted-foreground">Your people, in one place.</span>
         </div>
 
-        <div className="flex flex-1 items-center justify-center px-4 py-8 sm:px-7 sm:py-12 lg:px-10">
-          <div className="w-full max-w-[440px]">
-            <div className="mb-6 hidden lg:block">
+        <div className="flex flex-1 items-center justify-center px-5 py-10 sm:px-8 sm:py-12 lg:px-14">
+          <div className="w-full max-w-[408px]">
+            <div className="mb-11 hidden lg:block">
               <BrandLogo className="h-9" />
             </div>
 
-            <section className="rounded-[24px] border border-border bg-card px-5 py-6 shadow-[0_18px_48px_rgba(0,0,0,0.18)] sm:px-8 sm:py-8">
+            <section>
               {authMode === 'login' && (
-                <div className="mb-7 grid grid-cols-2 rounded-xl bg-muted p-1" role="tablist" aria-label="Authentication mode">
+                <div className="mb-8 flex gap-7 border-b border-border" role="tablist" aria-label="Authentication mode">
                   <button
                     type="button"
                     role="tab"
                     aria-selected={activeTab === 'login'}
                     onClick={() => switchTab('login')}
-                    className={cn('h-9 rounded-lg text-sm font-semibold transition-colors', activeTab === 'login' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+                    className={cn('-mb-px border-b-2 pb-3 text-sm font-semibold transition-colors', activeTab === 'login' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}
                   >
                     Log in
                   </button>
@@ -1041,7 +1020,7 @@ export default function Auth() {
                     role="tab"
                     aria-selected={activeTab === 'signup'}
                     onClick={() => switchTab('signup')}
-                    className={cn('h-9 rounded-lg text-sm font-semibold transition-colors', activeTab === 'signup' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+                    className={cn('-mb-px border-b-2 pb-3 text-sm font-semibold transition-colors', activeTab === 'signup' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}
                   >
                     Sign up
                   </button>
