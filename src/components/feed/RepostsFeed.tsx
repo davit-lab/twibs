@@ -54,6 +54,11 @@ interface Post {
   user_has_starred?: boolean;
 }
 
+type EmbeddedPost = Omit<Post, 'profiles' | 'post_media'> & {
+  profiles: PostProfile | PostProfile[];
+  post_media?: PostMedia[];
+};
+
 interface RepostItem {
   post: Post;
   reposter: ReposterProfile;
@@ -172,14 +177,15 @@ export default function RepostsFeed({ userId, refreshTrigger, onRefreshComplete 
           .in('user_id', reposterIds),
       ]);
 
-      const postMap = new Map((repostedPosts || []).map(p => [p.id, p]));
+      const repostedPostRows = (repostedPosts || []) as unknown as EmbeddedPost[];
+      const postMap = new Map(repostedPostRows.map((post) => [post.id, post]));
       const profileMap = new Map((reposterProfiles || []).map(p => [p.user_id, p]));
 
       let nextItems: RepostItem[] = reposts
         .filter(r => postMap.has(r.post_id))
         .map(r => ({
           post: {
-            ...(postMap.get(r.post_id) as Post),
+            ...(postMap.get(r.post_id) as unknown as Post),
             profiles: Array.isArray(postMap.get(r.post_id)?.profiles)
               ? postMap.get(r.post_id)!.profiles[0]
               : postMap.get(r.post_id)!.profiles,

@@ -33,7 +33,7 @@ export function usePremiumStatus(userId: string | undefined) {
  */
 export function useBatchPremiumStatus(userIds: string[]) {
   return useQuery({
-    queryKey: ['premium-status-batch', userIds.sort().join(',')],
+    queryKey: ['premium-status-batch', [...userIds].sort().join(',')],
     queryFn: async () => {
       if (userIds.length === 0) return {};
 

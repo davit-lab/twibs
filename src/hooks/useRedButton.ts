@@ -27,7 +27,7 @@ export function useRedButton() {
     }
     try {
       const payload = Array.isArray(data) ? data[0] : data;
-      setStatus(redButtonStatusSchema.parse(payload));
+      setStatus(redButtonStatusSchema.parse(payload) as RedButtonStatus);
       setError(null);
     } catch {
       setError('Invalid status payload');

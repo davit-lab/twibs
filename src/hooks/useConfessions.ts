@@ -59,7 +59,9 @@ export function useConfessions() {
           .from('profiles')
           .select('user_id, username, display_name, avatar_url')
           .in('user_id', authorIds);
-        const profileMap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
+        const profileMap = new Map<string, NonNullable<Confession['author_profile']>>(
+          (profiles || []).map((p: any) => [p.user_id, p as NonNullable<Confession['author_profile']>]),
+        );
         confessions = confessions.map((c) => ({
           ...c,
           author_profile: c.author_id ? profileMap.get(c.author_id) || null : null,

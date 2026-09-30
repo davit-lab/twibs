@@ -43,7 +43,7 @@ export default function AdminPostsTab() {
       const ids = [...new Set(rows.map(r => r.user_id))];
       const { data: profiles } = await (supabase as any)
         .from('profiles').select('user_id, display_name, username').in('user_id', ids);
-      const pmap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
+      const pmap = new Map<string, AdminPost['user']>((profiles || []).map((p: any) => [p.user_id, { display_name: p.display_name, username: p.username }]));
       setPosts(rows.map(r => ({ ...r, user: pmap.get(r.user_id) || { display_name: 'Unknown', username: 'unknown' } })));
       setTotal(count ?? 0);
     } catch (error) {

@@ -86,9 +86,9 @@ function StatButton({ value, label, onClick }: { value: string | number; label: 
   );
 }
 
-function Badge({ children, className }: { children: React.ReactNode; className?: string }) {
+function Badge({ children, className, title }: { children: React.ReactNode; className?: string; title?: string }) {
   return (
-    <span className={cn(
+    <span title={title} className={cn(
       "inline-flex items-center justify-center w-5 h-5 rounded-full shrink-0",
       className
     )}>

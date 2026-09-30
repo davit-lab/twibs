@@ -34,7 +34,8 @@ import {
   type DiscoveryPriority,
 } from '@/lib/business';
 
-const EDIT_ROLES: BusinessRole[] = ['admin', 'advertiser', 'analyst'];
+type EditableBusinessRole = Exclude<BusinessRole, 'owner'>;
+const EDIT_ROLES: EditableBusinessRole[] = ['admin', 'advertiser', 'analyst'];
 
 export function SettingsTab({ businessId }: { businessId: string }) {
   const { activeBusiness, canManage, role } = useBusiness();
@@ -53,7 +54,7 @@ export function SettingsTab({ businessId }: { businessId: string }) {
 
   const [goals, setGoals] = useState<string[]>(activeBusiness?.goals || []);
   const [inviteUsername, setInviteUsername] = useState('');
-  const [inviteRole, setInviteRole] = useState<BusinessRole>('advertiser');
+  const [inviteRole, setInviteRole] = useState<EditableBusinessRole>('advertiser');
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
 
   const toggleGoal = (goal: string) =>
@@ -243,7 +244,7 @@ export function SettingsTab({ businessId }: { businessId: string }) {
               </div>
               <div className="w-32 space-y-1.5">
                 <Label>Role</Label>
-                <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as BusinessRole)}>
+                <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as EditableBusinessRole)}>
                   <SelectTrigger className="h-9">
                     <SelectValue />
                   </SelectTrigger>
@@ -285,7 +286,7 @@ export function SettingsTab({ businessId }: { businessId: string }) {
                         value={m.role}
                         onValueChange={(v) =>
                           updateRole.mutate(
-                            { userId: m.user_id, role: v as BusinessRole },
+                            { userId: m.user_id, role: v as EditableBusinessRole },
                             {
                               onSuccess: () => toast({ title: 'Role updated' }),
                               onError: (err) =>

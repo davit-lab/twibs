@@ -20,7 +20,7 @@ export function ContentTab({ businessId }: { businessId: string }) {
   const api = useBusinessApi();
   const { data: account } = useQuery({
     queryKey: ['business', businessId, 'account'],
-    queryFn: () => api.getBusinessAccounts().then((list) => list.find((a) => a.id === businessId) ?? null),
+    queryFn: () => api.listBusinessAccounts().then((list) => list.find((a) => a.id === businessId) ?? null),
     enabled: !!businessId,
   });
 

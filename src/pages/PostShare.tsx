@@ -73,7 +73,7 @@ export default function PostShare() {
       }
 
       let resolved: PostData = {
-        ...(data as PostData),
+        ...(data as unknown as PostData),
         profiles: Array.isArray((data as any).profiles)
           ? (data as any).profiles[0]
           : (data as any).profiles,

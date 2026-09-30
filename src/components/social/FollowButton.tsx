@@ -16,6 +16,7 @@ interface FollowButtonProps {
   onFollowChange?: () => void;
   onFollowCreated?: () => void;
   size?: 'default' | 'sm' | 'lg' | 'icon';
+  initialStatus?: FollowStatus;
 }
 
 export default function FollowButton({
@@ -26,15 +27,21 @@ export default function FollowButton({
   onFollowChange,
   onFollowCreated,
   size = 'default',
+  initialStatus,
 }: FollowButtonProps) {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const [status, setStatus] = useState<FollowStatus>('none');
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<FollowStatus>(initialStatus ?? 'none');
+  const [loading, setLoading] = useState(initialStatus === undefined);
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
+    if (initialStatus !== undefined) {
+      setStatus(initialStatus);
+      setLoading(false);
+      return;
+    }
     if (!user) {
       setLoading(false);
       return;
@@ -59,7 +66,7 @@ export default function FollowButton({
     };
 
     checkFollowStatus();
-  }, [user, targetUserId]);
+  }, [user, targetUserId, initialStatus]);
 
   const handleFollow = async () => {
     if (!user) {

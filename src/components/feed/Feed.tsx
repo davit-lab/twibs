@@ -53,7 +53,13 @@ interface Post {
   user_has_starred?: boolean;
   expires_at?: string | null;
   context_meta?: PostContextMeta | null;
+  business_id?: string | null;
 }
+
+type EmbeddedPost = Omit<Post, 'profiles' | 'post_media'> & {
+  profiles: PostProfile | PostProfile[];
+  post_media?: PostMedia[];
+};
 
 interface PostContextMeta {
   location?: string | null;
@@ -280,7 +286,8 @@ export default function Feed({ userId, businessId, refreshTrigger, onRefreshComp
               .in('user_id', reposterIds),
           ]);
 
-          const postMap = new Map((repostedPosts || []).map(p => [p.id, p]));
+          const repostedPostRows = (repostedPosts || []) as unknown as EmbeddedPost[];
+          const postMap = new Map(repostedPostRows.map((post) => [post.id, post]));
           const profileMap = new Map((reposterProfiles || []).map(p => [p.user_id, p]));
 
           const repostItems: FeedItem[] = reposts
@@ -446,12 +453,11 @@ export default function Feed({ userId, businessId, refreshTrigger, onRefreshComp
         .or('expires_at.is.null,expires_at.gt.now()')
         .maybeSingle();
       if (error || !data) return null;
+      const row = data as unknown as EmbeddedPost;
       const post: Post = {
-        ...(data as Post),
-        profiles: Array.isArray((data as any).profiles)
-          ? (data as any).profiles[0]
-          : (data as any).profiles,
-        post_media: (data as any).post_media || [],
+        ...row,
+        profiles: Array.isArray(row.profiles) ? row.profiles[0] : row.profiles,
+        post_media: row.post_media || [],
       };
       const [annotated] = await attachStars([post]);
       return annotated || null;

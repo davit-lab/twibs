@@ -43,7 +43,7 @@ export default function AdminBooksTab() {
       const ids = [...new Set(rows.map(r => r.author_id))];
       const { data: profiles } = await (supabase as any)
         .from('profiles').select('user_id, display_name, username').in('user_id', ids);
-      const pmap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
+      const pmap = new Map<string, AdminBook['author']>((profiles || []).map((p: any) => [p.user_id, { display_name: p.display_name, username: p.username }]));
       setBooks(rows.map(r => ({ ...r, author: pmap.get(r.author_id) || { display_name: 'Unknown', username: 'unknown' } })));
       setTotal(count ?? 0);
     } catch (error) {

@@ -16,6 +16,7 @@ export interface ExploreUser {
   location: string | null;
   follower_count: number;
   distanceKm: number | null;
+  follow_status: 'none' | 'pending' | 'following';
 }
 
 /**
@@ -247,21 +248,27 @@ export function useExplore() {
     if (usersResult.data) {
       const userIds = usersResult.data.map(u => u.user_id);
       const counts = new Map<string, number>();
+      const viewerStatuses = new Map<string, ExploreUser['follow_status']>();
       if (userIds.length > 0) {
         const { data: followRows } = await supabase
           .from('follows')
-          .select('following_id')
-          .eq('status', 'accepted')
+          .select('follower_id, following_id, status')
           .in('following_id', userIds);
         if (genRef.current !== gen) return;
         for (const row of followRows || []) {
-          counts.set(row.following_id, (counts.get(row.following_id) || 0) + 1);
+          if (row.status === 'accepted') {
+            counts.set(row.following_id, (counts.get(row.following_id) || 0) + 1);
+          }
+          if (user && row.follower_id === user.id) {
+            viewerStatuses.set(row.following_id, row.status === 'pending' ? 'pending' : 'following');
+          }
         }
       }
-      const withCounts = (usersResult.data as Omit<ExploreUser, 'follower_count' | 'distanceKm'>[]).map(u => ({
+      const withCounts = (usersResult.data as Omit<ExploreUser, 'follower_count' | 'distanceKm' | 'follow_status'>[]).map(u => ({
         ...u,
         follower_count: counts.get(u.user_id) || 0,
         distanceKm: null,
+        follow_status: viewerStatuses.get(u.user_id) || 'none',
       })) as ExploreUser[];
       setUsers(withCounts);
       attachDistances(withCounts);

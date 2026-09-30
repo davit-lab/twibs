@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect, useRef } from 'react';
+import { lazy, ReactNode, Suspense, useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,7 +11,6 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import NotificationDropdown from '@/components/notifications/NotificationDropdown';
-import CreateDialog from '@/components/create/CreateDialog';
 import BrandLogo from '@/components/brand/BrandLogo';
 import { AccountSwitcher, AccountSwitcherItems } from '@/components/business/AccountSwitcher';
 import {
@@ -76,6 +75,8 @@ const mobileNavItems = [
   { icon: MessageCircle, label: 'Messages', href: '/messages', id: 'messages' },
 ];
 
+const CreateDialog = lazy(() => import('@/components/create/CreateDialog'));
+
 export default function MainLayout({ children, immersive = false }: MainLayoutProps) {
   const { user, profile, signOut, isAdmin, isModerator } = useAuth();
   const { accounts } = useBusiness();
@@ -84,6 +85,7 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
   usePresence();
   const location = useLocation();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createDialogLoaded, setCreateDialogLoaded] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [navVisible, setNavVisible] = useState(true);
   const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -125,6 +127,11 @@ export default function MainLayout({ children, immersive = false }: MainLayoutPr
     return location.pathname === href;
   };
 
+  const openCreateDialog = () => {
+    setCreateDialogLoaded(true);
+    setCreateDialogOpen(true);
+  };
+
 // Rendered only inside the top bar's 3-dot menu. "Profile" and "Business" are
 // intentionally absent: the profile header card above and the embedded account
 // switcher already cover them, so they were duplicate links.
@@ -157,7 +164,7 @@ const moreAccountItems = [
                 return (
                   <div key={item.id} className="mt-1">
                     <button
-                      onClick={() => setCreateDialogOpen(true)}
+                      onClick={openCreateDialog}
                       className="create-btn flex w-full items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white"
                     >
                       <Plus className="h-5 w-5 text-white" strokeWidth={2.5} />
@@ -190,7 +197,7 @@ const moreAccountItems = [
             })}
             <div className="mt-3 pt-1.5">
               <button
-                onClick={() => setCreateDialogOpen(true)}
+                onClick={openCreateDialog}
                 aria-label="Create"
                 className="create-btn flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-white"
               >
@@ -509,7 +516,7 @@ const moreAccountItems = [
                 return (
                   <button
                     key={item.id}
-                    onClick={() => setCreateDialogOpen(true)}
+                    onClick={openCreateDialog}
                     aria-label="Create post"
                     className="relative -mt-7 group"
                   >
@@ -585,7 +592,11 @@ const moreAccountItems = [
         </nav>
       )}
 
-      <CreateDialog open={createDialogOpen} onOpenChange={setCreateDialogOpen} />
+      {createDialogLoaded && (
+        <Suspense fallback={null}>
+          <CreateDialog open={createDialogOpen} onOpenChange={setCreateDialogOpen} />
+        </Suspense>
+      )}
 
       <style>{`
         .rail-tip {

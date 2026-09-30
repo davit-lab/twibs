@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Search, X, Users, BadgeCheck, Crown, Star, Eye, Play, FileText, ArrowUpRight, Clapperboard, MessageCircle, MapPin, Navigation, Store, Building2, Link2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { usePremiumStatus } from '@/hooks/usePremiumStatus';
+import { useBatchPremiumStatus } from '@/hooks/usePremiumStatus';
 import { useExplore, ExploreTab, ExploreUser, ExploreBusiness, ExplorePost, ExploreReel } from '@/hooks/useExplore';
 import { useBusinessApi } from '@/hooks/useBusinessApi';
 import { ACCOUNT_TYPE_META } from '@/lib/business';
@@ -70,8 +70,7 @@ function formatCount(n: number) {
   return `${n}`;
 }
 
-function UserCard({ userProfile, onFollowChange }: { userProfile: ExploreUser; onFollowChange: () => void }) {
-  const { data: isPremium } = usePremiumStatus(userProfile.user_id);
+function UserCard({ userProfile, isPremium, onFollowChange }: { userProfile: ExploreUser; isPremium?: boolean; onFollowChange: () => void }) {
   const hue = getHue(userProfile.username || userProfile.display_name);
   const initials = userProfile.display_name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
   const showDistance = userProfile.distanceKm != null;
@@ -120,6 +119,7 @@ function UserCard({ userProfile, onFollowChange }: { userProfile: ExploreUser; o
           isPrivateAccount={userProfile.privacy === 'private'}
           onFollowChange={onFollowChange}
           size="sm"
+          initialStatus={userProfile.follow_status}
           className="shrink-0"
         />
       </div>
@@ -427,6 +427,7 @@ export default function Explore() {
   const visiblePosts = posts.filter(p => !mutedIds.includes(p.user_id));
   const trimmedQuery = searchQuery.trim();
   const counts = { people: users.length, businesses: businesses.length, posts: visiblePosts.length, reels: reels.length };
+  const { data: premiumByUser = {} } = useBatchPremiumStatus(users.map((candidate) => candidate.user_id));
 
   useEffect(() => {
     let cancelled = false;
@@ -642,7 +643,7 @@ export default function Explore() {
               <SectionHeader title="People to discover" seeAll={() => setActiveTab('people')} />
               {distanceNote()}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {users.slice(0, 4).map(u => <UserCard key={u.id} userProfile={u} onFollowChange={handleFollowChange} />)}
+                {users.slice(0, 4).map(u => <UserCard key={u.id} userProfile={u} isPremium={premiumByUser[u.user_id]} onFollowChange={handleFollowChange} />)}
               </div>
             </section>
           )}
@@ -691,7 +692,7 @@ export default function Explore() {
         {distanceNote()}
         {users.length === 0
           ? emptyState('people')
-          : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{users.map(u => <UserCard key={u.id} userProfile={u} onFollowChange={handleFollowChange} />)}</div>}
+          : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{users.map(u => <UserCard key={u.id} userProfile={u} isPremium={premiumByUser[u.user_id]} onFollowChange={handleFollowChange} />)}</div>}
       </div>
     );
   };

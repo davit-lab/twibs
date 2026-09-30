@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import Messages from './Messages';
 
 vi.mock('@/contexts/ActiveIdentityContext', () => ({ useActiveIdentity: () => ({ identity: { type: 'personal', userId: 'user-1', businessId: null } }) }));
+vi.mock('@/contexts/BusinessContext', () => ({ useBusiness: () => ({ accounts: [] }) }));
 
 const mockUseAuth = vi.fn();
 const mockUseConversations = vi.fn();
